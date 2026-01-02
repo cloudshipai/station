@@ -1,0 +1,231 @@
+---
+title: Authentication
+description: Configure AI providers and CloudShip authentication
+---
+
+# Authentication
+
+Station supports multiple authentication methods for AI providers and CloudShip platform integration.
+
+## AI Provider Authentication
+
+### Claude Max/Pro (Recommended)
+
+Use your existing Claude subscription - no API billing required:
+
+```bash
+# Authenticate with your Claude subscription
+stn auth anthropic login
+```
+
+This opens your browser to authorize Station. After authorizing, paste the code:
+
+```
+✅ Successfully authenticated with Anthropic!
+
+   You're using your Claude Max/Pro subscription.
+   Station will automatically refresh tokens as needed.
+
+Select a model for your Claude Max/Pro subscription:
+
+* [1] Claude Opus 4.5 - Most capable model
+  [2] Claude Opus 4
+  [3] Claude Sonnet 4.5 - Balanced performance
+  [4] Claude Sonnet 4 - Fast and efficient
+  [5] Claude Haiku 4.5 - Fastest model
+```
+
+**Check status:**
+```bash
+stn auth anthropic status
+# ✅ Authenticated with Anthropic
+#    Token expires: 2025-01-15T10:30:00Z (23h remaining)
+```
+
+**Logout:**
+```bash
+stn auth anthropic logout
+```
+
+### API Keys
+
+Set your API key as an environment variable:
+
+```bash
+# OpenAI
+export OPENAI_API_KEY="sk-..."
+
+# Google Gemini
+export GEMINI_API_KEY="..."
+
+# Anthropic (API billing - alternative to OAuth)
+export ANTHROPIC_API_KEY="sk-ant-api03-..."
+```
+
+### Authentication Priority
+
+Station checks for credentials in this order:
+
+| Priority | Method | Description |
+|----------|--------|-------------|
+| 1 | `STN_AI_AUTH_TYPE=api_key` | Force API key mode (override) |
+| 2 | Station OAuth tokens | From `stn auth anthropic login` |
+| 3 | Claude Code credentials | From `~/.claude/.credentials.json` |
+| 4 | Environment variable | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, etc. |
+
+### Remote Deployments
+
+For deployed Station instances (Docker, K8s, Fly.io), use API keys:
+
+```bash
+docker run \
+  -e ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY \
+  -e STN_AI_PROVIDER=anthropic \
+  ghcr.io/cloudshipai/station:latest
+```
+
+OAuth tokens are designed for local/interactive use. For production deployments, API keys provide simpler credential management.
+
+---
+
+## CloudShip Authentication
+
+Connect your Station to [CloudShip](https://cloudshipai.com) for centralized management, team collaboration, and OAuth-protected MCP access.
+
+### Login with API Key
+
+```bash
+stn auth login
+```
+
+```
+Using config file: /home/user/.config/station/config.yaml
+🔭 OTEL telemetry enabled - provider=jaeger, endpoint=http://localhost:4318
+Enter your CloudShip API key: ▌
+```
+
+Get your API key from your [CloudShip dashboard](https://app.cloudshipai.com/settings/api-keys).
+
+### Using Registration Key
+
+For automated deployments, use a registration key in your config:
+
+```yaml
+# config.yaml
+cloudship:
+  enabled: true
+  registration_key: "sk-reg-..."
+  name: "my-station"
+  tags: ["production", "us-east-1"]
+```
+
+```bash
+stn serve
+# Output: Successfully registered with CloudShip management channel
+```
+
+### Check Connection Status
+
+```bash
+stn auth status
+```
+
+```
+CloudShip Connection:
+  ✅ Connected to CloudShip
+  Organization: My Company
+  Station: production-us-east
+  Last sync: 2 minutes ago
+
+AI Provider:
+  ✅ Authenticated with Anthropic (OAuth)
+  Model: claude-sonnet-4-20250514
+  Token expires: 23h remaining
+```
+
+### Logout
+
+```bash
+# Logout from CloudShip
+stn auth logout
+
+# Logout from Anthropic OAuth
+stn auth anthropic logout
+```
+
+---
+
+## OAuth for MCP Access
+
+When CloudShip OAuth is enabled, MCP clients authenticate through CloudShip before accessing your Station's agents.
+
+### Who Can Access?
+
+Only users who:
+1. Have a **CloudShip account**
+2. Are **members of your organization**
+3. Successfully **authenticate via OAuth**
+
+### Enable OAuth
+
+```yaml
+# config.yaml
+cloudship:
+  enabled: true
+  registration_key: "your-key"
+  name: "my-station"
+  oauth:
+    enabled: true
+    client_id: "your-oauth-client-id"  # From CloudShip OAuth Apps
+```
+
+### How It Works
+
+```
+MCP Client                    Station                      CloudShip
+    |                           |                             |
+    |------ POST /mcp --------->|                             |
+    |<----- 401 Unauthorized ---|                             |
+    |                           |                             |
+    |------- [Browser Login] -------------------------------->|
+    |<------ [Access Token] ----------------------------------|
+    |                           |                             |
+    |------ POST /mcp --------->|                             |
+    |  Authorization: Bearer    |------ Validate Token ------>|
+    |                           |<------ {active: true} ------|
+    |<----- MCP Response -------|                             |
+```
+
+### MCP Client Configuration
+
+Point your MCP client to port 8587 (Dynamic Agent MCP):
+
+```json
+{
+  "mcpServers": {
+    "my-station": {
+      "url": "https://my-station.example.com:8587/mcp"
+    }
+  }
+}
+```
+
+When connecting, the client will:
+1. Receive a 401 with OAuth discovery URL
+2. Open CloudShip login in your browser
+3. After authentication, automatically retry with the access token
+
+---
+
+## Security Notes
+
+- **Registration keys** should be kept secret - they authorize Station connections
+- **OAuth tokens** are validated on every MCP request via CloudShip introspection
+- **PKCE** is required for all OAuth flows (S256 code challenge)
+- Station caches validated tokens for 5 minutes to reduce introspection calls
+
+## Next Steps
+
+- [Quick Start](/station/en/quickstart) - Get Station running
+- [CloudShip Integration](/station/en/cloudship) - Full CloudShip setup guide
+- [MCP Tools](/station/en/mcp/tools) - Available MCP tools

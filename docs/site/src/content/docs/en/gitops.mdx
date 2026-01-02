@@ -1,0 +1,377 @@
+---
+title: GitOps Workflow
+description: Version control your agents, MCP configs, and variables with Git
+---
+
+# GitOps Workflow
+
+Station is designed for GitOps - version control your agent configurations, MCP templates, and variables just like infrastructure code.
+
+## Why GitOps?
+
+| Traditional | GitOps with Station |
+|-------------|---------------------|
+| Manual config changes | Version-controlled changes |
+| No audit trail | Full Git history |
+| Hard to rollback | Easy `git revert` |
+| Single machine | Team collaboration |
+| Config drift | Consistent state |
+
+## Directory Structure
+
+A typical Station GitOps repository:
+
+```
+my-station-config/
+├── config.yaml                    # Station configuration
+├── environments/
+│   ├── production/
+│   │   ├── agents/
+│   │   │   ├── incident-coordinator.prompt
+│   │   │   ├── logs-investigator.prompt
+│   │   │   └── metrics-analyst.prompt
+│   │   ├── template.json          # MCP server configs
+│   │   └── variables.yml          # Secrets and config
+│   │
+│   ├── staging/
+│   │   ├── agents/
+│   │   ├── template.json
+│   │   └── variables.yml
+│   │
+│   └── development/
+│       ├── agents/
+│       ├── template.json
+│       └── variables.yml
+│
+└── reports/                       # Generated performance reports
+```
+
+## Getting Started
+
+### 1. Create a Git Repository
+
+```bash
+mkdir my-station-config
+cd my-station-config
+git init
+```
+
+### 2. Initialize Station
+
+```bash
+export STATION_WORKSPACE=$(pwd)
+stn init --provider anthropic --ship
+```
+
+### 3. Commit Initial Configuration
+
+```bash
+git add .
+git commit -m "Initial Station configuration"
+```
+
+### 4. Push to Remote
+
+```bash
+git remote add origin git@github.com:your-team/station-config.git
+git push -u origin main
+```
+
+## Team Workflow
+
+### Clone and Run
+
+Team members can clone and run Station with your configuration:
+
+```bash
+# Clone team repository
+git clone git@github.com:your-team/station-config.git
+cd station-config
+
+# Run Station with this workspace
+export STATION_WORKSPACE=$(pwd)
+stn stdio
+```
+
+### Making Changes
+
+1. **Create a branch:**
+   ```bash
+   git checkout -b add-cost-analyzer
+   ```
+
+2. **Make changes** (add agents, update configs)
+
+3. **Test locally:**
+   ```bash
+   stn agent run cost-analyzer "Test task"
+   ```
+
+4. **Commit and push:**
+   ```bash
+   git add .
+   git commit -m "Add cost analyzer agent"
+   git push origin add-cost-analyzer
+   ```
+
+5. **Create Pull Request** for team review
+
+### Code Review
+
+Agent changes are reviewable like any code:
+
+```diff
+# incident-coordinator.prompt
+ ---
+ metadata:
+   name: "incident_coordinator"
++  description: "Enhanced incident response with severity classification"
+ model: gpt-4o-mini
+-max_steps: 15
++max_steps: 20
+ agents:
+   - "logs_investigator"
+   - "metrics_investigator"
++  - "security_analyst"
+ ---
+```
+
+## Configuration Files
+
+### config.yaml
+
+Global Station configuration:
+
+```yaml
+# config.yaml
+ai_provider: anthropic
+ai_model: claude-sonnet-4-20250514
+
+# Workspace can be set here or via STATION_WORKSPACE env var
+workspace: /path/to/environments
+
+# Optional: CloudShip integration
+cloudship:
+  enabled: true
+  registration_key: "{{ .CLOUDSHIP_KEY }}"
+  name: "production-station"
+```
+
+### template.json
+
+MCP server configurations with template variables:
+
+```json
+{
+  "mcpServers": {
+    "aws": {
+      "command": "aws-mcp",
+      "env": {
+        "AWS_REGION": "{{ .AWS_REGION }}",
+        "AWS_PROFILE": "{{ .AWS_PROFILE }}"
+      }
+    },
+    "datadog": {
+      "command": "datadog-mcp",
+      "env": {
+        "DD_API_KEY": "{{ .DATADOG_API_KEY }}",
+        "DD_APP_KEY": "{{ .DATADOG_APP_KEY }}"
+      }
+    }
+  }
+}
+```
+
+### variables.yml
+
+Environment-specific values (keep secrets out of Git!):
+
+```yaml
+# variables.yml - DO NOT COMMIT SECRETS
+AWS_REGION: us-east-1
+AWS_PROFILE: production
+# DATADOG_API_KEY: <set via environment variable>
+```
+
+**Best practice:** Use environment variables for secrets:
+
+```bash
+export DATADOG_API_KEY="your-secret-key"
+export DATADOG_APP_KEY="your-app-key"
+```
+
+## Environment Management
+
+### Multiple Environments
+
+Station supports multiple environments for dev/staging/prod:
+
+```
+environments/
+├── production/    # Production agents and configs
+├── staging/       # Pre-production testing
+└── development/   # Local development
+```
+
+### Switching Environments
+
+```bash
+# Run with specific environment
+stn --environment production agent run cost-analyzer "Analyze costs"
+
+# Default environment
+stn --environment development agent run cost-analyzer "Test analysis"
+```
+
+### Environment-Specific Configs
+
+Each environment has its own:
+- **agents/** - Agent definitions
+- **template.json** - MCP server configs
+- **variables.yml** - Environment-specific values
+
+## CI/CD Integration
+
+### GitHub Actions Example
+
+```yaml
+# .github/workflows/validate.yml
+name: Validate Station Config
+
+on:
+  pull_request:
+    paths:
+      - 'environments/**'
+      - 'config.yaml'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Station
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/cloudshipai/station/main/install.sh | bash
+      
+      - name: Validate Configuration
+        run: |
+          export STATION_WORKSPACE=$(pwd)
+          stn validate
+      
+      - name: Lint Agent Prompts
+        run: |
+          stn agent lint --all
+```
+
+### Deploy on Merge
+
+```yaml
+# .github/workflows/deploy.yml
+name: Deploy Station
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'environments/production/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Deploy to Fly.io
+        run: |
+          stn deploy station-prod --target fly
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+```
+
+## Secrets Management
+
+### Never Commit Secrets
+
+Add to `.gitignore`:
+
+```gitignore
+# Secrets
+variables.yml
+*.secret
+.env
+
+# But track the template
+!variables.yml.example
+```
+
+### Use Environment Variables
+
+```bash
+# Set secrets as environment variables
+export OPENAI_API_KEY="sk-..."
+export AWS_SECRET_ACCESS_KEY="..."
+export DATADOG_API_KEY="..."
+
+# Station resolves {{ .VAR }} from environment
+stn serve
+```
+
+### Template for Team
+
+Create a `variables.yml.example`:
+
+```yaml
+# variables.yml.example - Copy to variables.yml and fill in values
+AWS_REGION: us-east-1
+AWS_PROFILE: ""           # Your AWS profile name
+# Set these as environment variables:
+# OPENAI_API_KEY
+# DATADOG_API_KEY
+```
+
+## Best Practices
+
+1. **One repo per team/project** - Keep related agents together
+2. **Use branches for changes** - Never commit directly to main
+3. **Review agent changes** - Treat prompts like code
+4. **Test before merging** - Run agents locally first
+5. **Keep secrets out of Git** - Use environment variables
+6. **Document your agents** - Use clear descriptions in metadata
+7. **Version your prompts** - Git history shows evolution
+
+## Rollback
+
+### Revert a Change
+
+```bash
+# Revert last commit
+git revert HEAD
+
+# Revert specific commit
+git revert abc1234
+
+# Push the revert
+git push origin main
+```
+
+### Restore Previous Version
+
+```bash
+# View history
+git log --oneline environments/production/agents/
+
+# Checkout specific version
+git checkout abc1234 -- environments/production/agents/incident-coordinator.prompt
+
+# Commit the restoration
+git add .
+git commit -m "Restore incident-coordinator to previous version"
+```
+
+## Next Steps
+
+- [Bundles](/station/en/bundles/creating) - Package and share agents
+- [Deployment](/station/en/deployment/production) - Deploy to production
+- [CI/CD Integration](/station/en/ci-cd-integration) - Automated pipelines

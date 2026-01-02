@@ -1,0 +1,341 @@
+---
+title: OpenAPI MCP Servers
+description: Convert OpenAPI specifications to MCP servers automatically
+---
+
+# OpenAPI MCP Servers
+
+:::caution[Experimental]
+OpenAPI to MCP conversion is currently in beta. The API may change.
+:::
+
+Station can automatically convert OpenAPI/Swagger specifications into MCP servers, making any REST API instantly available as agent tools.
+
+## How It Works
+
+```
+OpenAPI Spec ──stn openapi-runtime──> MCP Server ──> Agent Tools
+     │                                    │
+     └── Paths become tools ──────────────┘
+```
+
+Station reads your OpenAPI spec and exposes each endpoint as an MCP tool.
+
+## Quick Start
+
+### 1. Add OpenAPI Spec to Bundle
+
+```json
+{
+  "name": "My API Tools",
+  "description": "Tools from my REST API",
+  "mcpServers": {
+    "my-api": {
+      "command": "stn",
+      "args": [
+        "openapi-runtime",
+        "--spec",
+        "environments/{{ .ENVIRONMENT_NAME }}/my-api.openapi.json"
+      ]
+    }
+  },
+  "metadata": {
+    "openapiSpec": "my-api.openapi.json",
+    "variables": {
+      "API_BASE_URL": {
+        "description": "Base URL for the API",
+        "default": "https://api.example.com"
+      }
+    }
+  }
+}
+```
+
+### 2. Use Template Variables
+
+Your OpenAPI spec can use template variables:
+
+```json
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "My API",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "{{ .API_BASE_URL }}",
+      "description": "API endpoint"
+    }
+  ],
+  "paths": {
+    "/users": {
+      "get": {
+        "operationId": "listUsers",
+        "summary": "List all users"
+      }
+    }
+  }
+}
+```
+
+### 3. Assign to Agent
+
+```yaml
+---
+metadata:
+  name: "api-manager"
+tools:
+  - "__listUsers"      # From OpenAPI spec
+  - "__createUser"
+  - "__getUserById"
+---
+```
+
+## Station Admin Example
+
+Create an agent that manages Station itself using the Station API:
+
+### OpenAPI Spec
+
+```json
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Station Management API",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "{{ .STATION_API_URL }}",
+      "description": "Station API endpoint"
+    }
+  ],
+  "paths": {
+    "/api/v1/environments": {
+      "get": {
+        "operationId": "listEnvironments",
+        "summary": "List all environments"
+      }
+    },
+    "/api/v1/agents": {
+      "get": {
+        "operationId": "listAgents",
+        "summary": "List all agents"
+      },
+      "post": {
+        "operationId": "createAgent",
+        "summary": "Create a new agent"
+      }
+    },
+    "/api/v1/agents/{id}": {
+      "get": {
+        "operationId": "getAgent",
+        "summary": "Get agent by ID"
+      }
+    },
+    "/api/v1/agents/{id}/execute": {
+      "post": {
+        "operationId": "executeAgent",
+        "summary": "Execute an agent"
+      }
+    }
+  }
+}
+```
+
+### Agent Definition
+
+```yaml
+---
+metadata:
+  name: "station-admin"
+  description: "Manages Station environments, agents, and MCP servers"
+model: gpt-4o-mini
+max_steps: 10
+tools:
+  - "__listEnvironments"
+  - "__listAgents"
+  - "__getAgent"
+  - "__createAgent"
+  - "__executeAgent"
+---
+
+{{role "system"}}
+You are a Station administrator. Use the Station API tools to:
+- List and inspect environments and agents
+- Create new agents from user requirements
+- Execute agents and monitor their runs
+
+{{role "user"}}
+{{userInput}}
+```
+
+### Usage
+
+```bash
+stn agent run station-admin "Show me all environments and their agents"
+```
+
+## Features
+
+### Automatic Tool Generation
+
+Each OpenAPI path becomes an MCP tool:
+
+| OpenAPI | MCP Tool |
+|---------|----------|
+| `GET /users` | `__listUsers` (from operationId) |
+| `POST /users` | `__createUser` |
+| `GET /users/{id}` | `__getUserById` |
+| `DELETE /users/{id}` | `__deleteUser` |
+
+### Template Variable Resolution
+
+Variables in `{{ .VAR }}` format are resolved from:
+1. `variables.yml` in the environment
+2. Environment variables
+3. Default values in metadata
+
+### Authentication Support
+
+```json
+{
+  "securityDefinitions": {
+    "bearerAuth": {
+      "type": "http",
+      "scheme": "bearer"
+    }
+  },
+  "security": [
+    {"bearerAuth": []}
+  ]
+}
+```
+
+Configure via variables:
+```yaml
+# variables.yml
+API_AUTH_TOKEN: "{{ .API_AUTH_TOKEN }}"
+```
+
+### Smart Tool Sync
+
+Station detects OpenAPI spec changes and refreshes tools automatically.
+
+## Configuration
+
+### Bundle Manifest
+
+```json
+{
+  "name": "API Integration Bundle",
+  "mcpServers": {
+    "my-api": {
+      "command": "stn",
+      "args": [
+        "openapi-runtime",
+        "--spec", "my-api.openapi.json",
+        "--base-url", "{{ .API_BASE_URL }}"
+      ],
+      "env": {
+        "API_TOKEN": "{{ .API_TOKEN }}"
+      }
+    }
+  },
+  "metadata": {
+    "openapiSpec": "my-api.openapi.json",
+    "variables": {
+      "API_BASE_URL": {
+        "description": "API base URL",
+        "required": true
+      },
+      "API_TOKEN": {
+        "description": "API authentication token",
+        "secret": true
+      }
+    }
+  }
+}
+```
+
+### Runtime Options
+
+```bash
+stn openapi-runtime \
+  --spec path/to/spec.json \
+  --base-url https://api.example.com \
+  --header "Authorization: Bearer $TOKEN" \
+  --timeout 30
+```
+
+## Supported Features
+
+| OpenAPI Feature | Support |
+|-----------------|---------|
+| OpenAPI 3.0 | ✅ Full |
+| OpenAPI 3.1 | ✅ Full |
+| Swagger 2.0 | ✅ Converted |
+| JSON specs | ✅ |
+| YAML specs | ✅ |
+| $ref resolution | ✅ |
+| allOf/oneOf/anyOf | ✅ |
+| Bearer auth | ✅ |
+| API key auth | ✅ |
+| OAuth2 | ⚠️ Partial |
+
+## Best Practices
+
+1. **Use operationId** - Explicit IDs make cleaner tool names
+2. **Write good summaries** - Used as tool descriptions
+3. **Define schemas** - Better type information for agents
+4. **Use template variables** - Keep credentials out of specs
+5. **Version your specs** - Track API changes in Git
+
+## Limitations
+
+- **No webhooks** - Only request/response patterns
+- **No streaming** - Standard HTTP only
+- **Limited OAuth** - Manual token management required
+- **Schema complexity** - Very complex schemas may simplify
+
+## Troubleshooting
+
+### Tool Not Found
+
+```
+Error: tool __myOperation not found
+```
+
+**Check:**
+1. `operationId` is defined in spec
+2. Spec file path is correct
+3. Run `stn tools list` to see available tools
+
+### Authentication Errors
+
+```
+Error: 401 Unauthorized
+```
+
+**Check:**
+1. Token is set in variables.yml or environment
+2. Security scheme matches your auth method
+3. Token hasn't expired
+
+### Schema Validation Errors
+
+```
+Error: invalid request body
+```
+
+**Check:**
+1. Request schema matches API expectations
+2. Required fields are provided
+3. Types match (string vs number)
+
+## Next Steps
+
+- [MCP Tools](/station/en/mcp/tools) - All available tools
+- [Bundles](/station/en/bundles/creating) - Package with OpenAPI specs
+- [Fakers](/station/en/fakers) - Mock your APIs for testing

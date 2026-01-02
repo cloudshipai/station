@@ -1,49 +1,326 @@
 ---
 title: Monitoring & Observability
-description: Monitoring Station deployments and agent performance
+description: Monitor Station deployments, agent performance, and system health
 ---
 
 # Monitoring & Observability
 
-## 🚧 Coming Soon
+This guide covers monitoring Station in production: metrics, logging, alerting, and dashboards.
 
-This page is under construction. We're working on comprehensive documentation for monitoring Station deployments and agent performance.
+:::tip[Looking for Tracing?]
+For OpenTelemetry/Jaeger tracing, see [Observability](/station/en/observability).
+:::
 
-## What This Will Cover
+## Key Metrics
 
-- **Metrics Collection** - Key metrics to monitor in Station
-- **Logging Strategy** - Structured logging and log aggregation
-- **Performance Monitoring** - Tracking agent execution and system performance
-- **Alerting & Notifications** - Setting up alerts for critical issues
-- **Dashboards & Visualization** - Building monitoring dashboards
+### Agent Execution
 
-## Quick Reference
+| Metric | Description | Alert Threshold |
+|--------|-------------|-----------------|
+| `agent_runs_total` | Total agent executions | - |
+| `agent_runs_success` | Successful runs | - |
+| `agent_runs_failed` | Failed runs | > 5% failure rate |
+| `agent_run_duration_seconds` | Execution time | P95 > 60s |
+| `agent_steps_total` | Steps per run | Avg > max_steps |
 
-Basic monitoring commands:
+### LLM Usage
 
-```bash
-# View recent agent runs
-stn runs list --limit 50
+| Metric | Description | Alert Threshold |
+|--------|-------------|-----------------|
+| `llm_requests_total` | Total LLM API calls | - |
+| `llm_tokens_input` | Input tokens | > budget |
+| `llm_tokens_output` | Output tokens | > budget |
+| `llm_latency_seconds` | API response time | P95 > 5s |
+| `llm_errors_total` | API errors | > 1% error rate |
 
-# Check system status
-stn status
+### System Health
 
-# View audit logs
-stn logs audit
+| Metric | Description | Alert Threshold |
+|--------|-------------|-----------------|
+| `station_uptime_seconds` | Time since start | - |
+| `mcp_servers_active` | Connected MCP servers | < expected |
+| `scheduler_runs_pending` | Scheduled runs queued | > 10 |
+| `database_size_bytes` | SQLite database size | > 1GB |
 
-# Monitor agent execution
-stn agent run "Agent Name" "Task" --tail
+## Logging
+
+### Log Levels
+
+| Level | When Used |
+|-------|-----------|
+| `ERROR` | Failures requiring attention |
+| `WARN` | Potential issues |
+| `INFO` | Normal operations |
+| `DEBUG` | Detailed debugging |
+
+### Configure Logging
+
+```yaml
+# config.yaml
+log_level: info
+log_format: json  # json or text
 ```
 
-## Key Metrics to Monitor
+Or via environment:
+```bash
+export STN_LOG_LEVEL=debug
+export STN_LOG_FORMAT=json
+```
 
-- **Agent Execution Success Rate** - Percentage of successful agent runs
-- **Response Times** - How long agents take to complete tasks
-- **Resource Usage** - CPU, memory, and disk utilization
-- **Error Rates** - Frequency and types of agent failures
-- **MCP Tool Performance** - Tool response times and availability
+### Log Output
+
+```json
+{
+  "level": "info",
+  "ts": "2024-01-15T10:30:00Z",
+  "msg": "Agent execution completed",
+  "agent_id": 21,
+  "agent_name": "cost-analyzer",
+  "run_id": 123,
+  "duration_ms": 4532,
+  "status": "success"
+}
+```
+
+### View Logs
+
+```bash
+# All logs
+stn logs
+
+# Follow logs
+stn logs -f
+
+# Filter by level
+stn logs --level error
+
+# Filter by agent
+stn logs --agent cost-analyzer
+```
+
+## Health Checks
+
+### HTTP Endpoint
+
+```bash
+curl http://localhost:8585/health
+```
+
+```json
+{
+  "status": "healthy",
+  "version": "0.5.0",
+  "uptime": "2h 15m 30s",
+  "agents": 12,
+  "mcp_servers": 5,
+  "database": "ok",
+  "scheduler": "running"
+}
+```
+
+### Kubernetes Probes
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
+      containers:
+      - name: station
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8585
+          initialDelaySeconds: 10
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8585
+          initialDelaySeconds: 5
+          periodSeconds: 10
+```
+
+### Docker Healthcheck
+
+```dockerfile
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:8585/health || exit 1
+```
+
+## Alerting
+
+### Webhook Notifications
+
+Configure alerts via webhooks:
+
+```yaml
+# config.yaml
+notifications:
+  webhook_url: https://hooks.slack.com/services/...
+  webhook_events:
+    - agent.failed
+    - agent.timeout
+    - scheduler.error
+```
+
+### Example Alerts
+
+**Agent Failure Rate High:**
+```yaml
+- alert: AgentFailureRateHigh
+  expr: rate(agent_runs_failed[5m]) / rate(agent_runs_total[5m]) > 0.05
+  for: 5m
+  labels:
+    severity: warning
+  annotations:
+    summary: "Agent failure rate above 5%"
+```
+
+**LLM Latency High:**
+```yaml
+- alert: LLMLatencyHigh
+  expr: histogram_quantile(0.95, llm_latency_seconds_bucket) > 5
+  for: 5m
+  labels:
+    severity: warning
+  annotations:
+    summary: "LLM API P95 latency above 5s"
+```
+
+## Dashboards
+
+### Grafana Dashboard
+
+Import the Station dashboard:
+
+```json
+{
+  "dashboard": {
+    "title": "Station Overview",
+    "panels": [
+      {
+        "title": "Agent Executions",
+        "type": "graph",
+        "targets": [
+          {"expr": "rate(agent_runs_total[5m])"}
+        ]
+      },
+      {
+        "title": "Success Rate",
+        "type": "gauge",
+        "targets": [
+          {"expr": "rate(agent_runs_success[1h]) / rate(agent_runs_total[1h]) * 100"}
+        ]
+      },
+      {
+        "title": "LLM Token Usage",
+        "type": "graph",
+        "targets": [
+          {"expr": "sum(rate(llm_tokens_total[1h])) by (type)"}
+        ]
+      }
+    ]
+  }
+}
+```
+
+### Key Panels
+
+1. **Agent Execution Rate** - Runs per minute
+2. **Success Rate** - Percentage of successful runs
+3. **Execution Duration** - P50, P95, P99 latency
+4. **Token Usage** - Input/output tokens over time
+5. **Error Rate** - Failures by type
+6. **Active Schedules** - Running scheduled agents
+
+## Performance Monitoring
+
+### Slow Agent Detection
+
+```bash
+# Find slow runs
+stn runs list --min-duration 30s
+
+# Inspect slow run
+stn runs inspect 123 --verbose
+```
+
+### Token Usage Tracking
+
+```bash
+# View token usage by agent
+stn stats tokens --group-by agent --period 7d
+
+# View token usage by model
+stn stats tokens --group-by model --period 7d
+```
+
+### Resource Usage
+
+```bash
+# CPU and memory
+docker stats station
+
+# Database size
+ls -lh ~/.config/station/station.db
+
+# Run history size
+stn stats runs --period 30d
+```
+
+## Production Checklist
+
+### Pre-Deployment
+
+- [ ] Configure structured logging (JSON format)
+- [ ] Set up health check endpoint monitoring
+- [ ] Configure alerting webhooks
+- [ ] Set resource limits (memory, CPU)
+- [ ] Configure database backups
+
+### Post-Deployment
+
+- [ ] Verify health checks passing
+- [ ] Test alerting pipeline
+- [ ] Baseline normal metrics
+- [ ] Set up dashboard
+- [ ] Document runbooks
+
+### Ongoing
+
+- [ ] Review error logs daily
+- [ ] Monitor token usage vs budget
+- [ ] Track success rate trends
+- [ ] Review slow agent runs
+- [ ] Prune old run history
+
+## Troubleshooting
+
+### High Error Rate
+
+1. Check logs: `stn logs --level error`
+2. Review failed runs: `stn runs list --status error`
+3. Inspect specific failure: `stn runs inspect <id>`
+4. Check MCP server health: `stn status`
+
+### Slow Execution
+
+1. Check LLM latency in traces (Jaeger)
+2. Review tool call durations
+3. Check for retry loops in agent output
+4. Consider increasing timeout or reducing max_steps
+
+### Memory Issues
+
+1. Check database size
+2. Prune old runs: `stn runs prune --older-than 30d`
+3. Review agent output sizes
+4. Consider cloud database for large deployments
 
 ## Next Steps
 
-- **[Production Setup](/station/en/deployment/production)** - Set up production monitoring
-- **[Security Configuration](/station/en/deployment/security)** - Monitor security events
+- [Observability](/station/en/observability) - Distributed tracing with Jaeger
+- [Security](/station/en/deployment/security) - Security configuration
+- [Production](/station/en/deployment/production) - Production deployment guide

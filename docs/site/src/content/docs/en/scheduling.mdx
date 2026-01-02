@@ -1,0 +1,329 @@
+---
+title: Agent Scheduling
+description: Run agents automatically on a schedule using cron expressions
+---
+
+# Agent Scheduling
+
+Station supports cron-based scheduling for automated agent execution. Run health checks, cost analysis, compliance audits, or any other task on a regular schedule.
+
+## Quick Start
+
+### Via MCP Tools
+
+```
+"Schedule the cost-analyzer agent to run daily at 9 AM"
+```
+
+Station will use the `set_schedule` MCP tool to configure the schedule.
+
+### Via CLI
+
+```bash
+# Set a daily schedule
+stn agent schedule cost-analyzer --cron "0 0 9 * * *"
+
+# View schedule
+stn agent schedule cost-analyzer --show
+
+# Remove schedule
+stn agent schedule cost-analyzer --remove
+```
+
+### Via .prompt File
+
+```yaml
+---
+metadata:
+  name: "cost-analyzer"
+  description: "Daily AWS cost analysis"
+schedule:
+  cron: "0 0 9 * * *"           # Daily at 9 AM
+  task: "Analyze yesterday's AWS costs and identify anomalies"
+  variables:
+    region: "us-east-1"
+    threshold: "100"
+---
+
+{{role "system"}}
+You analyze AWS costs and identify spending anomalies.
+```
+
+## Cron Expression Format
+
+Station uses **6-field cron expressions** with second precision:
+
+```
+┌──────────── second (0-59)
+│ ┌────────── minute (0-59)
+│ │ ┌──────── hour (0-23)
+│ │ │ ┌────── day of month (1-31)
+│ │ │ │ ┌──── month (1-12)
+│ │ │ │ │ ┌── day of week (0-6, 0=Sunday)
+│ │ │ │ │ │
+* * * * * *
+```
+
+### Common Patterns
+
+| Schedule | Cron Expression | Description |
+|----------|-----------------|-------------|
+| Every 5 minutes | `0 */5 * * * *` | Run at 0, 5, 10... minutes |
+| Every hour | `0 0 * * * *` | Run at the top of every hour |
+| Daily at 9 AM | `0 0 9 * * *` | Run once daily |
+| Daily at midnight | `0 0 0 * * *` | Run at 00:00 |
+| Weekly on Monday | `0 0 0 * * 1` | Run Monday at midnight |
+| Weekdays at 8 AM | `0 0 8 * * 1-5` | Mon-Fri at 8 AM |
+| Monthly on 1st | `0 0 0 1 * *` | First day of month |
+| Every 30 seconds | `*/30 * * * * *` | Twice per minute |
+
+## Configuration Methods
+
+### 1. MCP Tools (Recommended)
+
+Use natural language in your AI assistant:
+
+```
+"Set a schedule for incident-checker to run every 5 minutes"
+
+"Schedule the compliance-auditor to run weekly on Mondays at midnight"
+
+"Remove the schedule from cost-analyzer"
+```
+
+**Available tools:**
+- `set_schedule` - Create or update a schedule
+- `get_schedule` - View current schedule
+- `remove_schedule` - Delete a schedule
+
+### 2. Declarative (.prompt file)
+
+Add a `schedule` block to your agent's `.prompt` file:
+
+```yaml
+---
+metadata:
+  name: "system-health-checker"
+schedule:
+  cron: "0 */5 * * * *"
+  task: "Check system health metrics"
+  enabled: true
+  variables:
+    alert_threshold: "90"
+---
+```
+
+**Schedule fields:**
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `cron` | Yes | 6-field cron expression |
+| `task` | Yes | Task/prompt to run |
+| `enabled` | No | Enable/disable (default: true) |
+| `variables` | No | Input variables for the run |
+
+### 3. CLI
+
+```bash
+# Set schedule with task
+stn agent schedule my-agent \
+  --cron "0 0 9 * * *" \
+  --task "Perform daily analysis"
+
+# Set schedule with variables
+stn agent schedule my-agent \
+  --cron "0 0 9 * * *" \
+  --task "Analyze region" \
+  --var region=us-east-1 \
+  --var threshold=100
+
+# View current schedule
+stn agent schedule my-agent --show
+
+# Disable without removing
+stn agent schedule my-agent --disable
+
+# Re-enable
+stn agent schedule my-agent --enable
+
+# Remove completely
+stn agent schedule my-agent --remove
+```
+
+## Schedule Variables
+
+Pass variables to scheduled runs:
+
+### In .prompt file
+
+```yaml
+schedule:
+  cron: "0 0 9 * * *"
+  task: "Analyze costs for {{region}}"
+  variables:
+    region: "us-east-1"
+    account_id: "123456789"
+```
+
+### Via MCP tool
+
+```json
+{
+  "agent_id": "21",
+  "cron_schedule": "0 0 9 * * *",
+  "schedule_variables": {
+    "region": "us-east-1",
+    "threshold": "100"
+  }
+}
+```
+
+Variables are available in the agent's prompt as `{{variable_name}}`.
+
+## Viewing Scheduled Runs
+
+### List Scheduled Agents
+
+```bash
+stn agent list --scheduled
+```
+
+### View Run History
+
+```bash
+# List recent runs for a scheduled agent
+stn runs list --agent cost-analyzer --limit 10
+
+# Inspect a specific run
+stn runs inspect 123
+```
+
+### Via MCP
+
+```
+"Show me the last 10 runs of cost-analyzer"
+
+"List all scheduled agents"
+```
+
+## Examples
+
+### Daily Cost Analysis
+
+```yaml
+---
+metadata:
+  name: "cost-analyzer"
+schedule:
+  cron: "0 0 9 * * *"
+  task: "Analyze yesterday's AWS costs, identify any spending anomalies, and send a summary"
+  variables:
+    lookback_days: "1"
+---
+```
+
+### Continuous Health Monitoring
+
+```yaml
+---
+metadata:
+  name: "health-monitor"
+schedule:
+  cron: "0 */5 * * * *"
+  task: "Check all production services and alert if any are unhealthy"
+---
+```
+
+### Weekly Compliance Audit
+
+```yaml
+---
+metadata:
+  name: "compliance-auditor"
+schedule:
+  cron: "0 0 0 * * 1"
+  task: "Run full SOC2 compliance audit on AWS infrastructure"
+---
+```
+
+### Business Hours Monitoring
+
+```yaml
+---
+metadata:
+  name: "business-monitor"
+schedule:
+  cron: "0 0 8-18 * * 1-5"
+  task: "Check customer-facing services during business hours"
+---
+```
+
+## Timezone
+
+Schedules run in the **server's local timezone** by default.
+
+To verify:
+```bash
+date +%Z  # Shows current timezone
+```
+
+For UTC-based scheduling, ensure your server is set to UTC:
+```bash
+export TZ=UTC
+stn serve
+```
+
+## Error Handling
+
+### Failed Scheduled Runs
+
+- Failed runs are logged with error details
+- Subsequent scheduled runs continue normally
+- Use `stn runs list --status error` to find failures
+
+### Retry Behavior
+
+Scheduled runs do **not** automatically retry on failure. Each scheduled execution is independent.
+
+For critical tasks, consider:
+1. Building retry logic into the agent
+2. Using a shorter interval with idempotent tasks
+3. Setting up alerting via webhooks
+
+## Monitoring Schedules
+
+### Web UI
+
+View scheduled agents at `http://localhost:8585/agents` - scheduled agents show a clock icon.
+
+### Logs
+
+```bash
+# View scheduler logs
+stn logs | grep -i schedule
+
+# View specific agent runs
+stn logs | grep "cost-analyzer"
+```
+
+### Metrics
+
+With observability enabled, scheduled runs appear as traces in Jaeger:
+
+1. Open Jaeger UI (http://localhost:16686)
+2. Filter by `scheduled=true` tag
+3. View execution timeline
+
+## Best Practices
+
+1. **Use descriptive task prompts** - The scheduled task should be self-contained
+2. **Set appropriate intervals** - Don't schedule more frequently than needed
+3. **Include error handling** - Agents should handle failures gracefully
+4. **Monitor run history** - Check for failed runs regularly
+5. **Use variables for flexibility** - Make schedules configurable
+
+## Next Steps
+
+- [Webhooks](/station/en/webhooks) - Trigger agents from external events
+- [Observability](/station/en/observability) - Monitor scheduled runs
+- [Agent Configuration](/station/en/agents/config) - Full agent setup

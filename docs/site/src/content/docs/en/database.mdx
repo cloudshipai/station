@@ -1,0 +1,292 @@
+---
+title: Database & Persistence
+description: SQLite, cloud databases, and continuous backup with Litestream
+---
+
+# Database & Persistence
+
+Station uses SQLite by default, with support for cloud databases and continuous backup for production deployments.
+
+## Storage Options
+
+| Option | Use Case | Setup |
+|--------|----------|-------|
+| **Local SQLite** | Development, single instance | Zero config (default) |
+| **Cloud Database** | Multi-instance, teams | libsql connection string |
+| **Litestream** | Production backup | S3/GCS replication |
+
+## Local Development (Default)
+
+Station uses a local SQLite file - zero configuration required:
+
+```bash
+stn serve
+# Database created at ~/.config/station/station.db
+```
+
+**Or specify a custom location:**
+
+```yaml
+# config.yaml
+database_url: /path/to/custom/station.db
+```
+
+## Cloud Database (libsql)
+
+For multi-instance deployments or team collaboration, use a libsql-compatible cloud database like [Turso](https://turso.tech).
+
+### Setup
+
+1. **Create a database:**
+   ```bash
+   turso db create station-prod
+   turso db tokens create station-prod
+   ```
+
+2. **Configure Station:**
+   ```bash
+   export DATABASE_URL="libsql://station-prod-your-org.turso.io?authToken=your-token"
+   stn serve
+   ```
+
+   Or in config:
+   ```yaml
+   # config.yaml
+   database_url: "libsql://station-prod-your-org.turso.io?authToken={{ .TURSO_AUTH_TOKEN }}"
+   ```
+
+### Benefits
+
+- **Shared state** across multiple Station instances
+- **Team collaboration** with centralized data
+- **Multi-region** replication
+- **Automatic backups** by the provider
+- **Edge locations** for low latency
+
+### Docker Deployment
+
+```yaml
+# docker-compose.yml
+services:
+  station:
+    image: ghcr.io/cloudshipai/station:latest
+    environment:
+      - DATABASE_URL=libsql://station-prod.turso.io?authToken=${TURSO_AUTH_TOKEN}
+```
+
+## Continuous Backup (Litestream)
+
+For single-instance production deployments with disaster recovery, use [Litestream](https://litestream.io) for continuous SQLite replication.
+
+### How It Works
+
+```
+Station ──writes──> SQLite ──replicates──> S3/GCS/Azure
+                                              │
+Station (new instance) <──restores on startup─┘
+```
+
+### Docker with Litestream
+
+Station's production Docker image includes Litestream:
+
+```bash
+docker run -d \
+  -e LITESTREAM_S3_BUCKET=my-backups \
+  -e LITESTREAM_S3_ACCESS_KEY_ID=xxx \
+  -e LITESTREAM_S3_SECRET_ACCESS_KEY=yyy \
+  -e LITESTREAM_S3_REGION=us-east-1 \
+  ghcr.io/cloudshipai/station:production
+```
+
+### Configuration Options
+
+**AWS S3:**
+```bash
+export LITESTREAM_S3_BUCKET=my-station-backups
+export LITESTREAM_S3_ACCESS_KEY_ID=AKIA...
+export LITESTREAM_S3_SECRET_ACCESS_KEY=...
+export LITESTREAM_S3_REGION=us-east-1
+```
+
+**Google Cloud Storage:**
+```bash
+export LITESTREAM_GCS_BUCKET=my-station-backups
+export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
+```
+
+**Azure Blob Storage:**
+```bash
+export LITESTREAM_AZURE_ACCOUNT_NAME=mystorageaccount
+export LITESTREAM_AZURE_ACCOUNT_KEY=...
+export LITESTREAM_AZURE_CONTAINER=station-backups
+```
+
+### Kubernetes Deployment
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: station
+spec:
+  replicas: 1  # Single replica with Litestream
+  template:
+    spec:
+      containers:
+      - name: station
+        image: ghcr.io/cloudshipai/station:production
+        env:
+        - name: LITESTREAM_S3_BUCKET
+          value: "station-backups"
+        - name: LITESTREAM_S3_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: aws-credentials
+              key: access-key-id
+        - name: LITESTREAM_S3_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: aws-credentials
+              key: secret-access-key
+        volumeMounts:
+        - name: data
+          mountPath: /data
+      volumes:
+      - name: data
+        emptyDir: {}  # Ephemeral - Litestream restores on startup
+```
+
+### Benefits
+
+- **Continuous replication** - Changes streamed in real-time
+- **Automatic restore** - New instances restore from backup
+- **Point-in-time recovery** - Restore to any point in time
+- **Zero data loss** - Even on server failures
+- **Cost effective** - Just object storage costs
+
+## Migration
+
+### Local to Cloud Database
+
+1. **Export data:**
+   ```bash
+   sqlite3 ~/.config/station/station.db .dump > backup.sql
+   ```
+
+2. **Import to Turso:**
+   ```bash
+   turso db shell station-prod < backup.sql
+   ```
+
+3. **Update config:**
+   ```yaml
+   database_url: "libsql://station-prod.turso.io?authToken=..."
+   ```
+
+### Cloud to Local
+
+```bash
+# Dump from Turso
+turso db shell station-prod ".dump" > backup.sql
+
+# Import locally
+sqlite3 station.db < backup.sql
+```
+
+## Database Schema
+
+Station's database stores:
+
+| Table | Purpose |
+|-------|---------|
+| `agents` | Agent definitions and metadata |
+| `runs` | Execution history and results |
+| `run_events` | Step-by-step execution logs |
+| `mcp_configs` | MCP server configurations |
+| `schedules` | Agent scheduling data |
+| `workflows` | Workflow definitions |
+| `workflow_runs` | Workflow execution history |
+
+### Viewing Data
+
+```bash
+# SQLite CLI
+sqlite3 ~/.config/station/station.db
+
+# List tables
+.tables
+
+# View recent runs
+SELECT id, agent_id, status, created_at FROM runs ORDER BY created_at DESC LIMIT 10;
+
+# View agent execution times
+SELECT agent_id, AVG(duration_ms) as avg_ms FROM runs GROUP BY agent_id;
+```
+
+## Backup Best Practices
+
+### Development
+- Local SQLite is sufficient
+- Git-backed workspace provides config backup
+
+### Staging
+- Use cloud database (Turso) for team access
+- Or Litestream to staging S3 bucket
+
+### Production
+
+**Option A: Cloud Database (Turso)**
+- Best for: Multiple instances, team access
+- Pros: Managed, multi-region, automatic backups
+- Cons: Dependency on external service
+
+**Option B: Litestream**
+- Best for: Single instance, cost-sensitive
+- Pros: Simple, cheap (just S3), fast local reads
+- Cons: Single writer only
+
+**Option C: Both**
+- Primary: Turso for live operations
+- Secondary: Periodic SQLite exports to S3
+
+## Troubleshooting
+
+### Connection Failed
+
+```
+Error: failed to connect to database
+```
+
+**Check:**
+1. `DATABASE_URL` is correctly formatted
+2. Auth token is valid and not expired
+3. Network allows outbound to database endpoint
+
+### Litestream Not Restoring
+
+```
+Error: no backup found
+```
+
+**Check:**
+1. S3 bucket exists and is accessible
+2. Correct region configured
+3. IAM credentials have read access
+
+### Database Locked
+
+```
+Error: database is locked
+```
+
+**Solutions:**
+1. Ensure only one Station instance writes
+2. Use cloud database for multi-instance
+3. Check for zombie processes: `lsof station.db`
+
+## Next Steps
+
+- [Deployment](/station/en/deployment/production) - Production setup
+- [GitOps](/station/en/gitops) - Version control your config
+- [CloudShip](/station/en/cloudship) - Centralized management

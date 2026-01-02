@@ -1,0 +1,370 @@
+---
+title: Sandbox Execution
+description: Isolated code execution for agents using Docker containers
+---
+
+# Sandbox Execution
+
+Station provides isolated code execution environments for agents using Docker containers. This enables agents to safely execute Python, Node.js, or Bash code without affecting the host system.
+
+## Why Sandbox?
+
+| Without Sandbox | With Sandbox |
+|-----------------|--------------|
+| LLM calculates (often wrong) | Python computes correctly |
+| Large JSON in context (slow) | Python parses efficiently |
+| Host execution (security risk) | Isolated container (safe) |
+| No persistence between calls | Persistent session available |
+
+## Execution Modes
+
+### Compute Mode (Default)
+
+Ephemeral per-call execution. Each tool call runs in a fresh container.
+
+```yaml
+---
+metadata:
+  name: "data-processor"
+sandbox: python    # or: node, bash
+---
+Use the sandbox_run tool to process data with Python.
+```
+
+**Available tool:** `sandbox_run`
+
+**Example usage:**
+```python
+# Agent can call sandbox_run with Python code
+result = sandbox_run("""
+import json
+data = json.loads('{"users": 150, "revenue": 45000}')
+print(f"Revenue per user: ${data['revenue'] / data['users']:.2f}")
+""")
+```
+
+### Code Mode
+
+Persistent session across multiple calls. Perfect for iterative development.
+
+```yaml
+---
+metadata:
+  name: "code-developer"
+sandbox:
+  mode: code
+  session: workflow  # Share container across workflow steps
+  runtime: python
+  pip_packages:
+    - pandas
+    - numpy
+---
+Use sandbox tools to develop iteratively.
+```
+
+**Available tools:**
+- `sandbox_open` - Start a persistent session
+- `sandbox_exec` - Execute code in the session
+- `sandbox_fs_write` - Write files to the sandbox
+- `sandbox_fs_read` - Read files from the sandbox
+- `sandbox_close` - End the session
+
+## Configuration
+
+### Simple Syntax
+
+```yaml
+sandbox: python  # Shorthand for compute mode
+```
+
+### Full Configuration
+
+```yaml
+sandbox:
+  mode: code              # 'compute' (default) or 'code'
+  session: agent          # 'agent' (per-agent) or 'workflow' (shared)
+  runtime: python         # 'python', 'node', or 'bash'
+  image: python:3.11-slim # Custom Docker image
+  timeout_seconds: 300    # Execution timeout
+  allow_network: true     # Network access in container
+  pip_packages:           # Python packages to install
+    - pandas
+    - requests
+  npm_packages:           # Node.js packages to install
+    - lodash
+    - axios
+  limits:                 # Resource limits
+    memory: 512m
+    cpu: 1.0
+```
+
+### Session Scoping
+
+| Session Type | Behavior |
+|--------------|----------|
+| `agent` (default) | Each agent gets its own container |
+| `workflow` | Container shared across all agents in a workflow |
+
+**Workflow session example:**
+
+```yaml
+# Agent 1: Setup
+sandbox:
+  mode: code
+  session: workflow
+---
+Create data.csv with test data using sandbox_fs_write.
+
+# Agent 2: Process (same workflow)
+sandbox:
+  mode: code
+  session: workflow
+---
+Read data.csv and process it - the file from Agent 1 is available!
+```
+
+## Enabling Sandbox
+
+### Environment Variables
+
+```bash
+# Compute mode (ephemeral per-call)
+export STATION_SANDBOX_ENABLED=true
+
+# Code mode (persistent sessions)
+export STATION_SANDBOX_ENABLED=true
+export STATION_SANDBOX_CODE_MODE_ENABLED=true
+```
+
+### Config File
+
+```yaml
+# config.yaml
+sandbox:
+  enabled: true
+  code_mode_enabled: true
+  default_runtime: python
+  default_timeout: 300
+```
+
+## Runtime Options
+
+### Python
+
+```yaml
+sandbox:
+  runtime: python
+  pip_packages:
+    - pandas
+    - numpy
+    - scikit-learn
+    - matplotlib
+```
+
+**Pre-installed:** Python 3.11, pip, standard library
+
+### Node.js
+
+```yaml
+sandbox:
+  runtime: node
+  npm_packages:
+    - lodash
+    - axios
+    - cheerio
+```
+
+**Pre-installed:** Node.js 20, npm
+
+### Bash
+
+```yaml
+sandbox:
+  runtime: bash
+```
+
+**Pre-installed:** Common Unix utilities (curl, jq, grep, awk, etc.)
+
+## Examples
+
+### Data Processing Agent
+
+```yaml
+---
+metadata:
+  name: "csv-analyzer"
+  description: "Analyze CSV files with Python"
+sandbox:
+  runtime: python
+  pip_packages:
+    - pandas
+    - matplotlib
+---
+
+{{role "system"}}
+You analyze CSV data using Python. Use sandbox_run to execute analysis code.
+
+When given data:
+1. Parse it with pandas
+2. Calculate statistics
+3. Generate insights
+
+{{role "user"}}
+{{userInput}}
+```
+
+### Web Scraper Agent
+
+```yaml
+---
+metadata:
+  name: "web-scraper"
+  description: "Scrape web pages safely"
+sandbox:
+  runtime: python
+  pip_packages:
+    - requests
+    - beautifulsoup4
+  allow_network: true
+---
+
+{{role "system"}}
+You scrape web pages using Python. Use sandbox_run to fetch and parse HTML.
+
+{{role "user"}}
+{{userInput}}
+```
+
+### Multi-Step Code Development
+
+```yaml
+---
+metadata:
+  name: "code-assistant"
+  description: "Iterative code development"
+sandbox:
+  mode: code
+  session: agent
+  runtime: python
+  pip_packages:
+    - pytest
+---
+
+{{role "system"}}
+You help develop Python code iteratively.
+
+Tools available:
+- sandbox_open: Start a coding session
+- sandbox_exec: Run code
+- sandbox_fs_write: Create/update files
+- sandbox_fs_read: Read files
+- sandbox_close: End session
+
+Workflow:
+1. Open a session
+2. Write code files
+3. Execute and test
+4. Iterate based on results
+5. Close when done
+
+{{role "user"}}
+{{userInput}}
+```
+
+## Security
+
+### Container Isolation
+
+- Each sandbox runs in a separate Docker container
+- No access to host filesystem (except mounted volumes)
+- Network access controlled via `allow_network`
+- Resource limits prevent runaway processes
+
+### Resource Limits
+
+```yaml
+sandbox:
+  limits:
+    memory: 512m      # Memory limit
+    cpu: 1.0          # CPU cores
+    timeout: 300      # Seconds before kill
+```
+
+### Network Control
+
+```yaml
+# Allow network (for APIs, web scraping)
+sandbox:
+  allow_network: true
+
+# No network (pure computation)
+sandbox:
+  allow_network: false  # default
+```
+
+## Troubleshooting
+
+### Docker Not Available
+
+```
+Error: sandbox requires Docker to be installed and running
+```
+
+**Solution:** Install Docker and ensure it's running:
+```bash
+docker --version
+docker ps
+```
+
+### Package Installation Failed
+
+```
+Error: pip install failed for pandas
+```
+
+**Solution:** Check package name and network access:
+```yaml
+sandbox:
+  allow_network: true  # Required for package installation
+  pip_packages:
+    - pandas==2.0.0    # Pin specific version if needed
+```
+
+### Session Timeout
+
+```
+Error: sandbox session timed out
+```
+
+**Solution:** Increase timeout:
+```yaml
+sandbox:
+  timeout_seconds: 600  # 10 minutes
+```
+
+### Out of Memory
+
+```
+Error: container killed due to memory limit
+```
+
+**Solution:** Increase memory limit:
+```yaml
+sandbox:
+  limits:
+    memory: 1g  # 1 GB
+```
+
+## Best Practices
+
+1. **Use compute mode for simple tasks** - Faster startup, no cleanup needed
+2. **Use code mode for iterative work** - Files persist between calls
+3. **Pin package versions** - Ensure reproducible environments
+4. **Set appropriate timeouts** - Prevent runaway processes
+5. **Limit network access** - Only enable when needed
+
+## Next Steps
+
+- [Agent Configuration](/station/en/agents/config) - Full agent setup
+- [Workflows](/station/en/workflows) - Multi-agent orchestration
+- [Fakers](/station/en/fakers) - Mock data for testing

@@ -1,0 +1,363 @@
+---
+title: Faker System
+description: AI-powered mock data for safe agent development and testing
+---
+
+# Faker System
+
+Station's Faker system generates realistic mock data using AI, enabling safe development and testing without production credentials.
+
+## Why Fakers?
+
+| Without Fakers | With Fakers |
+|----------------|-------------|
+| Need production credentials | No credentials required |
+| Risk of affecting real systems | Completely isolated |
+| Limited test scenarios | Unlimited realistic scenarios |
+| Expensive API calls | Free, local generation |
+
+## Quick Start
+
+### Via MCP Tool
+
+```
+"Create a prometheus-metrics faker that generates realistic Kubernetes metrics"
+```
+
+Station uses the `faker_create_standalone` tool to set up the faker.
+
+### Via CLI
+
+```bash
+stn faker create prometheus-metrics \
+  --goal "Generate realistic Prometheus metrics for a microservices environment"
+```
+
+## How It Works
+
+```
+Agent ──calls tool──> Faker MCP Server ──AI generates──> Realistic Mock Data
+                             │
+                             └── Uses Station's AI provider (no extra config)
+```
+
+Fakers are MCP servers that:
+1. Receive tool calls from agents
+2. Use AI to generate contextually appropriate responses
+3. Return realistic mock data
+
+## Creating Fakers
+
+### MCP Tool (Recommended)
+
+```
+"Create a datadog faker with tools for querying metrics, logs, and APM data"
+```
+
+### Programmatic
+
+```json
+{
+  "faker_name": "datadog",
+  "description": "Mock Datadog monitoring data",
+  "goal": "Generate realistic Datadog metrics, logs, and APM traces for a production e-commerce application with occasional performance issues",
+  "tools": [
+    {
+      "name": "get_metrics",
+      "description": "Query time series metrics",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {"type": "string"},
+          "from": {"type": "integer"},
+          "to": {"type": "integer"}
+        }
+      }
+    },
+    {
+      "name": "search_logs",
+      "description": "Search application logs",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {"type": "string"},
+          "limit": {"type": "integer"}
+        }
+      }
+    }
+  ]
+}
+```
+
+### In template.json
+
+```json
+{
+  "mcpServers": {
+    "datadog": {
+      "command": "stn",
+      "args": [
+        "faker",
+        "--ai-instruction",
+        "Generate production incident data: high CPU, memory leaks, error spikes for an e-commerce platform"
+      ]
+    }
+  }
+}
+```
+
+## Configuration
+
+### Goal/Instruction
+
+The `goal` or `ai-instruction` guides the AI in generating appropriate data:
+
+**Good:**
+```
+"Generate realistic Kubernetes metrics for a production cluster with 50 nodes, 
+running microservices. Include occasional resource pressure and pod restarts."
+```
+
+**Too vague:**
+```
+"Generate some metrics"
+```
+
+### Tool Definitions
+
+Define tools that match your real MCP server's interface:
+
+```json
+{
+  "tools": [
+    {
+      "name": "get_pod_metrics",
+      "description": "Get CPU and memory metrics for pods",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "namespace": {"type": "string"},
+          "pod_name": {"type": "string"},
+          "metric": {"type": "string", "enum": ["cpu", "memory", "network"]}
+        },
+        "required": ["namespace"]
+      }
+    }
+  ]
+}
+```
+
+## Examples
+
+### Infrastructure Monitoring
+
+```bash
+stn faker create kubernetes \
+  --goal "Generate Kubernetes cluster metrics for a production environment with 3 namespaces (frontend, backend, data). Include realistic resource utilization, occasional OOM kills, and pod restarts."
+```
+
+### Security Scanning
+
+```bash
+stn faker create security-scanner \
+  --goal "Generate security scan results for a Node.js application. Include a mix of critical, high, and low severity vulnerabilities in dependencies, with realistic CVE IDs and remediation suggestions."
+```
+
+### Cost Analysis
+
+```bash
+stn faker create aws-cost-explorer \
+  --goal "Generate AWS cost data for a medium-sized SaaS company. Include EC2, RDS, S3, and Lambda costs with realistic daily variations and occasional cost spikes from autoscaling events."
+```
+
+### Incident Response
+
+```bash
+stn faker create pagerduty \
+  --goal "Generate PagerDuty incident data for an SRE team. Include a mix of acknowledged, triggered, and resolved incidents across different services with realistic escalation patterns."
+```
+
+## Using Fakers in Agents
+
+### Assign to Agent
+
+```yaml
+---
+metadata:
+  name: "metrics-investigator"
+  description: "Investigate performance issues using metrics"
+tools:
+  - "__get_metrics"        # From datadog faker
+  - "__query_time_series"  # From prometheus faker
+---
+
+{{role "system"}}
+You investigate performance issues by analyzing metrics data.
+```
+
+### In template.json
+
+```json
+{
+  "mcpServers": {
+    "prometheus": {
+      "command": "stn",
+      "args": ["faker", "--config", "prometheus-faker.json"]
+    },
+    "datadog": {
+      "command": "stn", 
+      "args": ["faker", "--ai-instruction", "Generate realistic APM data for microservices"]
+    }
+  }
+}
+```
+
+## Faker vs Real MCP Server
+
+### Development with Faker
+
+```json
+{
+  "mcpServers": {
+    "datadog": {
+      "command": "stn",
+      "args": ["faker", "--ai-instruction", "Generate monitoring data"]
+    }
+  }
+}
+```
+
+### Production with Real Server
+
+```json
+{
+  "mcpServers": {
+    "datadog": {
+      "command": "datadog-mcp",
+      "env": {
+        "DD_API_KEY": "{{ .DATADOG_API_KEY }}",
+        "DD_APP_KEY": "{{ .DATADOG_APP_KEY }}"
+      }
+    }
+  }
+}
+```
+
+Use different `template.json` files per environment to swap between faker and real.
+
+## Advanced Configuration
+
+### Persistence
+
+By default, fakers don't persist data between calls. For stateful scenarios:
+
+```json
+{
+  "faker_name": "stateful-db",
+  "persist": true,
+  "goal": "Simulate a database with user records that persist between queries"
+}
+```
+
+### Auto-sync
+
+Faker configurations can auto-sync to your environment:
+
+```json
+{
+  "auto_sync": true  // Updates template.json automatically
+}
+```
+
+### Debug Mode
+
+Enable verbose logging to see AI prompts and responses:
+
+```bash
+stn faker create my-faker --goal "..." --debug
+```
+
+## Testing Agents with Fakers
+
+### Generate Test Scenarios
+
+```
+"Generate 10 test scenarios for the incident-coordinator agent using fakers"
+```
+
+### Run Evaluation
+
+```bash
+# Create fakers for all dependencies
+stn faker create datadog --goal "Generate incident data"
+stn faker create kubernetes --goal "Generate cluster issues"
+
+# Run agent evaluation
+stn eval run incident-coordinator --scenarios 100
+```
+
+## Best Practices
+
+1. **Match real schemas** - Faker tool schemas should match your real MCP servers
+2. **Be specific in goals** - Detailed instructions produce more realistic data
+3. **Include edge cases** - Mention error conditions and anomalies in goals
+4. **Version your fakers** - Keep faker configs in Git alongside agents
+5. **Test transitions** - Ensure agents work with both faker and real data
+
+## Troubleshooting
+
+### Generic/Unrealistic Data
+
+**Problem:** Faker returns too generic data
+
+**Solution:** Make the goal more specific:
+```
+# Too generic
+"Generate metrics"
+
+# Better
+"Generate Prometheus metrics for a Kubernetes cluster running an e-commerce 
+application. Include realistic CPU/memory patterns with daily traffic cycles, 
+occasional memory leaks in the checkout service, and 99.9% uptime for core services."
+```
+
+### Schema Mismatch
+
+**Problem:** Agent expects different data format
+
+**Solution:** Define explicit output schema in tool definition:
+```json
+{
+  "name": "get_metrics",
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "series": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "timestamp": {"type": "integer"},
+            "value": {"type": "number"}
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+### Slow Responses
+
+**Problem:** Faker takes too long
+
+**Solution:** 
+1. Use a faster model for fakers
+2. Simplify the goal
+3. Cache common responses
+
+## Next Steps
+
+- [Sandbox](/station/en/sandbox) - Isolated code execution
+- [Evaluation](/station/en/agents/monitoring) - Test agent performance
+- [Bundles](/station/en/bundles/creating) - Package agents with fakers

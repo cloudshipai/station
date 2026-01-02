@@ -1,0 +1,337 @@
+---
+title: Observability & Tracing
+description: OpenTelemetry integration for complete execution visibility
+---
+
+# Observability & Tracing
+
+Station includes built-in OpenTelemetry (OTEL) support for complete execution observability. Every agent execution, LLM call, and tool invocation is automatically traced.
+
+## What Gets Traced
+
+| Component | Details Captured |
+|-----------|------------------|
+| **Agent Executions** | Complete timeline from start to finish |
+| **LLM Calls** | Every OpenAI/Anthropic/Gemini API call with latency |
+| **MCP Tool Usage** | Individual tool calls to AWS, databases, etc. |
+| **Database Operations** | Query performance and data access patterns |
+| **GenKit Spans** | Dotprompt execution, generation flow, model interactions |
+
+## Quick Start with Jaeger
+
+The fastest way to get tracing running locally:
+
+```bash
+# Start Jaeger
+stn jaeger up
+
+# Jaeger UI available at http://localhost:16686
+```
+
+Station automatically detects Jaeger and sends traces to `http://localhost:4318`.
+
+### Example Trace
+
+```
+incident_coordinator (18.2s)
+├─ assess_severity (0.5s)
+├─ delegate_logs_investigator (4.1s)
+│  └─ __get_logs (3.2s)
+├─ delegate_metrics_investigator (3.8s)
+│  └─ __query_time_series (2.9s)
+├─ delegate_change_detective (2.4s)
+│  └─ __get_recent_deployments (1.8s)
+└─ synthesize_findings (1.2s)
+```
+
+## Configuration
+
+### Environment Variable (Recommended)
+
+```bash
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+stn serve
+```
+
+### Config File
+
+```yaml
+# config.yaml
+otel_endpoint: "http://localhost:4318"
+```
+
+### MCP Client Configuration
+
+When connecting MCP clients, include the OTEL endpoint:
+
+```json
+{
+  "mcpServers": {
+    "station": {
+      "command": "stn",
+      "args": ["stdio"],
+      "env": {
+        "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4318"
+      }
+    }
+  }
+}
+```
+
+Or with Claude Code CLI:
+
+```bash
+claude mcp add station -e OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 --scope user -- stn stdio
+```
+
+## Tracing Backends
+
+Station works with any OpenTelemetry-compatible backend.
+
+### Jaeger (Local Development)
+
+```bash
+# Built-in command
+stn jaeger up
+
+# Or manual Docker
+docker run -d --name jaeger \
+  -p 16686:16686 \
+  -p 4318:4318 \
+  -e COLLECTOR_OTLP_ENABLED=true \
+  jaegertracing/all-in-one:latest
+```
+
+**UI:** http://localhost:16686
+
+### Grafana Tempo
+
+```yaml
+# docker-compose.yml
+services:
+  tempo:
+    image: grafana/tempo:latest
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./tempo.yaml:/etc/tempo.yaml
+    ports:
+      - "4318:4318"   # OTLP HTTP
+      - "3200:3200"   # Tempo API
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+```
+
+```bash
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+```
+
+### Datadog APM
+
+```bash
+# Install Datadog Agent with OTLP support
+DD_API_KEY=<your-key> DD_SITE="datadoghq.com" \
+  DD_OTLP_CONFIG_RECEIVER_PROTOCOLS_HTTP_ENDPOINT="0.0.0.0:4318" \
+  bash -c "$(curl -L https://install.datadoghq.com/scripts/install_script_agent7.sh)"
+
+# Configure Station
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+```
+
+### Honeycomb
+
+```bash
+export OTEL_EXPORTER_OTLP_ENDPOINT=https://api.honeycomb.io
+export OTEL_EXPORTER_OTLP_HEADERS="x-honeycomb-team=your-api-key"
+```
+
+### AWS X-Ray
+
+```bash
+# Run AWS OTEL Collector
+docker run -d \
+  -p 4318:4318 \
+  -e AWS_REGION=us-east-1 \
+  amazon/aws-otel-collector:latest
+
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+```
+
+### New Relic
+
+```bash
+export OTEL_EXPORTER_OTLP_ENDPOINT=https://otlp.nr-data.net:4318
+export OTEL_EXPORTER_OTLP_HEADERS="api-key=your-license-key"
+```
+
+### Azure Monitor
+
+```bash
+# Use Azure Monitor OpenTelemetry Exporter
+export APPLICATIONINSIGHTS_CONNECTION_STRING="InstrumentationKey=..."
+export OTEL_EXPORTER_OTLP_ENDPOINT=https://dc.services.visualstudio.com/v2/track
+```
+
+## Span Details
+
+Station captures rich span information:
+
+### Agent Execution Span
+
+```json
+{
+  "name": "agent.execute",
+  "attributes": {
+    "agent.id": "21",
+    "agent.name": "incident_coordinator",
+    "agent.environment": "production",
+    "task": "Investigate API timeout",
+    "model": "gpt-4o-mini",
+    "max_steps": 20
+  }
+}
+```
+
+### LLM Call Span
+
+```json
+{
+  "name": "llm.generate",
+  "attributes": {
+    "model": "gpt-4o-mini",
+    "provider": "openai",
+    "input_tokens": 1250,
+    "output_tokens": 380,
+    "latency_ms": 1240
+  }
+}
+```
+
+### Tool Call Span
+
+```json
+{
+  "name": "tool.call",
+  "attributes": {
+    "tool.name": "__get_logs",
+    "tool.server": "datadog",
+    "duration_ms": 320,
+    "success": true
+  }
+}
+```
+
+## Viewing Traces
+
+### Jaeger UI
+
+1. Open http://localhost:16686
+2. Select "station" from the Service dropdown
+3. Click "Find Traces"
+4. Click on a trace to see the full execution timeline
+
+### Filtering Traces
+
+In Jaeger, use tags to filter:
+
+```
+agent.name=incident_coordinator
+model=gpt-4o-mini
+error=true
+```
+
+## Production Setup
+
+### High-Volume Environments
+
+For production, use sampling to reduce trace volume:
+
+```bash
+export OTEL_TRACES_SAMPLER=parentbased_traceidratio
+export OTEL_TRACES_SAMPLER_ARG=0.1  # Sample 10% of traces
+```
+
+### Secure Endpoints
+
+```bash
+# TLS endpoint
+export OTEL_EXPORTER_OTLP_ENDPOINT=https://collector.example.com:4318
+export OTEL_EXPORTER_OTLP_CERTIFICATE=/path/to/ca.crt
+
+# With authentication
+export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer your-token"
+```
+
+### Docker Deployment
+
+```yaml
+# docker-compose.yml
+services:
+  station:
+    image: ghcr.io/cloudshipai/station:latest
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
+    depends_on:
+      - jaeger
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    ports:
+      - "16686:16686"
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+```
+
+## Troubleshooting
+
+### No Traces Appearing
+
+1. **Check endpoint connectivity:**
+   ```bash
+   curl -v http://localhost:4318/v1/traces
+   # Should return 405 Method Not Allowed (POST required)
+   ```
+
+2. **Verify environment variable:**
+   ```bash
+   echo $OTEL_EXPORTER_OTLP_ENDPOINT
+   ```
+
+3. **Check Station logs:**
+   ```bash
+   stn logs | grep -i otel
+   ```
+
+### Traces Missing Tool Calls
+
+Ensure MCP servers are configured with tracing:
+
+```json
+{
+  "mcpServers": {
+    "my-server": {
+      "command": "my-mcp-server",
+      "env": {
+        "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4318"
+      }
+    }
+  }
+}
+```
+
+### High Latency in Traces
+
+If traces show high latency:
+1. Check network connectivity to tracing backend
+2. Consider async export: traces are sent asynchronously by default
+3. For high-volume, use sampling (see Production Setup)
+
+## Next Steps
+
+- [Deployment Monitoring](/station/en/deployment/monitoring) - Metrics and alerting
+- [Scheduling](/station/en/scheduling) - Automated agent runs
+- [CloudShip Integration](/station/en/cloudship) - Centralized observability

@@ -1,0 +1,417 @@
+---
+title: "Example: SRE Incident Response Team"
+description: Build a complete SRE incident response team with multi-agent coordination
+---
+
+# Example: SRE Incident Response Team
+
+This guide walks you through building a production-ready SRE incident response team with 9 specialized agents that achieved a **7.5/10 performance score** in automated testing.
+
+## The Team Structure
+
+```
+incident_coordinator (Orchestrator)
+    ├── logs_investigator      - Analyzes error patterns in application logs
+    ├── metrics_investigator   - Identifies performance spikes and anomalies
+    ├── traces_investigator    - Examines distributed trace slowdowns
+    ├── change_detective       - Correlates with recent deployments
+    ├── infra_sre             - Checks K8s, AWS, and infrastructure
+    ├── saas_dependency_analyst - Monitors external service outages
+    ├── runbook_recommender   - Finds relevant documentation
+    └── scribe                - Generates incident reports
+```
+
+## Prerequisites
+
+- Station installed and initialized
+- AI provider configured (Claude, OpenAI, or Gemini)
+- Jaeger running: `stn jaeger up`
+
+## Step 1: Create Mock Data Sources
+
+First, set up fakers to simulate production monitoring tools:
+
+```
+"Create a datadog faker that generates production incident data including high CPU, 
+memory leaks, and error spikes for a microservices e-commerce platform"
+```
+
+```
+"Create a kubernetes faker that generates cluster metrics, pod status, and events 
+for a production environment with occasional OOM kills and pod restarts"
+```
+
+```
+"Create a github faker that generates deployment history and recent commits"
+```
+
+## Step 2: Create Specialist Agents
+
+### Logs Investigator
+
+```yaml
+---
+metadata:
+  name: "logs_investigator"
+  description: "Deep dive into logs to identify error patterns"
+model: gpt-4o-mini
+max_steps: 8
+tools:
+  - "__logs_query"
+  - "__search_query"
+---
+
+{{role "system"}}
+You analyze application logs to find root causes of incidents.
+
+When investigating:
+1. Search for error patterns in the time window
+2. Identify stack traces and error messages
+3. Look for unusual log volume spikes
+4. Correlate errors across services
+
+Focus on: error patterns, stack traces, and anomalies.
+Report your findings concisely.
+
+{{role "user"}}
+{{userInput}}
+```
+
+### Metrics Investigator
+
+```yaml
+---
+metadata:
+  name: "metrics_investigator"
+  description: "Analyze performance metrics and identify anomalies"
+model: gpt-4o-mini
+max_steps: 8
+tools:
+  - "__get_metrics"
+  - "__query_time_series"
+  - "__get_dashboards"
+  - "__list_alerts"
+---
+
+{{role "system"}}
+You investigate performance issues by analyzing metrics and time series data.
+
+When investigating:
+1. Check CPU, memory, and latency metrics
+2. Identify anomalies and spikes
+3. Compare against baselines
+4. Correlate across services
+
+Focus on: CPU, memory, latency, error rates, and throughput.
+Report specific numbers and timeframes.
+
+{{role "user"}}
+{{userInput}}
+```
+
+### Change Detective
+
+```yaml
+---
+metadata:
+  name: "change_detective"
+  description: "Correlate incidents with recent deployments and changes"
+model: gpt-4o-mini
+max_steps: 6
+tools:
+  - "__get_recent_deployments"
+  - "__get_commits"
+  - "__get_config_changes"
+---
+
+{{role "system"}}
+You correlate incidents with recent changes to identify root causes.
+
+When investigating:
+1. Find deployments in the past 24 hours
+2. Identify relevant code changes
+3. Check configuration updates
+4. Assess which changes could cause the issue
+
+Report: deployment times, changes made, and correlation with incident.
+
+{{role "user"}}
+{{userInput}}
+```
+
+### Infrastructure SRE
+
+```yaml
+---
+metadata:
+  name: "infra_sre"
+  description: "Check infrastructure health (K8s, AWS, networking)"
+model: gpt-4o-mini
+max_steps: 10
+tools:
+  - "__kubectl_get"
+  - "__aws_describe"
+  - "__check_network"
+---
+
+{{role "system"}}
+You analyze infrastructure health to identify issues.
+
+When investigating:
+1. Check Kubernetes pod status and events
+2. Review AWS resource health
+3. Analyze networking and connectivity
+4. Look for resource exhaustion
+
+Report: specific resources affected and their status.
+
+{{role "user"}}
+{{userInput}}
+```
+
+### Additional Specialists
+
+Create similar agents for:
+- **traces_investigator** - Distributed tracing analysis
+- **saas_dependency_analyst** - External service monitoring
+- **runbook_recommender** - Documentation search
+- **scribe** - Incident report generation
+
+## Step 3: Create the Coordinator
+
+```yaml
+---
+metadata:
+  name: "incident_coordinator"
+  description: "Orchestrates specialist agents to investigate production incidents"
+model: gpt-4o-mini
+max_steps: 20
+agents:
+  - "logs_investigator"
+  - "metrics_investigator"
+  - "traces_investigator"
+  - "change_detective"
+  - "infra_sre"
+  - "saas_dependency_analyst"
+  - "runbook_recommender"
+  - "scribe"
+---
+
+{{role "system"}}
+You are an expert SRE incident coordinator. When presented with a production issue:
+
+## Investigation Protocol
+
+1. **Initial Assessment**
+   - Assess severity (SEV1-4) based on impact
+   - Identify affected services
+   - Determine investigation scope
+
+2. **Parallel Investigation**
+   - Delegate to relevant specialists using __agent_<name> tools
+   - Logs: error patterns and stack traces
+   - Metrics: performance anomalies
+   - Changes: recent deployments
+   - Infrastructure: resource health
+
+3. **Root Cause Analysis**
+   - Synthesize findings from all specialists
+   - Identify the root cause
+   - Determine contributing factors
+
+4. **Response**
+   - Provide clear remediation steps
+   - Prioritize: immediate, short-term, long-term
+   - Suggest monitoring improvements
+
+## Communication Style
+- Be direct and specific
+- Use timestamps and numbers
+- Reference specific services and metrics
+- Provide actionable next steps
+
+{{role "user"}}
+{{userInput}}
+```
+
+## Step 4: Wire Up the Hierarchy
+
+Using MCP tools:
+
+```
+"Add logs_investigator as a tool for incident_coordinator"
+"Add metrics_investigator as a tool for incident_coordinator"
+"Add change_detective as a tool for incident_coordinator"
+"Add infra_sre as a tool for incident_coordinator"
+```
+
+Or in the .prompt file, the `agents:` block handles this automatically.
+
+## Step 5: Test the Team
+
+### Simple Test
+
+```
+"Run incident_coordinator with task: The checkout service is returning 503 errors"
+```
+
+### Expected Response
+
+```
+I'll coordinate our SRE team to investigate this critical checkout service issue.
+
+INITIAL ASSESSMENT:
+- Service: checkout-service  
+- Error: HTTP 503 (Service Unavailable)
+- Impact: Customers unable to complete purchases
+- Severity: SEV1 - Revenue impacting
+
+Delegating to specialist agents...
+
+[LOGS INVESTIGATION - @logs_investigator]
+✅ Found error spike starting at 14:32 UTC
+- Pattern: "connection pool exhausted" 
+- Frequency: 847 errors/minute
+- Stack trace: database connection timeout
+
+[METRICS ANALYSIS - @metrics_investigator]
+✅ Database connection pool at 100% utilization
+- Normal: 40-60 connections
+- Current: 200 connections (maxed out)
+- Response time: 5000ms (normal: 200ms)
+
+[DEPLOYMENT CHECK - @change_detective]
+✅ Recent deployment detected:
+- Service: checkout-service v2.3.0
+- Deployed: 14:15 UTC (17 minutes before incident)
+- Change: Added batch order processing
+
+ROOT CAUSE IDENTIFIED:
+New batch processing feature holding database connections 
+longer than expected, exhausting the connection pool.
+
+RECOMMENDED ACTIONS:
+1. IMMEDIATE: Increase connection pool to 400 (kubectl patch)
+2. ROLLBACK: Revert to v2.2.0 if pool increase insufficient
+3. LONG-TERM: Implement connection pooling in batch processor
+```
+
+## Step 6: Evaluate Performance
+
+### Generate Test Scenarios
+
+```
+"Generate 100 test scenarios for incident_coordinator"
+```
+
+### Run Evaluation
+
+```
+"Evaluate the incident_coordinator using LLM-as-judge"
+```
+
+### Generate Report
+
+```
+"Create a performance report for the SRE team"
+```
+
+### Expected Results
+
+**Team Performance: 7.5/10**
+
+| Metric | Score | Notes |
+|--------|-------|-------|
+| Multi-agent coordination | 8.5/10 | Excellent delegation |
+| Tool utilization | 8.0/10 | Effective use of all tools |
+| Root cause analysis | 7.5/10 | Identifies issues accurately |
+| Resolution speed | 7.0/10 | Room for improvement |
+| Communication clarity | 6.5/10 | Could be more concise |
+
+## Step 7: Deploy to Production
+
+### Build Bundle
+
+```
+"Create a bundle from the sre-team environment"
+```
+
+### Deploy to Fly.io
+
+```bash
+stn deploy sre-team --target fly
+```
+
+### Connect from Claude/Cursor
+
+```json
+{
+  "mcpServers": {
+    "sre-team": {
+      "url": "https://sre-team.fly.dev:3030/mcp",
+      "headers": {
+        "Authorization": "Bearer YOUR_TOKEN"
+      }
+    }
+  }
+}
+```
+
+## Step 8: Schedule Continuous Monitoring
+
+```
+"Schedule incident_coordinator to run every 5 minutes with task: 
+Check all production services for anomalies and alert if any issues detected"
+```
+
+## Customizing for Your Environment
+
+### Replace Fakers with Real Tools
+
+Update `template.json` to use real MCP servers:
+
+```json
+{
+  "mcpServers": {
+    "datadog": {
+      "command": "datadog-mcp",
+      "env": {
+        "DD_API_KEY": "{{ .DATADOG_API_KEY }}",
+        "DD_APP_KEY": "{{ .DATADOG_APP_KEY }}"
+      }
+    },
+    "kubernetes": {
+      "command": "kubectl-mcp",
+      "env": {
+        "KUBECONFIG": "{{ .KUBECONFIG }}"
+      }
+    }
+  }
+}
+```
+
+### Add More Specialists
+
+Create additional agents for:
+- **security_analyst** - Security incident investigation
+- **cost_analyst** - Cost-related performance issues
+- **database_specialist** - Database-specific deep dives
+
+### Tune for Your Stack
+
+Adjust agent prompts to match your:
+- Service naming conventions
+- Monitoring tool specifics
+- Runbook locations
+- Escalation procedures
+
+## Full Agent Files
+
+See the complete agent definitions in the [Station examples repository](https://github.com/cloudshipai/station/tree/main/examples/sre-team).
+
+## Next Steps
+
+- [Scheduling](/station/en/scheduling) - Automate incident checks
+- [Webhooks](/station/en/webhooks) - Trigger from PagerDuty
+- [Observability](/station/en/observability) - Monitor agent performance
+- [Bundles](/station/en/bundles/creating) - Package for distribution

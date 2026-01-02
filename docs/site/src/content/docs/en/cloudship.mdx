@@ -1,0 +1,309 @@
+---
+title: CloudShip Integration
+description: Connect Station to CloudShip for centralized management and team collaboration
+---
+
+# CloudShip Integration
+
+Connect your Station to [CloudShip](https://cloudshipai.com) for centralized management, OAuth authentication, and team collaboration.
+
+## Why CloudShip?
+
+| Feature | Standalone Station | With CloudShip |
+|---------|-------------------|----------------|
+| Management | Local only | Centralized dashboard |
+| Authentication | Manual API keys | OAuth for team members |
+| Collaboration | Single user | Organization-wide access |
+| Audit Trail | Local logs | Centralized tracking |
+
+## Quick Setup
+
+### 1. Get a Registration Key
+
+From your [CloudShip dashboard](https://app.cloudshipai.com):
+1. Go to **Settings > Stations**
+2. Click **Create Registration Key**
+3. Copy the key
+
+### 2. Configure Station
+
+Add to your `config.yaml`:
+
+```yaml
+cloudship:
+  enabled: true
+  registration_key: "sk-reg-..."
+  name: "my-station"
+  tags: ["production", "us-east-1"]
+```
+
+### 3. Start Station
+
+```bash
+stn serve
+# Output: Successfully registered with CloudShip management channel
+```
+
+Your Station is now connected and visible in your CloudShip dashboard.
+
+## Authentication Methods
+
+### Interactive Login
+
+```bash
+stn auth login
+```
+
+```
+Using config file: /home/user/.config/station/config.yaml
+Enter your CloudShip API key: ▌
+```
+
+Get your API key from [CloudShip Settings > API Keys](https://app.cloudshipai.com/settings/api-keys).
+
+### Registration Key (Automated)
+
+For automated deployments, use a registration key in config:
+
+```yaml
+cloudship:
+  enabled: true
+  registration_key: "sk-reg-..."
+```
+
+### Check Status
+
+```bash
+stn auth status
+```
+
+```
+CloudShip Connection:
+  ✅ Connected to CloudShip
+  Organization: My Company
+  Station: production-us-east
+  Last sync: 2 minutes ago
+```
+
+## OAuth for MCP Access
+
+When CloudShip OAuth is enabled, MCP clients authenticate through CloudShip before accessing your Station's agents.
+
+### Who Can Access?
+
+Only users who:
+1. Have a **CloudShip account**
+2. Are **members of your organization**
+3. Successfully **authenticate via OAuth**
+
+### Enable OAuth
+
+1. **Create an OAuth App** in CloudShip (Settings > OAuth Apps)
+
+2. **Configure Station**:
+
+```yaml
+cloudship:
+  enabled: true
+  registration_key: "your-key"
+  name: "my-station"
+  oauth:
+    enabled: true
+    client_id: "your-oauth-client-id"
+```
+
+3. **Invite team members** to your CloudShip organization
+
+### How OAuth Works
+
+```
+MCP Client                    Station                      CloudShip
+    |                           |                             |
+    |------ POST /mcp --------->|                             |
+    |<----- 401 Unauthorized ---|                             |
+    |       (OAuth discovery)   |                             |
+    |                           |                             |
+    |------- [Browser Login] -------------------------------->|
+    |<------ [Access Token] ----------------------------------|
+    |                           |                             |
+    |------ POST /mcp --------->|                             |
+    |  Authorization: Bearer    |------ Validate Token ------>|
+    |                           |<------ {active: true} ------|
+    |<----- MCP Response -------|                             |
+```
+
+### MCP Client Configuration
+
+Point your MCP client to port 8587 (Dynamic Agent MCP):
+
+```json
+{
+  "mcpServers": {
+    "my-station": {
+      "url": "https://my-station.example.com:8587/mcp"
+    }
+  }
+}
+```
+
+When connecting:
+1. Client receives 401 with OAuth discovery URL
+2. Browser opens for CloudShip login
+3. After authentication, client automatically retries with token
+
+## Configuration Reference
+
+```yaml
+cloudship:
+  # Enable CloudShip integration
+  enabled: true
+  
+  # Registration key from CloudShip dashboard
+  registration_key: "sk-reg-..."
+  
+  # Unique station name (required for multi-station support)
+  name: "production-us-east"
+  
+  # Tags for filtering and organization
+  tags: ["production", "us-east-1", "sre-team"]
+  
+  # CloudShip endpoints (defaults shown - usually no need to change)
+  endpoint: "lighthouse.cloudshipai.com:443"
+  use_tls: true
+  base_url: "https://app.cloudshipai.com"
+  
+  # OAuth settings for MCP authentication
+  oauth:
+    enabled: false
+    client_id: ""
+    # Auto-configured from base_url:
+    # auth_url: "https://app.cloudshipai.com/oauth/authorize/"
+    # token_url: "https://app.cloudshipai.com/oauth/token/"
+    # introspect_url: "https://app.cloudshipai.com/oauth/introspect/"
+```
+
+## Development Setup
+
+### Local Development (No CloudShip)
+
+```yaml
+# config.yaml - no cloudship section needed
+ai_provider: anthropic
+ai_model: claude-sonnet-4-20250514
+```
+
+### Local Lighthouse (Testing)
+
+For testing CloudShip integration locally:
+
+```yaml
+cloudship:
+  enabled: true
+  registration_key: "your-dev-key"
+  name: "dev-station"
+  endpoint: "localhost:50051"
+  use_tls: false
+  base_url: "http://localhost:8000"
+  oauth:
+    enabled: true
+    client_id: "your-dev-client-id"
+    introspect_url: "http://localhost:8000/oauth/introspect/"
+```
+
+### Production CloudShip (Recommended)
+
+```yaml
+cloudship:
+  enabled: true
+  registration_key: "your-registration-key"
+  name: "dev-station"
+  # Uses defaults: endpoint=lighthouse.cloudshipai.com:443, use_tls=true
+```
+
+## Multi-Station Management
+
+### Naming Stations
+
+Each Station needs a unique name within your organization:
+
+```yaml
+# Station 1: Production US
+cloudship:
+  name: "prod-us-east"
+  tags: ["production", "us-east-1"]
+
+# Station 2: Production EU
+cloudship:
+  name: "prod-eu-west"
+  tags: ["production", "eu-west-1"]
+
+# Station 3: Development
+cloudship:
+  name: "dev-local"
+  tags: ["development", "local"]
+```
+
+### Filtering by Tags
+
+In CloudShip dashboard, filter Stations by tags to manage specific environments.
+
+## Security
+
+### Registration Keys
+
+- Keep registration keys secret
+- Rotate keys periodically
+- Use different keys for different environments
+
+### OAuth Tokens
+
+- Validated on every MCP request
+- PKCE required (S256 code challenge)
+- Cached for 5 minutes to reduce introspection calls
+
+### Audit Trail
+
+CloudShip logs all:
+- Station connections/disconnections
+- Agent executions triggered via MCP
+- OAuth authentications
+- Configuration changes
+
+## Troubleshooting
+
+### Connection Failed
+
+```
+Error: failed to connect to CloudShip
+```
+
+**Check:**
+1. Registration key is valid
+2. Network allows outbound to `lighthouse.cloudshipai.com:443`
+3. TLS is properly configured
+
+### OAuth 401 Errors
+
+```
+Error: 401 Unauthorized
+```
+
+**Check:**
+1. OAuth is enabled in config
+2. Client ID is correct
+3. User is member of organization
+
+### Token Expired
+
+Tokens auto-refresh. If issues persist:
+
+```bash
+stn auth logout
+stn auth login
+```
+
+## Next Steps
+
+- [Authentication](/station/en/authentication) - All auth options
+- [Deployment](/station/en/deployment/production) - Production setup
+- [Observability](/station/en/observability) - Centralized tracing
