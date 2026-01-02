@@ -119,6 +119,10 @@ jobs:
           name: plugin-dist
           path: ${{ env.PLUGIN_DIR }}/dist/
 
+      - name: Install dependencies
+        working-directory: ${{ env.PLUGIN_DIR }}
+        run: bun install
+
       - name: Publish to npm
         working-directory: ${{ env.PLUGIN_DIR }}
         run: npm publish --access public
