@@ -521,8 +521,7 @@ func (r *AgentRepo) UpdateMemoryConfig(id int64, memoryTopicKey *string, memoryM
 	)
 }
 
-// CreateTxWithMemory creates agent with memory support within a transaction
-func (r *AgentRepo) CreateTxWithMemory(tx *sql.Tx, name, description, prompt string, maxSteps, environmentID, createdBy int64, inputSchema *string, cronSchedule *string, scheduleEnabled bool, outputSchema *string, outputSchemaPreset *string, app, appType string, memoryTopicKey *string, memoryMaxTokens *int) (*models.Agent, error) {
+func (r *AgentRepo) CreateTxWithMemory(tx *sql.Tx, name, description, prompt string, maxSteps, environmentID, createdBy int64, inputSchema *string, cronSchedule *string, scheduleEnabled bool, scheduleVariables *string, outputSchema *string, outputSchemaPreset *string, app, appType string, memoryTopicKey *string, memoryMaxTokens *int) (*models.Agent, error) {
 	isScheduled := cronSchedule != nil && *cronSchedule != "" && scheduleEnabled
 
 	params := queries.CreateAgentParams{
@@ -542,6 +541,10 @@ func (r *AgentRepo) CreateTxWithMemory(tx *sql.Tx, name, description, prompt str
 
 	if cronSchedule != nil {
 		params.CronSchedule = sql.NullString{String: *cronSchedule, Valid: true}
+	}
+
+	if scheduleVariables != nil {
+		params.ScheduleVariables = sql.NullString{String: *scheduleVariables, Valid: true}
 	}
 
 	if outputSchema != nil {
@@ -579,7 +582,7 @@ func (r *AgentRepo) CreateTxWithMemory(tx *sql.Tx, name, description, prompt str
 }
 
 // UpdateTxWithMemory updates agent with memory support within a transaction
-func (r *AgentRepo) UpdateTxWithMemory(tx *sql.Tx, id int64, name, description, prompt string, maxSteps int64, inputSchema *string, cronSchedule *string, scheduleEnabled bool, outputSchema *string, outputSchemaPreset *string, app, appType string, memoryTopicKey *string, memoryMaxTokens *int) error {
+func (r *AgentRepo) UpdateTxWithMemory(tx *sql.Tx, id int64, name, description, prompt string, maxSteps int64, inputSchema *string, cronSchedule *string, scheduleEnabled bool, scheduleVariables *string, outputSchema *string, outputSchemaPreset *string, app, appType string, memoryTopicKey *string, memoryMaxTokens *int) error {
 	isScheduled := cronSchedule != nil && *cronSchedule != "" && scheduleEnabled
 
 	params := queries.UpdateAgentParams{
@@ -598,6 +601,16 @@ func (r *AgentRepo) UpdateTxWithMemory(tx *sql.Tx, id int64, name, description, 
 
 	if cronSchedule != nil {
 		params.CronSchedule = sql.NullString{String: *cronSchedule, Valid: true}
+	} else {
+		// Explicitly clear schedule when not provided (declarative sync)
+		params.CronSchedule = sql.NullString{String: "", Valid: false}
+	}
+
+	if scheduleVariables != nil {
+		params.ScheduleVariables = sql.NullString{String: *scheduleVariables, Valid: true}
+	} else {
+		// Explicitly clear schedule variables when not provided
+		params.ScheduleVariables = sql.NullString{String: "", Valid: false}
 	}
 
 	if outputSchema != nil {

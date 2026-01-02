@@ -23,16 +23,23 @@ type DotPromptConfig struct {
 	Model        string                 `yaml:"model"`
 	Config       map[string]interface{} `yaml:"config"`
 	Tools        []string               `yaml:"tools"`
-	Agents       []string               `yaml:"agents"` // Agent tool references for multi-agent hierarchy
+	Agents       []string               `yaml:"agents"`
 	Metadata     map[string]interface{} `yaml:"metadata"`
 	Station      map[string]interface{} `yaml:"station"`
 	Input        map[string]interface{} `yaml:"input"`
 	Output       map[string]interface{} `yaml:"output"`
-	OutputSchema string                 `yaml:"output_schema"` // JSON string format for output schema
-	MaxSteps     int64                  `yaml:"max_steps"`     // Top-level max_steps field
-	App          string                 `yaml:"app"`           // CloudShip app classification
-	AppType      string                 `yaml:"app_type"`      // CloudShip app_type (maps to app_subtype in DB)
-	CloudShipAI  CloudShipAIConfig      `yaml:"cloudshipai"`   // CloudShip memory integration
+	OutputSchema string                 `yaml:"output_schema"`
+	MaxSteps     int64                  `yaml:"max_steps"`
+	App          string                 `yaml:"app"`
+	AppType      string                 `yaml:"app_type"`
+	CloudShipAI  CloudShipAIConfig      `yaml:"cloudshipai"`
+	Schedule     ScheduleConfig         `yaml:"schedule"`
+}
+
+type ScheduleConfig struct {
+	Cron      string                 `yaml:"cron"`
+	Enabled   *bool                  `yaml:"enabled"`
+	Variables map[string]interface{} `yaml:"variables"`
 }
 
 // CloudShipAIConfig represents CloudShip-specific configuration in frontmatter
@@ -279,14 +286,30 @@ func (s *DeclarativeSync) createAgentFromFile(ctx context.Context, filePath, age
 		memoryMaxTokens = &config.CloudShipAI.MemoryMaxTokens
 	}
 
-	// Start transaction for atomic agent creation + tool assignment
+	var cronSchedule *string
+	var scheduleVariables *string
+	scheduleEnabled := false
+	if config.Schedule.Cron != "" {
+		cronSchedule = &config.Schedule.Cron
+		scheduleEnabled = true
+		if config.Schedule.Enabled != nil {
+			scheduleEnabled = *config.Schedule.Enabled
+		}
+		if len(config.Schedule.Variables) > 0 {
+			varsJSON, err := json.Marshal(config.Schedule.Variables)
+			if err == nil {
+				varsStr := string(varsJSON)
+				scheduleVariables = &varsStr
+			}
+		}
+	}
+
 	tx, err := s.repos.BeginTx()
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback()
 
-	// Create agent using individual parameters within transaction (with memory support)
 	createdAgent, err := s.repos.Agents.CreateTxWithMemory(
 		tx,
 		agentName,
@@ -294,16 +317,17 @@ func (s *DeclarativeSync) createAgentFromFile(ctx context.Context, filePath, age
 		promptContent,
 		maxSteps,
 		env.ID,
-		1,                  // createdBy - system user
-		inputSchema,        // input_schema - extracted from frontmatter
-		nil,                // cronSchedule
-		true,               // scheduleEnabled
-		outputSchema,       // outputSchema - extracted from dotprompt frontmatter
-		outputSchemaPreset, // outputSchemaPreset - extracted from dotprompt frontmatter
-		app,                // app - CloudShip app classification
-		appType,            // appType - CloudShip app_type classification
-		memoryTopicKey,     // memoryTopicKey - CloudShip memory integration
-		memoryMaxTokens,    // memoryMaxTokens - CloudShip memory max tokens
+		1,
+		inputSchema,
+		cronSchedule,
+		scheduleEnabled,
+		scheduleVariables,
+		outputSchema,
+		outputSchemaPreset,
+		app,
+		appType,
+		memoryTopicKey,
+		memoryMaxTokens,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create agent: %w", err)
@@ -403,6 +427,25 @@ func (s *DeclarativeSync) updateAgentFromFile(ctx context.Context, existingAgent
 		memoryMaxTokens = &config.CloudShipAI.MemoryMaxTokens
 	}
 
+	// Extract schedule configuration from frontmatter
+	var cronSchedule *string
+	var scheduleVariables *string
+	scheduleEnabled := false
+	if config.Schedule.Cron != "" {
+		cronSchedule = &config.Schedule.Cron
+		scheduleEnabled = true
+		if config.Schedule.Enabled != nil {
+			scheduleEnabled = *config.Schedule.Enabled
+		}
+		if len(config.Schedule.Variables) > 0 {
+			varsJSON, err := json.Marshal(config.Schedule.Variables)
+			if err == nil {
+				varsStr := string(varsJSON)
+				scheduleVariables = &varsStr
+			}
+		}
+	}
+
 	// Check if anything actually changed
 	needsUpdate := false
 	if existingAgent.Prompt != promptContent {
@@ -477,6 +520,33 @@ func (s *DeclarativeSync) updateAgentFromFile(ctx context.Context, existingAgent
 		newMemoryMaxTokens = *memoryMaxTokens
 	}
 	if currentMemoryMaxTokens != newMemoryMaxTokens {
+		needsUpdate = true
+	}
+
+	// Check if schedule changed
+	currentCronSchedule := ""
+	if existingAgent.CronSchedule != nil {
+		currentCronSchedule = *existingAgent.CronSchedule
+	}
+	newCronSchedule := ""
+	if cronSchedule != nil {
+		newCronSchedule = *cronSchedule
+	}
+	if currentCronSchedule != newCronSchedule {
+		needsUpdate = true
+	}
+	if existingAgent.ScheduleEnabled != scheduleEnabled {
+		needsUpdate = true
+	}
+	currentScheduleVars := ""
+	if existingAgent.ScheduleVariables != nil {
+		currentScheduleVars = *existingAgent.ScheduleVariables
+	}
+	newScheduleVars := ""
+	if scheduleVariables != nil {
+		newScheduleVars = *scheduleVariables
+	}
+	if currentScheduleVars != newScheduleVars {
 		needsUpdate = true
 	}
 
@@ -563,15 +633,16 @@ func (s *DeclarativeSync) updateAgentFromFile(ctx context.Context, existingAgent
 			description,
 			promptContent,
 			maxSteps,
-			inputSchema,        // input_schema - extracted from frontmatter
-			nil,                // cronSchedule
-			true,               // scheduleEnabled
-			outputSchema,       // outputSchema - extracted from dotprompt frontmatter
-			outputSchemaPreset, // outputSchemaPreset - extracted from dotprompt frontmatter
-			app,                // app - CloudShip app classification
-			appType,            // appType - CloudShip app_type classification
-			memoryTopicKey,     // memoryTopicKey - CloudShip memory integration
-			memoryMaxTokens,    // memoryMaxTokens - CloudShip memory max tokens
+			inputSchema,
+			cronSchedule,
+			scheduleEnabled,
+			scheduleVariables,
+			outputSchema,
+			outputSchemaPreset,
+			app,
+			appType,
+			memoryTopicKey,
+			memoryMaxTokens,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to update agent: %w", err)

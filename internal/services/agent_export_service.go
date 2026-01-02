@@ -152,6 +152,11 @@ metadata:
 		content += "\nnotify: true"
 	}
 
+	scheduleSection := s.generateScheduleSection(agent)
+	if scheduleSection != "" {
+		content += scheduleSection
+	}
+
 	if len(toolNames) > 0 {
 		content += "\ntools:\n"
 		for _, toolName := range toolNames {
@@ -377,4 +382,31 @@ func (s *AgentExportService) indentLines(text, prefix string) string {
 		}
 	}
 	return result
+}
+
+func (s *AgentExportService) generateScheduleSection(agent *models.Agent) string {
+	if agent.CronSchedule == nil || *agent.CronSchedule == "" {
+		return ""
+	}
+
+	content := "\nschedule:\n"
+	content += fmt.Sprintf("  cron: \"%s\"\n", *agent.CronSchedule)
+	content += fmt.Sprintf("  enabled: %t\n", agent.ScheduleEnabled)
+
+	if agent.ScheduleVariables != nil && *agent.ScheduleVariables != "" {
+		var vars map[string]interface{}
+		if err := json.Unmarshal([]byte(*agent.ScheduleVariables), &vars); err == nil && len(vars) > 0 {
+			content += "  variables:\n"
+			for key, value := range vars {
+				switch v := value.(type) {
+				case string:
+					content += fmt.Sprintf("    %s: \"%s\"\n", key, v)
+				default:
+					content += fmt.Sprintf("    %s: %v\n", key, v)
+				}
+			}
+		}
+	}
+
+	return content
 }
