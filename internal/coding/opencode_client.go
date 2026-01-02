@@ -173,6 +173,7 @@ func (c *OpenCodeClient) SendMessage(ctx context.Context, sessionID, directory, 
 	if directory != "" {
 		url += "?directory=" + directory
 	}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)

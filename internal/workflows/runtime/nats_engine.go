@@ -37,16 +37,25 @@ func NewEngine(opts Options) (*NATSEngine, error) {
 
 	engine := &NATSEngine{opts: opts}
 	if opts.Embedded {
-		srv, err := natsserver.NewServer(&natsserver.Options{Port: -1, JetStream: true})
+		port := opts.EmbeddedPort
+		if port == 0 {
+			port = 4222
+		}
+		srv, err := natsserver.NewServer(&natsserver.Options{
+			Port:      port,
+			JetStream: true,
+			StoreDir:  "",
+		})
 		if err != nil {
-			return nil, fmt.Errorf("failed to start embedded nats: %w", err)
+			return nil, fmt.Errorf("failed to start embedded nats on port %d: %w", port, err)
 		}
 		go srv.Start()
 		if !srv.ReadyForConnections(5 * time.Second) {
-			return nil, fmt.Errorf("embedded nats failed to start")
+			return nil, fmt.Errorf("embedded nats failed to start on port %d", port)
 		}
 		engine.server = srv
-		engine.opts.URL = fmt.Sprintf("nats://%s", srv.Addr().String())
+		engine.opts.URL = fmt.Sprintf("nats://127.0.0.1:%d", port)
+		log.Printf("Embedded NATS started on port %d", port)
 	}
 
 	conn, err := nats.Connect(engine.opts.URL)

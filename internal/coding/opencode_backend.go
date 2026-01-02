@@ -161,7 +161,7 @@ func (b *OpenCodeBackend) executeInternal(ctx context.Context, session *Session,
 	startTime := time.Now()
 
 	prompt := b.buildPrompt(task, session.WorkspacePath)
-	resp, err := b.client.SendMessage(ctx, session.BackendSessionID, session.WorkspacePath, prompt)
+	resp, err := b.client.SendMessage(ctx, session.BackendSessionID, "", prompt)
 
 	endTime := time.Now()
 	duration := endTime.Sub(startTime)

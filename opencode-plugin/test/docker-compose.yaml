@@ -1,32 +1,28 @@
 services:
-  nats:
-    image: nats:2.10-alpine
-    command: ["--jetstream", "--store_dir=/data"]
-    ports:
-      - "4222:4222"
-      - "8222:8222"
-    volumes:
-      - nats-data:/data
-
+  # nats:
+  #   image: nats:2.10-alpine
+  #   command: ["--jetstream", "--store_dir=/data"]
+  #   ports:
+  #     - "4222:4222"
+  #     - "8222:8222"
+  #   volumes:
+  #     - nats-data:/data
 
   opencode:
     build:
       context: ..
       dockerfile: test/Dockerfile.opencode
     environment:
-      - NATS_URL=nats://nats:4222
+      - NATS_URL=nats://host.docker.internal:4222
       - OPENCODE_WORKSPACE_DIR=/workspaces
-      # API keys are optional when using OAuth (Claude Max subscription)
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
     volumes:
       - opencode-workspaces:/workspaces
-      # Mount only auth.json for OAuth credentials (Claude Max, etc.)
-      # The rest of the opencode directory needs to be writable for storage
       - ${HOME}/.local/share/opencode/auth.json:/root/.local/share/opencode/auth.json:ro
-    depends_on:
-      - nats
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "4097:4096"
     working_dir: /workspaces
