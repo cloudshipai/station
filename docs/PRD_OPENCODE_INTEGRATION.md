@@ -1,9 +1,9 @@
 # PRD: Station + OpenCode Integration
 
-**Status**: Phase 1-7 Complete, E2E Verified ✅  
+**Status**: Phase 1-8 Complete, E2E Verified ✅  
 **Author**: Station Team  
-**Date**: 2025-12-30  
-**Version**: 0.9
+**Date**: 2025-12-31  
+**Version**: 1.0
 
 ---
 
@@ -1350,9 +1350,10 @@ INSERT INTO run_events (run_id, seq, type, payload) VALUES (
 
 ---
 
-## Phase 8: NATS-Based Communication (Next)
+## Phase 8: NATS-Based Communication (COMPLETE ✅)
 
-**Status**: Plugin Complete ✅, Station Integration Pending
+**Status**: Complete ✅  
+**Date**: 2025-12-31
 
 ### 8.1 Architecture Evolution
 
@@ -1425,18 +1426,33 @@ The OpenCode plugin (`@cloudshipai/opencode-plugin`) is **published and tested**
 
 **Test Results**: 15 integration tests passing
 
-### 8.3 Station-Side NATS Dispatcher (TODO)
+### 8.3 Station-Side NATS Dispatcher (COMPLETE ✅)
 
-Station needs a **NATS-based dispatcher** to replace direct HTTP calls.
+Station has a **NATS-based dispatcher** that replaces direct HTTP calls.
 
-**Files to Create/Modify**:
+**Files Created/Modified**:
 
-| File | Changes |
-|------|---------|
-| `internal/coding/nats_backend.go` | New backend using NATS instead of HTTP |
-| `internal/coding/nats_client.go` | NATS connection, pub/sub, KV/Object Store |
-| `internal/coding/tool.go` | Update tools to use NATS backend |
-| `internal/services/coding_tool_factory.go` | Wire NATS backend based on config |
+| File | Purpose | Lines |
+|------|---------|-------|
+| `internal/coding/nats_client.go` | NATS connection, pub/sub, KV store | 523 |
+| `internal/coding/nats_backend.go` | Backend implementation via NATS | 445 |
+| `internal/coding/nats_interface.go` | NATSClient interface for testing | 37 |
+| `internal/coding/nats_backend_test.go` | Unit tests with mock client | 421 |
+| `internal/coding/nats_client_test.go` | Unit tests for types/config | 323 |
+| `internal/coding/nats_e2e_test.go` | E2E tests against real NATS+OpenCode | 310 |
+
+**Test Results:**
+```bash
+# Unit tests (fast, no dependencies)
+go test ./internal/coding/... -short -count=1
+
+# E2E tests (requires NATS + OpenCode running)
+NATS_E2E=true go test ./internal/coding/... -run "TestE2E_NATS" -v -timeout 5m
+```
+
+**E2E Verified:**
+- ✅ `TestE2E_NATSTaskExecution` - Task execution with event streaming (1.8s)
+- ✅ `TestE2E_NATSBackendIntegration` - Full session lifecycle with git ops (13s)
 
 **Configuration**:
 
