@@ -16,10 +16,15 @@ services:
     environment:
       - NATS_URL=nats://nats:4222
       - OPENCODE_WORKSPACE_DIR=/workspaces
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      # API keys are optional when using OAuth (Claude Max subscription)
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
     volumes:
       - opencode-workspaces:/workspaces
+      # Mount only auth.json for OAuth credentials (Claude Max, etc.)
+      # The rest of the opencode directory needs to be writable for storage
+      - ${HOME}/.local/share/opencode/auth.json:/root/.local/share/opencode/auth.json:ro
     depends_on:
       - nats
     ports:

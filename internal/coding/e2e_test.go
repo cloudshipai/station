@@ -23,10 +23,15 @@ func TestE2E_OpenCodeIntegration(t *testing.T) {
 	workspaceDir := t.TempDir()
 	initGitRepoForE2E(t, workspaceDir)
 
+	openCodeURL := os.Getenv("OPENCODE_URL")
+	if openCodeURL == "" {
+		openCodeURL = "http://localhost:4096"
+	}
+
 	cfg := config.CodingConfig{
 		Backend: "opencode",
 		OpenCode: config.CodingOpenCodeConfig{
-			URL: "http://localhost:4096",
+			URL: openCodeURL,
 		},
 		MaxAttempts:    3,
 		TaskTimeoutMin: 5,
@@ -92,16 +97,28 @@ func TestE2E_OpenCodeIntegration(t *testing.T) {
 	})
 
 	t.Run("verify_file_created", func(t *testing.T) {
-		helloPath := filepath.Join(workspaceDir, "hello.py")
-		content, err := os.ReadFile(helloPath)
-		if err != nil {
-			t.Fatalf("hello.py not found: %v", err)
+		if session == nil {
+			t.Skip("Session not created")
 		}
 
-		t.Logf("File content:\n%s", string(content))
+		verifyTask := Task{
+			Instruction: "Read the file hello.py and tell me its contents. If it doesn't exist, say 'FILE NOT FOUND'.",
+			Timeout:     1 * time.Minute,
+		}
 
-		if len(content) == 0 {
-			t.Error("hello.py is empty")
+		result, err := backend.Execute(ctx, session.ID, verifyTask)
+		if err != nil {
+			t.Fatalf("Failed to verify file: %v", err)
+		}
+
+		if !result.Success {
+			t.Fatalf("Verification failed: %s", result.Error)
+		}
+
+		t.Logf("File verification: %s", result.Summary)
+
+		if result.Summary == "" {
+			t.Error("Empty verification response")
 		}
 	})
 
@@ -128,10 +145,15 @@ func TestE2E_GitCommitFlow(t *testing.T) {
 	workspaceDir := t.TempDir()
 	initGitRepoForE2E(t, workspaceDir)
 
+	openCodeURL := os.Getenv("OPENCODE_URL")
+	if openCodeURL == "" {
+		openCodeURL = "http://localhost:4096"
+	}
+
 	cfg := config.CodingConfig{
 		Backend: "opencode",
 		OpenCode: config.CodingOpenCodeConfig{
-			URL: "http://localhost:4096",
+			URL: openCodeURL,
 		},
 		MaxAttempts:    3,
 		TaskTimeoutMin: 5,
