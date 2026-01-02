@@ -711,6 +711,10 @@ func (s *Server) handleSetSchedule(ctx context.Context, request mcp.CallToolRequ
 		s.schedulerService.UnscheduleAgent(agentID)
 	}
 
+	if err := s.agentExportService.ExportAgentAfterSave(agentID); err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to export agent after schedule update: %v", err)), nil
+	}
+
 	response := map[string]interface{}{
 		"success": true,
 		"message": fmt.Sprintf("Schedule set for agent '%s' and activated in scheduler", agent.Name),
@@ -763,6 +767,10 @@ func (s *Server) handleRemoveSchedule(ctx context.Context, request mcp.CallToolR
 	// Remove from the running scheduler service
 	if s.schedulerService != nil {
 		s.schedulerService.UnscheduleAgent(agentID)
+	}
+
+	if err := s.agentExportService.ExportAgentAfterSave(agentID); err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to export agent after schedule removal: %v", err)), nil
 	}
 
 	response := map[string]interface{}{
