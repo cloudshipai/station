@@ -121,8 +121,9 @@ type SandboxConfig struct {
 }
 
 type CodingConfig struct {
-	Backend           string               `yaml:"backend"`
+	Backend           string               `yaml:"backend"` // "opencode" (HTTP) or "opencode-nats" (NATS)
 	OpenCode          CodingOpenCodeConfig `yaml:"opencode"`
+	NATS              CodingNATSConfig     `yaml:"nats"` // NATS configuration for opencode-nats backend
 	MaxAttempts       int                  `yaml:"max_attempts"`
 	TaskTimeoutMin    int                  `yaml:"task_timeout_min"`
 	CloneTimeoutSec   int                  `yaml:"clone_timeout_sec"`
@@ -130,6 +131,38 @@ type CodingConfig struct {
 	WorkspaceBasePath string               `yaml:"workspace_base_path"`
 	CleanupPolicy     string               `yaml:"cleanup_policy"`
 	Git               CodingGitConfig      `yaml:"git"`
+}
+
+// CodingNATSConfig holds NATS configuration for the opencode-nats backend.
+type CodingNATSConfig struct {
+	// URL is the NATS server URL (e.g., "nats://localhost:4222")
+	URL string `yaml:"url"`
+	// CredsFile is the path to NATS credentials file (optional)
+	CredsFile string `yaml:"creds_file"`
+	// Subjects configures the NATS subject names
+	Subjects CodingNATSSubjects `yaml:"subjects"`
+	// KV configures the KV bucket names
+	KV CodingNATSKV `yaml:"kv"`
+	// ObjectStore is the object store bucket name for artifacts
+	ObjectStore string `yaml:"object_store"`
+}
+
+// CodingNATSSubjects configures the NATS subject names for coding operations.
+type CodingNATSSubjects struct {
+	// Task is the subject for sending task requests (default: "station.coding.task")
+	Task string `yaml:"task"`
+	// Stream is the subject pattern for execution events (default: "station.coding.stream")
+	Stream string `yaml:"stream"`
+	// Result is the subject pattern for final results (default: "station.coding.result")
+	Result string `yaml:"result"`
+}
+
+// CodingNATSKV configures the KV bucket names for session state.
+type CodingNATSKV struct {
+	// Sessions is the KV bucket for session state (default: "coding-sessions")
+	Sessions string `yaml:"sessions"`
+	// State is the KV bucket for agent context (default: "coding-state")
+	State string `yaml:"state"`
 }
 
 // CodingGitConfig holds git credentials and identity for coding operations.
@@ -312,12 +345,13 @@ func bindEnvVars() {
 	viper.BindEnv("sandbox.idle_timeout_minutes", "STN_SANDBOX_IDLE_TIMEOUT_MINUTES")
 	viper.BindEnv("sandbox.cleanup_interval_minutes", "STN_SANDBOX_CLEANUP_INTERVAL_MINUTES")
 
-	// Coding config
 	viper.BindEnv("coding.backend", "STN_CODING_BACKEND")
 	viper.BindEnv("coding.opencode.url", "STN_CODING_OPENCODE_URL")
 	viper.BindEnv("coding.opencode.model", "STN_CODING_OPENCODE_MODEL")
 	viper.BindEnv("coding.max_attempts", "STN_CODING_MAX_ATTEMPTS")
 	viper.BindEnv("coding.task_timeout_min", "STN_CODING_TASK_TIMEOUT_MIN")
+	viper.BindEnv("coding.nats.url", "STN_NATS_URL")
+	viper.BindEnv("coding.nats.creds_file", "STN_NATS_CREDS_FILE")
 
 	// Telemetry config
 	viper.BindEnv("telemetry_enabled", "STN_TELEMETRY_ENABLED", "STATION_TELEMETRY_ENABLED")
@@ -612,6 +646,30 @@ func Load() (*Config, error) {
 	}
 	if viper.IsSet("coding.task_timeout_min") {
 		cfg.Coding.TaskTimeoutMin = viper.GetInt("coding.task_timeout_min")
+	}
+	if viper.IsSet("coding.nats.url") {
+		cfg.Coding.NATS.URL = viper.GetString("coding.nats.url")
+	}
+	if viper.IsSet("coding.nats.creds_file") {
+		cfg.Coding.NATS.CredsFile = viper.GetString("coding.nats.creds_file")
+	}
+	if viper.IsSet("coding.nats.subjects.task") {
+		cfg.Coding.NATS.Subjects.Task = viper.GetString("coding.nats.subjects.task")
+	}
+	if viper.IsSet("coding.nats.subjects.stream") {
+		cfg.Coding.NATS.Subjects.Stream = viper.GetString("coding.nats.subjects.stream")
+	}
+	if viper.IsSet("coding.nats.subjects.result") {
+		cfg.Coding.NATS.Subjects.Result = viper.GetString("coding.nats.subjects.result")
+	}
+	if viper.IsSet("coding.nats.kv.sessions") {
+		cfg.Coding.NATS.KV.Sessions = viper.GetString("coding.nats.kv.sessions")
+	}
+	if viper.IsSet("coding.nats.kv.state") {
+		cfg.Coding.NATS.KV.State = viper.GetString("coding.nats.kv.state")
+	}
+	if viper.IsSet("coding.nats.object_store") {
+		cfg.Coding.NATS.ObjectStore = viper.GetString("coding.nats.object_store")
 	}
 
 	// Load faker templates from config file
