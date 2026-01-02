@@ -1,13 +1,14 @@
-// Top-level logging - if this doesn't appear, the module isn't being imported at all
-console.log("[station-plugin] ========================================");
-console.log("[station-plugin] Module file loaded at top level");
-console.log("[station-plugin] ========================================");
+console.log("[station-plugin] Module loaded");
 
 import type { Hooks, Plugin, PluginInput } from "@opencode-ai/plugin";
 import { tool } from "@opencode-ai/plugin";
 import { NATSClient } from "./nats/client";
 import { TaskHandler } from "./nats/handler";
-import { DEFAULT_CONFIG, type PluginConfig, type SessionState } from "./types";
+import {
+	DEFAULT_CONFIG,
+	type PluginConfig,
+	type SessionState,
+} from "./types";
 
 export type {
 	CodingTask,
@@ -19,7 +20,6 @@ export type {
 let globalNats: NATSClient | null = null;
 let globalTaskHandler: TaskHandler | null = null;
 let globalConnected = false;
-let initPromise: Promise<void> | null = null;
 
 const plugin: Plugin = async (input: PluginInput): Promise<Hooks> => {
 	const { client, $: shell, directory } = input;
@@ -32,42 +32,39 @@ const plugin: Plugin = async (input: PluginInput): Promise<Hooks> => {
 		},
 	};
 
-	if (!initPromise) {
-		initPromise = (async () => {
+	setImmediate(async () => {
+		try {
 			globalNats = new NATSClient(config);
 			globalConnected = await globalNats.connect();
 
 			if (!globalConnected) {
-				console.log("[station-plugin] Running in standalone mode (no NATS)");
+				console.log("[station-plugin] Standalone mode (no NATS)");
+				return;
 			}
 
 			globalTaskHandler = new TaskHandler(
 				client,
-				globalConnected ? globalNats : null,
+				globalNats,
 				shell,
 				config,
 			);
 
-			if (globalConnected && globalTaskHandler) {
-				const handler = globalTaskHandler;
-				await globalNats.subscribe(config.subjects.task, async (data) => {
-					await handler.handle(data);
-				});
-				console.log(`[station-plugin] Subscribed to ${config.subjects.task}`);
-			}
-		})();
-	}
-
-	await initPromise;
+			await globalNats.subscribe(config.subjects.task, async (data) => {
+				await globalTaskHandler?.handle(data);
+			});
+			console.log("[station-plugin] Ready");
+		} catch (err) {
+			console.error("[station-plugin] Init error:", err);
+		}
+	});
 
 	const hooks: Hooks = {
 		event: async ({ event }) => {
 			if (event.type === "server.instance.disposed" && globalNats) {
-				console.log("[station-plugin] Shutting down...");
+				console.log("[station-plugin] Shutting down");
 				await globalNats.close();
 				globalNats = null;
 				globalTaskHandler = null;
-				initPromise = null;
 			}
 		},
 

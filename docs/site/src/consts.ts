@@ -51,9 +51,10 @@ export const SIDEBAR: Sidebar = {
       collapsed: false,
       items: [
         { text: 'Introduction', link: 'en/introduction' },
-        { text: 'MCP Quick Start', link: 'en/mcp-quickstart', badge: 'Start Here' },
-        { text: 'Why Station', link: 'en/why-station' },
-        { text: 'Installation', link: 'en/installation' }
+        { text: 'Quick Start', link: 'en/quickstart', badge: 'Start Here' },
+        { text: 'Installation', link: 'en/installation' },
+        { text: 'Authentication', link: 'en/authentication' },
+        { text: 'Why Station', link: 'en/why-station' }
       ]
     },
     'MCP Integration': {
@@ -61,8 +62,17 @@ export const SIDEBAR: Sidebar = {
       items: [
         { text: 'Overview', link: 'en/mcp/overview' },
         { text: 'Claude Desktop Setup', link: 'en/mcp/claude-desktop' },
-        { text: 'MCP Tools & Commands', link: 'en/mcp/tools' },
+        { text: 'MCP Tools Reference', link: 'en/mcp/tools' },
         { text: 'Other MCP Clients', link: 'en/mcp/other-clients' }
+      ]
+    },
+    'Core Features': {
+      collapsed: false,
+      items: [
+        { text: 'Sandbox Execution', link: 'en/sandbox' },
+        { text: 'Scheduling', link: 'en/scheduling' },
+        { text: 'Database', link: 'en/database' },
+        { text: 'Webhooks', link: 'en/webhooks' }
       ]
     },
     'Agent Management': {
@@ -73,6 +83,16 @@ export const SIDEBAR: Sidebar = {
         { text: 'Agent Configuration', link: 'en/agents/config' },
         { text: 'Environment Isolation', link: 'en/agents/environments' },
         { text: 'Monitoring & Logs', link: 'en/agents/monitoring' }
+      ]
+    },
+    'Advanced Features': {
+      collapsed: true,
+      items: [
+        { text: 'Coding Backend', link: 'en/coding-backend', badge: 'New' },
+        { text: 'Fakers (Mock Data)', link: 'en/fakers' },
+        { text: 'OpenAPI to MCP', link: 'en/openapi-mcp' },
+        { text: 'GitOps Workflow', link: 'en/gitops' },
+        { text: 'CloudShip Integration', link: 'en/cloudship' }
       ]
     },
     'CLI Management': {
@@ -99,18 +119,32 @@ export const SIDEBAR: Sidebar = {
         { text: 'Publishing Bundles', link: 'en/bundles/publishing' }
       ]
     },
-    'CI/CD Integration': {
-      collapsed: false,
+    'Deployment': {
+      collapsed: true,
+      items: [
+        { text: 'Docker Deployment', link: 'en/deployment/docker' },
+        { text: 'Production Setup', link: 'en/deployment/production' },
+        { text: 'Security Configuration', link: 'en/deployment/security' },
+        { text: 'Observability', link: 'en/observability' },
+        { text: 'Monitoring & Metrics', link: 'en/deployment/monitoring' }
+      ]
+    },
+    'CI/CD & Operations': {
+      collapsed: true,
       items: [
         { text: 'CI/CD Integration', link: 'en/ci-cd-integration', badge: 'Production Ready' }
       ]
     },
-    'Deployment': {
+    'Examples': {
       collapsed: true,
       items: [
-        { text: 'Production Setup', link: 'en/deployment/production' },
-        { text: 'Security Configuration', link: 'en/deployment/security' },
-        { text: 'Monitoring & Observability', link: 'en/deployment/monitoring' }
+        { text: 'SRE Team Tutorial', link: 'en/examples/sre-team' }
+      ]
+    },
+    'Reference': {
+      collapsed: true,
+      items: [
+        { text: 'Architecture', link: 'en/architecture' }
       ]
     }
   }
