@@ -1,30 +1,27 @@
 apiVersion: tekton.dev/v1beta1
 kind: Task
 metadata:
-  name: station-security-scan
-  namespace: security
+  name: station-agent
 spec:
-  description: Run Station security agents for vulnerability scanning
+  description: Run a Station agent
   params:
   - name: agent
     type: string
-    description: Station agent to run (e.g., "Infrastructure Security Auditor")
+    description: Agent name to run
   - name: task
     type: string
     description: Task description for the agent
   workspaces:
   - name: source
-    description: Workspace containing source code to scan
+    description: Workspace containing source code
   steps:
-  - name: security-scan
-    image: ghcr.io/cloudshipai/station-security:latest
+  - name: run-agent
+    image: ghcr.io/cloudshipai/station:latest
     workingDir: $(workspaces.source.path)
     script: |
       #!/bin/sh
       set -e
-      echo "═══════════════════════════════════════"
-      echo "Station Security Agent: $(params.agent)"
-      echo "═══════════════════════════════════════"
+      echo "Running agent: $(params.agent)"
       stn agent run "$(params.agent)" "$(params.task)"
     env:
     - name: OPENAI_API_KEY
@@ -32,5 +29,3 @@ spec:
         secretKeyRef:
           name: station-secrets
           key: openai-api-key
-    - name: PROJECT_ROOT
-      value: $(workspaces.source.path)

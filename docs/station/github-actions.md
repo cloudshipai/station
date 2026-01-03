@@ -1,6 +1,21 @@
 # Station Reusable GitHub Actions
 
-Station provides production-ready, reusable GitHub Actions that dramatically simplify CI/CD workflows for agent deployment and bundle management.
+Station provides production-ready, reusable GitHub Actions that simplify CI/CD workflows for agent deployment and bundle management.
+
+## Running Agents in CI/CD
+
+To run AI agents in your workflows, use the published [station-action](https://github.com/cloudshipai/station-action):
+
+```yaml
+- uses: cloudshipai/station-action@v1
+  with:
+    agent: 'Code Reviewer'
+    task: 'Review this PR for bugs and security issues'
+  env:
+    OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+```
+
+The actions below are for **building and deploying** Station environments.
 
 ## Why Reusable Actions?
 
@@ -147,19 +162,21 @@ Installs and configures Station CLI in GitHub Actions runners.
 **Minimal Example:**
 ```yaml
 - uses: cloudshipai/station/.github/actions/setup-station@main
-  with:
-    api-key-secret: ${{ secrets.OPENAI_API_KEY }}
+  env:
+    OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 ```
 
 **Full Example:**
 ```yaml
 - uses: cloudshipai/station/.github/actions/setup-station@main
   with:
-    version: 'v0.21.1'          # Or 'latest'
-    provider: 'openai'           # Or 'gemini', 'anthropic'
-    model: 'gpt-4o'             # Default: gpt-4o-mini
-    api-key-secret: ${{ secrets.OPENAI_API_KEY }}
-    workspace-path: './agents'   # Default: '.'
+    version: 'latest'             # Or specific version like 'v0.22.0'
+    provider: 'openai'            # Or 'anthropic', 'gemini', 'ollama'
+    model: 'gpt-4o'               # Optional, uses provider default
+    base-url: ''                  # For Azure OpenAI or Ollama
+    workspace-path: './agents'    # Default: '.'
+  env:
+    OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 ```
 
 **Outputs:**

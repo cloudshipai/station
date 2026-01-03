@@ -49,10 +49,10 @@ This document explains how to configure secrets (API keys, credentials) for Stat
 **Setup:**
 ```yaml
 # .gitlab-ci.yml
-security-scan:
-  image: ghcr.io/cloudshipai/station-security:latest
+analyze:
+  image: ghcr.io/cloudshipai/station:latest
   script:
-    - stn agent run "Infrastructure Security Auditor" "Scan for issues"
+    - stn agent run "Code Reviewer" "Review the code"
   variables:
     OPENAI_API_KEY: $OPENAI_API_KEY
     STN_CLOUDSHIP_KEY: $STN_CLOUDSHIP_KEY  # Optional
@@ -77,7 +77,7 @@ pipeline {
   stages {
     stage('Security Scan') {
       steps {
-        sh 'stn agent run "Infrastructure Security Auditor" "Scan"'
+        sh 'stn agent run "Code Reviewer" "Review the code"'
       }
     }
   }

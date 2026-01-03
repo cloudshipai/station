@@ -1,317 +1,285 @@
-# CloudShip AI Security Scanner - GitHub Action
+# Station GitHub Action
 
-Add AI-powered security scanning to your CI/CD pipeline in 3 lines.
-
-📚 **Documentation**: [Quick Start](QUICK_START.md) | [Deployment Guide](DEPLOYMENT_GUIDE.md) | [Examples](examples/)
+Run AI agents from Station bundles in GitHub Actions workflows.
 
 ## Quick Start
 
 ```yaml
-- uses: actions/checkout@v4
 - uses: cloudshipai/station-action@v1
   with:
-    agent: infrastructure-security
-```
-
-That's it! Your infrastructure will be scanned for security vulnerabilities.
-
-## Features
-
-- 🤖 **6 Specialized AI Agents** - Infrastructure, PR Review, Supply Chain, Deployment Gates, Security Advisor, Metrics
-- 🛠️ **97+ Security Tools** - Checkov, TFLint, Semgrep, Syft, Trivy, and many more
-- 🧠 **AI-Powered Analysis** - Not just tool output, actual intelligent insights and prioritization
-- 📊 **Automatic PR Comments** - Get security findings directly in your pull requests
-- 🔧 **Fully Customizable** - Override tasks, agents, and workflows as needed
-
-## Available Agents
-
-### Infrastructure Security Auditor (`infrastructure-security`)
-Scans Terraform, Kubernetes, and Docker configurations for misconfigurations, secrets, and compliance violations.
-
-**Use when:**
-- You have IaC files (Terraform, K8s manifests, Dockerfiles)
-- You want to check for infrastructure misconfigurations
-- You need compliance validation (CIS, NIST, etc.)
-
-### PR Security Reviewer (`pr-security`)
-Analyzes pull request code changes for security vulnerabilities, focusing on diffs and new code.
-
-**Use when:**
-- Reviewing pull requests
-- You want automated security code review
-- You need to catch secrets, SQL injection, XSS, etc.
-
-### Supply Chain Guardian (`supply-chain`)
-Generates SBOMs and scans dependencies for known vulnerabilities and malicious packages.
-
-**Use when:**
-- You have package dependencies (npm, pip, go.mod, etc.)
-- You need SBOM generation
-- You want to track dependency vulnerabilities
-
-### Deployment Security Gate (`deployment-gate`)
-Pre-deployment validation with compliance attestation and blocking capabilities.
-
-**Use when:**
-- Before deploying to production
-- You need security sign-off for deployments
-- You want compliance attestation
-
-### Security Improvement Advisor (`security-advisor`)
-Proactive security recommendations and modernization suggestions.
-
-**Use when:**
-- You want to improve security posture
-- You need guidance on security best practices
-- You're doing security hardening
-
-### Security Metrics Reporter (`security-metrics`)
-Periodic security metrics aggregation with KPI tracking and executive reporting.
-
-**Use when:**
-- You need security dashboards
-- You want trend analysis
-- You're generating compliance reports
-
-## Usage Examples
-
-### Basic Infrastructure Scanning
-
-```yaml
-name: Security Scan
-on: [pull_request, push]
-
-jobs:
-  security:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: cloudshipai/station-action@v1
-        with:
-          agent: infrastructure-security
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-```
-
-### PR Security Review
-
-```yaml
-name: PR Security Check
-on: pull_request
-
-jobs:
-  security-review:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: cloudshipai/station-action@v1
-        with:
-          agent: pr-security
-          comment_pr: true
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-```
-
-### Supply Chain + Infrastructure (Multiple Agents)
-
-```yaml
-name: Comprehensive Security
-on: [pull_request]
-
-jobs:
-  infrastructure:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: cloudshipai/station-action@v1
-        with:
-          agent: infrastructure-security
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-
-  supply-chain:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: cloudshipai/station-action@v1
-        with:
-          agent: supply-chain
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-```
-
-### Custom Task Override
-
-```yaml
-- uses: cloudshipai/station-action@v1
-  with:
-    agent: infrastructure-security
-    task: "Focus only on AWS security groups and check for overly permissive ingress rules"
+    agent: 'Code Reviewer'
+    task: 'Review this PR for bugs and security issues'
   env:
     OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-```
-
-### Block Deployment on Critical Issues
-
-```yaml
-- uses: cloudshipai/station-action@v1
-  with:
-    agent: deployment-gate
-    fail_on_critical: true  # Will fail the workflow if critical issues found
-  env:
-    OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-```
-
-### Run All Agents
-
-```yaml
-- uses: cloudshipai/station-action@v1
-  with:
-    agent: all  # Runs Infrastructure, PR Review, and Supply Chain agents
-  env:
-    OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-```
-
-### With CloudShip AI Telemetry (Optional)
-
-```yaml
-- uses: cloudshipai/station-action@v1
-  with:
-    agent: infrastructure-security
-  env:
-    OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-    STN_CLOUDSHIP_KEY: ${{ secrets.CLOUDSHIP_KEY }}  # Optional: for telemetry and monitoring
 ```
 
 ## Inputs
 
-| Input | Description | Required | Default |
-|-------|-------------|----------|---------|
-| `agent` | Agent to run (infrastructure-security, pr-security, supply-chain, deployment-gate, security-advisor, security-metrics, or all) | No | `infrastructure-security` |
-| `task` | Custom task description to override default agent behavior | No | Agent-specific default |
-| `openai_api_key` | OpenAI API key (can also use OPENAI_API_KEY env var) | No | From env var |
-| `cloudship_key` | CloudShip AI registration key for telemetry and monitoring (can also use STN_CLOUDSHIP_KEY env var) | No | From env var |
-| `comment_pr` | Post results as PR comment (true/false) | No | `true` |
-| `fail_on_critical` | Fail workflow if critical issues found (true/false) | No | `false` |
-| `docker_image` | Override default CloudShip security image | No | `ghcr.io/cloudshipai/station-security:latest` |
+### Required
+
+| Input | Description |
+|-------|-------------|
+| `agent` | Name of the agent to run (as defined in your bundle/environment) |
+| `task` | Task description for the agent to execute |
+
+### Bundle Source
+
+Pick one method to provide your agents:
+
+| Input | Description |
+|-------|-------------|
+| `environment` | Local environment name (default: `default`). Looks for `./environments/<name>/` in your repo |
+| `bundle-url` | URL to download a Station bundle (.tar.gz) |
+| `bundle-id` | CloudShip bundle ID to download. Requires `cloudship-api-key` |
+| `cloudship-api-key` | CloudShip API key for bundle downloads |
+
+### AI Provider
+
+| Input | Description | Default |
+|-------|-------------|---------|
+| `provider` | AI provider: `openai`, `anthropic`, `gemini`, `ollama` | `openai` |
+| `model` | Model name (e.g., `gpt-4o`, `claude-3-5-sonnet-20241022`, `gemini-2.0-flash-exp`) | Provider default |
+| `base-url` | Custom API endpoint (for Azure, Ollama, etc.) | - |
+
+### Execution
+
+| Input | Description | Default |
+|-------|-------------|---------|
+| `timeout` | Execution timeout in seconds | `300` |
+| `max-steps` | Maximum agent steps | `50` |
+| `comment-pr` | Post results as PR comment | `false` |
+| `fail-on-error` | Fail workflow if agent fails | `true` |
+| `version` | Station CLI version | `latest` |
+| `debug` | Enable debug logging | `false` |
+
+## API Keys
+
+Pass your API key via the `env:` block (NOT via `with:`):
+
+```yaml
+env:
+  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+  # OR
+  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+  # OR
+  GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+```
+
+**Why not via `with:`?** Secrets should be passed as environment variables, not action inputs. This is a GitHub Actions security best practice.
+
+## Examples
+
+### OpenAI (Default)
+
+```yaml
+name: Code Review
+on: [pull_request]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: cloudshipai/station-action@v1
+        with:
+          agent: 'Code Reviewer'
+          task: 'Review this PR for bugs, security issues, and best practices'
+          comment-pr: true
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+```
+
+### Anthropic Claude
+
+```yaml
+- uses: cloudshipai/station-action@v1
+  with:
+    agent: 'Security Analyst'
+    task: 'Scan for security vulnerabilities'
+    provider: anthropic
+    model: claude-3-5-sonnet-20241022
+  env:
+    ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+```
+
+### Google Gemini
+
+```yaml
+- uses: cloudshipai/station-action@v1
+  with:
+    agent: 'Documentation Generator'
+    task: 'Generate API documentation for changed files'
+    provider: gemini
+    model: gemini-2.0-flash-exp
+  env:
+    GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+```
+
+### Azure OpenAI
+
+```yaml
+- uses: cloudshipai/station-action@v1
+  with:
+    agent: 'Test Generator'
+    task: 'Generate unit tests for new code'
+    provider: openai
+    model: gpt-4o
+    base-url: https://YOUR-RESOURCE.openai.azure.com/
+  env:
+    OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_KEY }}
+```
+
+### Ollama (Self-Hosted)
+
+```yaml
+- uses: cloudshipai/station-action@v1
+  with:
+    agent: 'Code Assistant'
+    task: 'Explain the architecture'
+    provider: ollama
+    model: llama3.2
+    base-url: http://localhost:11434
+```
+
+### From Bundle URL
+
+```yaml
+- uses: cloudshipai/station-action@v1
+  with:
+    agent: 'FinOps Analyzer'
+    task: 'Analyze cloud costs'
+    bundle-url: https://releases.example.com/finops-bundle-v1.0.0.tar.gz
+  env:
+    OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+```
+
+### From CloudShip Registry
+
+```yaml
+- uses: cloudshipai/station-action@v1
+  with:
+    agent: 'Security Scanner'
+    task: 'Run security audit'
+    bundle-id: '550e8400-e29b-41d4-a716-446655440000'
+    cloudship-api-key: ${{ secrets.CLOUDSHIP_API_KEY }}
+  env:
+    OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+```
+
+### Scheduled Analysis
+
+```yaml
+name: Weekly Security Scan
+on:
+  schedule:
+    - cron: '0 2 * * 1'  # Monday 2 AM
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: cloudshipai/station-action@v1
+        with:
+          agent: 'Security Auditor'
+          task: 'Comprehensive security scan of the entire codebase'
+          timeout: 600
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+```
 
 ## Outputs
 
 | Output | Description |
 |--------|-------------|
-| `exit_code` | Exit code from security scan (0 = clean, non-zero = issues found) |
-
-## Setup
-
-### 1. Add OpenAI API Key
-
-Go to your repository **Settings** → **Secrets and variables** → **Actions** → **New repository secret**
-
-- Name: `OPENAI_API_KEY`
-- Value: Your OpenAI API key
-
-### 2. Add Workflow
-
-Create `.github/workflows/security.yml`:
+| `result` | Agent execution result (JSON) |
+| `exit-code` | Exit code (0 = success) |
+| `run-id` | Station run ID |
 
 ```yaml
-name: CloudShip Security
-on: [pull_request, push]
+- uses: cloudshipai/station-action@v1
+  id: agent
+  with:
+    agent: 'Analyzer'
+    task: 'Analyze code'
 
-jobs:
-  security-scan:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: write  # Required for PR comments
-    steps:
-      - uses: actions/checkout@v4
-      - uses: cloudshipai/station-action@v1
-        with:
-          agent: infrastructure-security
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+- run: echo "Exit code: ${{ steps.agent.outputs.exit-code }}"
 ```
 
-### 3. Push and Test
+## Additional Environment Variables
 
-Commit the workflow file and create a PR to see it in action!
+You can pass any Station configuration via environment variables:
 
-## How It Works
+```yaml
+env:
+  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+  
+  # CloudShip telemetry
+  STN_CLOUDSHIP_ENABLED: true
+  STN_CLOUDSHIP_KEY: ${{ secrets.CLOUDSHIP_KEY }}
+  
+  # Telemetry/Observability
+  STN_TELEMETRY_ENABLED: true
+  STN_TELEMETRY_ENDPOINT: https://otel.example.com
+  
+  # Debug
+  STN_DEBUG: true
+```
 
-1. **Checkout**: Your code is checked out to the runner
-2. **Agent Selection**: Based on your input, the appropriate agent is selected
-3. **Docker Execution**: The CloudShip Station container runs with:
-   - Your workspace mounted at `/workspace`
-   - Docker socket for container scanning (privileged mode)
-   - OpenAI API key for AI analysis
-4. **Analysis**: The agent:
-   - Syncs MCP tools (97+ security tools)
-   - Runs relevant security scanners
-   - AI analyzes and prioritizes findings
-   - Generates actionable recommendations
-5. **Results**:
-   - PR comment with summary (if enabled)
-   - Detailed logs in workflow run
-   - Optional workflow failure on critical issues
+See [Station Configuration](https://github.com/cloudshipai/station#configuration) for all options.
 
-## What Makes This Different?
+## Repository Structure
 
-### vs Traditional Security Scanners
-- ✅ **Multi-tool orchestration** (97 tools vs 1-2 per scanner)
-- ✅ **AI-powered analysis** (prioritization and context, not just rule matching)
-- ✅ **Single integration** (one action vs 5-10 different scanners)
-- ✅ **Natural language customization** (describe what you want, no config files)
+For local environments, structure your repo like this:
 
-### vs GitHub Security Features
-- ✅ **More coverage** (IaC, containers, code, dependencies all in one)
-- ✅ **Customizable agents** (not locked into predefined rules)
-- ✅ **AI analysis** (intelligent insights, not just CVE lists)
+```
+your-repo/
+├── environments/
+│   ├── default/           # Default environment
+│   │   └── template.json
+│   └── production/        # Production environment
+│       └── template.json
+└── .github/
+    └── workflows/
+        └── station.yml
+```
 
-### vs GitHub Actions Marketplace
-- ✅ **One action for everything** (vs 10+ different actions)
-- ✅ **Consistent interface** (same inputs/outputs for all agents)
-- ✅ **AI-powered** (actual intelligence, not just tool wrappers)
+## Troubleshooting
 
-## Pricing
+### "No API key found"
 
-The action itself is **free and open source**.
+Make sure you're passing the API key via `env:`, not `with:`:
 
-You'll need:
-- ✅ **OpenAI API key** (pay-as-you-go, typically $0.10-$0.50 per scan)
-- ✅ **GitHub Actions minutes** (free tier: 2,000 min/month for private repos)
+```yaml
+# WRONG
+with:
+  openai-api-key: ${{ secrets.OPENAI_API_KEY }}
 
-## Roadmap
+# CORRECT
+env:
+  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+```
 
-- [ ] GitHub App (zero-config installation)
-- [ ] Custom bundle support (bring your own agents)
-- [ ] GitLab CI adapter
-- [ ] CircleCI orb
-- [ ] Dagger module
-- [ ] Self-hosted option (no API key required)
+### "Agent not found"
 
-## Support
+Check that your agent name matches exactly what's in your bundle/environment. Agent names are case-sensitive.
 
-- 📖 **Documentation**: https://docs.cloudshipai.com
-- 💬 **Discord**: https://discord.gg/cloudshipai
-- 🐛 **Issues**: https://github.com/cloudshipai/station-action/issues
-- 📧 **Email**: support@cloudshipai.com
+### "Environment directory not found"
+
+Ensure your environment exists at `./environments/<name>/` relative to the repo root.
+
+## Reusable Actions
+
+For more control, use the individual reusable actions:
+
+| Action | Description |
+|--------|-------------|
+| `cloudshipai/station/.github/actions/setup-station@main` | Just install Station CLI |
+| `cloudshipai/station/.github/actions/build-bundle@main` | Create bundles from environments |
+| `cloudshipai/station/.github/actions/build-image@main` | Build Docker images |
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details.
-
-## Contributing
-
-Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
----
-
-**Built with ❤️ by the CloudShip AI team**
-
-Add AI-powered security scanning to your pipeline in 3 lines:
-```yaml
-- uses: cloudshipai/station-action@v1
-  with:
-    agent: infrastructure-security
-```
+Apache 2.0 - See [LICENSE](../../LICENSE)

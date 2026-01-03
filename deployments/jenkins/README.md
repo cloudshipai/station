@@ -1,6 +1,6 @@
-# Station + Jenkins Integration
+# Station + Jenkins
 
-Run Station security agents in Jenkins pipelines.
+Run Station agents in Jenkins pipelines.
 
 ## Quick Start
 
@@ -9,21 +9,19 @@ Add to your `Jenkinsfile`:
 ```groovy
 pipeline {
   agent {
-    docker {
-      image 'ghcr.io/cloudshipai/station-security:latest'
-    }
-  }
-
-  stages {
-    stage('Security Scan') {
-      steps {
-        sh 'stn agent run "Infrastructure Security Auditor" "Scan for security issues"'
-      }
-    }
+    docker { image 'ghcr.io/cloudshipai/station:latest' }
   }
 
   environment {
     OPENAI_API_KEY = credentials('openai-api-key')
+  }
+
+  stages {
+    stage('Analyze') {
+      steps {
+        sh 'stn agent run "Code Reviewer" "Review the code"'
+      }
+    }
   }
 }
 ```
@@ -34,18 +32,17 @@ pipeline {
 pipeline {
   agent {
     docker {
-      image 'ghcr.io/cloudshipai/station-security:latest'
-      args '-v /var/run/docker.sock:/var/run/docker.sock --privileged'
+      image 'ghcr.io/cloudshipai/station:latest'
+      args '-v /var/run/docker.sock:/var/run/docker.sock'
     }
   }
 
   environment {
     OPENAI_API_KEY = credentials('openai-api-key')
-    PROJECT_ROOT = "${WORKSPACE}"
   }
 
   stages {
-    stage('Infrastructure Security') {
+    stage('Code Review') {
       when {
         anyOf {
           branch 'main'
@@ -53,68 +50,67 @@ pipeline {
         }
       }
       steps {
-        sh '''
-          stn agent run "Infrastructure Security Auditor" \
-            "Scan terraform, kubernetes, and docker for security vulnerabilities"
-        '''
+        sh 'stn agent run "Code Reviewer" "Review code for bugs and best practices"'
       }
     }
 
-    stage('Supply Chain') {
+    stage('Security Scan') {
       steps {
-        sh '''
-          stn agent run "Supply Chain Guardian" \
-            "Generate SBOM and scan dependencies"
-        '''
-      }
-    }
-
-    stage('Deployment Gate') {
-      when {
-        branch 'main'
-      }
-      steps {
-        input message: 'Approve deployment?'
-        sh '''
-          stn agent run "Deployment Security Gate" \
-            "Validate security posture before deployment"
-        '''
+        sh 'stn agent run "Security Analyst" "Scan for security vulnerabilities"'
       }
     }
   }
 
   post {
     always {
-      echo 'Security scan completed'
+      echo 'Analysis completed'
     }
   }
 }
 ```
 
-## Scheduled Scans
+## Using Different AI Providers
 
-Create a Jenkins job with cron trigger:
+### Anthropic Claude
+
+```groovy
+environment {
+  ANTHROPIC_API_KEY = credentials('anthropic-api-key')
+  STN_AI_PROVIDER = 'anthropic'
+  STN_AI_MODEL = 'claude-3-5-sonnet-20241022'
+}
+```
+
+### Google Gemini
+
+```groovy
+environment {
+  GOOGLE_API_KEY = credentials('google-api-key')
+  STN_AI_PROVIDER = 'gemini'
+  STN_AI_MODEL = 'gemini-2.0-flash-exp'
+}
+```
+
+## Scheduled Jobs
 
 ```groovy
 pipeline {
   agent {
-    docker { image 'ghcr.io/cloudshipai/station-security:latest' }
+    docker { image 'ghcr.io/cloudshipai/station:latest' }
   }
 
   triggers {
-    cron('0 9 * * *')  // Daily at 9 AM
+    cron('0 9 * * *')
   }
 
   environment {
     OPENAI_API_KEY = credentials('openai-api-key')
-    AWS_ACCESS_KEY_ID = credentials('aws-access-key-id')
-    AWS_SECRET_ACCESS_KEY = credentials('aws-secret-key')
   }
 
   stages {
-    stage('Daily Cost Analysis') {
+    stage('Daily Analysis') {
       steps {
-        sh 'stn agent run "AWS Cost Analyzer" "Analyze AWS costs"'
+        sh 'stn agent run "Report Generator" "Generate daily summary"'
       }
     }
   }
@@ -123,46 +119,13 @@ pipeline {
 
 ## Setup
 
-1. **Add Credentials** (Manage Jenkins → Credentials):
+1. **Add Credentials** (Manage Jenkins > Credentials):
    - ID: `openai-api-key`
-   - Secret text: Your OpenAI API key
+   - Type: Secret text
+   - Value: Your OpenAI API key
 
-2. **Copy Jenkinsfile** to your repository
+2. **Create your agents** in `environments/default/template.json`
 
 3. **Create Pipeline** job pointing to your repo
 
-4. **Run** - Pipeline executes automatically
-
-## Shared Library (Advanced)
-
-Create `vars/stationScan.groovy`:
-
-```groovy
-def call(Map config = [:]) {
-  docker.image('ghcr.io/cloudshipai/station-security:latest').inside() {
-    sh """
-      stn agent run '${config.agent}' '${config.task}'
-    """
-  }
-}
-```
-
-Use in Jenkinsfile:
-
-```groovy
-@Library('shared-library') _
-
-pipeline {
-  agent any
-  stages {
-    stage('Security') {
-      steps {
-        stationScan(
-          agent: 'Infrastructure Security Auditor',
-          task: 'Scan for vulnerabilities'
-        )
-      }
-    }
-  }
-}
-```
+4. **Run** - pipeline executes automatically

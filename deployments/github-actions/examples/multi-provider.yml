@@ -1,0 +1,53 @@
+name: Multi-Provider Example
+
+on:
+  workflow_dispatch:
+    inputs:
+      provider:
+        description: 'AI Provider'
+        required: true
+        type: choice
+        options:
+          - openai
+          - anthropic
+          - gemini
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run with OpenAI
+        if: inputs.provider == 'openai'
+        uses: cloudshipai/station-action@v1
+        with:
+          agent: 'Analyzer'
+          task: 'Analyze the codebase'
+          provider: openai
+          model: gpt-4o
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
+      - name: Run with Anthropic
+        if: inputs.provider == 'anthropic'
+        uses: cloudshipai/station-action@v1
+        with:
+          agent: 'Analyzer'
+          task: 'Analyze the codebase'
+          provider: anthropic
+          model: claude-3-5-sonnet-20241022
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+      - name: Run with Gemini
+        if: inputs.provider == 'gemini'
+        uses: cloudshipai/station-action@v1
+        with:
+          agent: 'Analyzer'
+          task: 'Analyze the codebase'
+          provider: gemini
+          model: gemini-2.0-flash-exp
+        env:
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}

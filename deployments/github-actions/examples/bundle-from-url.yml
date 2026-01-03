@@ -1,0 +1,31 @@
+name: Run from Bundle
+
+on:
+  workflow_dispatch:
+    inputs:
+      bundle_url:
+        description: 'Bundle URL'
+        required: true
+        default: 'https://github.com/your-org/your-bundles/releases/download/v1.0.0/production.tar.gz'
+      agent:
+        description: 'Agent name'
+        required: true
+        default: 'FinOps Analyzer'
+      task:
+        description: 'Task'
+        required: true
+        default: 'Analyze cloud costs and identify savings opportunities'
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: cloudshipai/station-action@v1
+        with:
+          bundle-url: ${{ inputs.bundle_url }}
+          agent: ${{ inputs.agent }}
+          task: ${{ inputs.task }}
+          timeout: 600
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}

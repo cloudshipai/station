@@ -1,0 +1,268 @@
+name: Test Reusable Actions
+
+on:
+  workflow_dispatch:
+    inputs:
+      test_setup:
+        description: 'Test setup-station action'
+        type: boolean
+        default: true
+      test_bundle:
+        description: 'Test build-bundle action'
+        type: boolean
+        default: true
+      test_image:
+        description: 'Test build-image action'
+        type: boolean
+        default: true
+  pull_request:
+    paths:
+      - '.github/actions/**'
+
+jobs:
+  # =============================================================================
+  # Test: setup-station
+  # =============================================================================
+  test-setup-station:
+    if: github.event.inputs.test_setup != 'false'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        version: ['latest']
+        provider: ['openai']
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Test setup-station action
+        uses: ./.github/actions/setup-station
+        with:
+          version: ${{ matrix.version }}
+          provider: ${{ matrix.provider }}
+          skip-init: 'true'  # Skip init since we don't have API keys in CI
+
+      - name: Verify CLI installation
+        run: |
+          echo "Testing Station CLI..."
+          stn --version
+          which stn
+          echo "✅ setup-station action works!"
+
+  # =============================================================================
+  # Test: build-bundle
+  # =============================================================================
+  test-build-bundle:
+    if: github.event.inputs.test_bundle != 'false'
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create test environment
+        run: |
+          mkdir -p environments/test-env/agents
+          
+          # Create a minimal agent
+          cat > environments/test-env/agents/hello-world.prompt <<'EOF'
+          ---
+          name: Hello World
+          description: A simple test agent
+          model: gpt-4o-mini
+          tools: []
+          ---
+          
+          You are a helpful assistant. Say hello!
+          EOF
+          
+          # Create template.json
+          cat > environments/test-env/template.json <<'EOF'
+          {
+            "name": "test-env",
+            "description": "Test environment for CI",
+            "version": "1.0.0"
+          }
+          EOF
+          
+          echo "✅ Test environment created"
+          ls -la environments/test-env/
+
+      - name: Test build-bundle action
+        id: bundle
+        uses: ./.github/actions/build-bundle
+        with:
+          environment: 'test-env'
+          version: '1.0.0-test'
+
+      - name: Verify bundle output
+        run: |
+          echo "Bundle path: ${{ steps.bundle.outputs.bundle-path }}"
+          echo "Bundle size: ${{ steps.bundle.outputs.bundle-size }}"
+          echo "Metadata path: ${{ steps.bundle.outputs.metadata-path }}"
+          
+          # Verify files exist
+          ls -la ${{ steps.bundle.outputs.bundle-path }}
+          ls -la ${{ steps.bundle.outputs.metadata-path }}
+          
+          # Verify bundle contents
+          echo "Bundle contents:"
+          tar -tzf ${{ steps.bundle.outputs.bundle-path }} | head -20
+          
+          # Verify metadata
+          echo "Metadata:"
+          cat ${{ steps.bundle.outputs.metadata-path }}
+          
+          echo "✅ build-bundle action works!"
+
+  # =============================================================================
+  # Test: build-image
+  # =============================================================================
+  test-build-image:
+    if: github.event.inputs.test_image != 'false'
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create test environment
+        run: |
+          mkdir -p environments/test-env/agents
+          
+          cat > environments/test-env/agents/hello-world.prompt <<'EOF'
+          ---
+          name: Hello World
+          description: A simple test agent
+          model: gpt-4o-mini
+          tools: []
+          ---
+          
+          You are a helpful assistant. Say hello!
+          EOF
+          
+          cat > environments/test-env/template.json <<'EOF'
+          {
+            "name": "test-env",
+            "description": "Test environment for CI",
+            "version": "1.0.0"
+          }
+          EOF
+
+      - name: Test build-image action (from environment)
+        id: image
+        uses: ./.github/actions/build-image
+        with:
+          source-type: 'environment'
+          environment: 'test-env'
+          image-name: 'station-test'
+          image-tag: 'ci-test'
+          push: 'false'
+
+      - name: Verify image output
+        run: |
+          echo "Image name: ${{ steps.image.outputs.image-name }}"
+          echo "Image digest: ${{ steps.image.outputs.image-digest }}"
+          
+          # Verify image exists locally
+          docker images | grep station-test
+          
+          # Quick smoke test
+          docker run --rm ${{ steps.image.outputs.image-name }} stn --version
+          
+          echo "✅ build-image action works!"
+
+  # =============================================================================
+  # Integration: Full Pipeline
+  # =============================================================================
+  test-full-pipeline:
+    if: github.event.inputs.test_bundle != 'false' && github.event.inputs.test_image != 'false'
+    runs-on: ubuntu-latest
+    needs: [test-setup-station, test-build-bundle, test-build-image]
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create test environment
+        run: |
+          mkdir -p environments/pipeline-test/agents
+          
+          cat > environments/pipeline-test/agents/pipeline-agent.prompt <<'EOF'
+          ---
+          name: Pipeline Agent
+          description: Agent created via full pipeline test
+          model: gpt-4o-mini
+          tools: []
+          ---
+          
+          You are a helpful assistant created via the CI pipeline.
+          EOF
+          
+          cat > environments/pipeline-test/template.json <<'EOF'
+          {
+            "name": "pipeline-test",
+            "description": "Full pipeline test",
+            "version": "1.0.0"
+          }
+          EOF
+
+      - name: Step 1 - Setup Station CLI
+        uses: ./.github/actions/setup-station
+        with:
+          skip-init: 'true'
+
+      - name: Step 2 - Build Bundle
+        id: bundle
+        uses: ./.github/actions/build-bundle
+        with:
+          environment: 'pipeline-test'
+          version: '1.0.0'
+
+      - name: Step 3 - Build Image from Bundle
+        id: image
+        uses: ./.github/actions/build-image
+        with:
+          source-type: 'bundle'
+          bundle-url: 'file://${{ steps.bundle.outputs.bundle-path }}'
+          image-name: 'station-pipeline-test'
+          image-tag: 'latest'
+          push: 'false'
+
+      - name: Verify full pipeline
+        run: |
+          echo "=== Full Pipeline Test Results ==="
+          echo "Bundle: ${{ steps.bundle.outputs.bundle-path }}"
+          echo "Image: ${{ steps.image.outputs.image-name }}"
+          
+          docker images | grep station-pipeline
+          docker run --rm ${{ steps.image.outputs.image-name }} stn --version
+          
+          echo "✅ Full pipeline works!"
+
+  # =============================================================================
+  # Summary
+  # =============================================================================
+  summary:
+    runs-on: ubuntu-latest
+    needs: [test-setup-station, test-build-bundle, test-build-image]
+    if: always()
+    
+    steps:
+      - name: Test Summary
+        run: |
+          echo "=== Reusable Actions Test Summary ==="
+          echo ""
+          echo "setup-station: ${{ needs.test-setup-station.result }}"
+          echo "build-bundle:  ${{ needs.test-build-bundle.result }}"
+          echo "build-image:   ${{ needs.test-build-image.result }}"
+          echo ""
+          
+          if [ "${{ needs.test-setup-station.result }}" = "success" ] && \
+             [ "${{ needs.test-build-bundle.result }}" = "success" ] && \
+             [ "${{ needs.test-build-image.result }}" = "success" ]; then
+            echo "✅ All tests passed!"
+          else
+            echo "❌ Some tests failed"
+            exit 1
+          fi

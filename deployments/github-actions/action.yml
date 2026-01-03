@@ -1,214 +1,372 @@
-name: 'CloudShip AI Security Scanner'
-description: 'AI-powered security scanning for infrastructure, containers, and code using Station agents'
+# Station GitHub Action
+# Run AI agents from Station bundles in GitHub Actions
+#
+# Usage:
+#   - uses: cloudshipai/station-action@v1
+#     with:
+#       agent: 'My Agent'
+#       task: 'Analyze the codebase'
+#     env:
+#       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+#
+# See: https://github.com/cloudshipai/station/tree/main/deployments/github-actions
+
+name: 'Station'
+description: 'Run AI agents from Station bundles in GitHub Actions workflows'
+author: 'CloudShip AI'
 branding:
-  icon: 'shield'
-  color: 'blue'
+  icon: 'cpu'
+  color: 'purple'
 
 inputs:
+  # =============================================================================
+  # Agent Execution (Required)
+  # =============================================================================
   agent:
-    description: |
-      Agent to run. Available agents:
-      - infrastructure-security (Terraform, K8s, Docker IaC scanning)
-      - pr-security (PR code review with security focus)
-      - supply-chain (SBOM generation and dependency scanning)
-      - deployment-gate (Pre-deployment security validation)
-      - security-advisor (Security improvement recommendations)
-      - security-metrics (Security posture reporting)
-      Or specify 'all' to run all agents
-    required: false
-    default: 'infrastructure-security'
+    description: 'Name of the agent to run (as defined in your bundle/environment)'
+    required: true
 
   task:
-    description: 'Custom task description to override default agent behavior (optional)'
-    required: false
-    default: ''
+    description: 'Task description for the agent to execute'
+    required: true
 
-  openai_api_key:
-    description: 'OpenAI API key (will use OPENAI_API_KEY secret if not provided)'
+  # =============================================================================
+  # Bundle Source (pick one, or use local environment)
+  # =============================================================================
+  environment:
+    description: |
+      Local environment name to use (e.g., 'production', 'default').
+      Looks for ./environments/<name>/ in your repo.
+      If not specified, uses 'default' environment.
+    required: false
+    default: 'default'
+
+  bundle-url:
+    description: |
+      URL to download a Station bundle (.tar.gz).
+      Use this to run agents from pre-built bundles hosted anywhere.
     required: false
 
-  cloudship_key:
-    description: 'CloudShip AI registration key for telemetry and monitoring (optional)'
+  bundle-id:
+    description: |
+      CloudShip bundle ID (UUID) to download from CloudShip registry.
+      Requires cloudship-api-key to be set.
     required: false
 
-  comment_pr:
-    description: 'Post results as PR comment (true/false)'
+  cloudship-api-key:
+    description: |
+      CloudShip API key for downloading bundles by ID.
+      Only required when using bundle-id.
     required: false
-    default: 'true'
 
-  fail_on_critical:
-    description: 'Fail the workflow if critical security issues are found (true/false)'
+  # =============================================================================
+  # AI Provider Configuration
+  # =============================================================================
+  provider:
+    description: |
+      AI provider to use: 'openai', 'anthropic', 'gemini', or 'ollama'.
+      Defaults to 'openai'. Each provider requires its own API key:
+        - openai: OPENAI_API_KEY
+        - anthropic: ANTHROPIC_API_KEY
+        - gemini: GOOGLE_API_KEY or GEMINI_API_KEY
+        - ollama: No key needed, set base-url to your Ollama instance
+    required: false
+    default: 'openai'
+
+  model:
+    description: |
+      AI model to use. Examples:
+        - openai: gpt-4o, gpt-4o-mini, o1-preview
+        - anthropic: claude-3-5-sonnet-20241022, claude-3-5-haiku-20241022
+        - gemini: gemini-2.0-flash-exp, gemini-1.5-pro
+        - ollama: llama3.2, codellama, mistral
+      If not specified, uses provider's default model.
+    required: false
+
+  base-url:
+    description: |
+      Custom API base URL for:
+        - Azure OpenAI: https://YOUR-RESOURCE.openai.azure.com/
+        - Ollama: http://localhost:11434
+        - OpenAI-compatible APIs: Your endpoint URL
+    required: false
+
+  # =============================================================================
+  # Execution Options
+  # =============================================================================
+  timeout:
+    description: 'Agent execution timeout in seconds (default: 300)'
+    required: false
+    default: '300'
+
+  max-steps:
+    description: 'Maximum number of agent steps (default: 50)'
+    required: false
+    default: '50'
+
+  comment-pr:
+    description: |
+      Post agent results as a PR comment (true/false).
+      Only works on pull_request events.
     required: false
     default: 'false'
 
-  docker_image:
-    description: 'Override the default CloudShip security image'
+  fail-on-error:
+    description: 'Fail the workflow if agent execution fails (default: true)'
     required: false
-    default: 'ghcr.io/cloudshipai/station-security:latest'
+    default: 'true'
+
+  # =============================================================================
+  # Station Configuration
+  # =============================================================================
+  version:
+    description: 'Station CLI version to install (e.g., v0.22.0, latest)'
+    required: false
+    default: 'latest'
+
+  debug:
+    description: 'Enable debug logging (true/false)'
+    required: false
+    default: 'false'
+
+outputs:
+  result:
+    description: 'Agent execution result (JSON)'
+    value: ${{ steps.run.outputs.result }}
+
+  exit-code:
+    description: 'Agent exit code (0 = success)'
+    value: ${{ steps.run.outputs.exit_code }}
+
+  run-id:
+    description: 'Station run ID for this execution'
+    value: ${{ steps.run.outputs.run_id }}
 
 runs:
   using: 'composite'
   steps:
-    - name: Determine agent configuration
-      id: config
+    # =========================================================================
+    # Step 1: Install Station CLI
+    # =========================================================================
+    - name: Install Station CLI
+      id: install
       shell: bash
       run: |
-        # Map friendly names to actual agent names
-        case "${{ inputs.agent }}" in
-          infrastructure-security|infrastructure)
-            echo "agent_name=Infrastructure Security Auditor" >> $GITHUB_OUTPUT
-            echo "default_task=Scan /workspace for infrastructure security vulnerabilities in Terraform, Kubernetes, and Docker configurations. Focus on critical misconfigurations, secrets, and compliance violations." >> $GITHUB_OUTPUT
-            ;;
-          pr-security|pr-review)
-            echo "agent_name=PR Security Reviewer" >> $GITHUB_OUTPUT
-            echo "default_task=Review PR #${{ github.event.pull_request.number }} for security vulnerabilities, focusing on code changes, secrets exposure, and security anti-patterns. Provide actionable remediation guidance." >> $GITHUB_OUTPUT
-            ;;
-          supply-chain|sbom)
-            echo "agent_name=Supply Chain Guardian" >> $GITHUB_OUTPUT
-            echo "default_task=Generate SBOM and scan /workspace dependencies for known vulnerabilities, malicious packages, and supply chain risks." >> $GITHUB_OUTPUT
-            ;;
-          deployment-gate|gate)
-            echo "agent_name=Deployment Security Gate" >> $GITHUB_OUTPUT
-            echo "default_task=Validate security posture before deployment. Check for blocking security issues, compliance requirements, and generate deployment attestation." >> $GITHUB_OUTPUT
-            ;;
-          security-advisor|advisor)
-            echo "agent_name=Security Improvement Advisor" >> $GITHUB_OUTPUT
-            echo "default_task=Analyze /workspace for security improvement opportunities, modernization recommendations, and best practices that can enhance security posture." >> $GITHUB_OUTPUT
-            ;;
-          security-metrics|metrics)
-            echo "agent_name=Security Metrics Reporter" >> $GITHUB_OUTPUT
-            echo "default_task=Generate security metrics report for /workspace including vulnerability trends, compliance status, and security KPIs." >> $GITHUB_OUTPUT
-            ;;
-          all)
-            echo "agent_name=all" >> $GITHUB_OUTPUT
-            echo "default_task=Comprehensive security analysis" >> $GITHUB_OUTPUT
-            ;;
-          *)
-            # Assume it's a custom agent name
-            echo "agent_name=${{ inputs.agent }}" >> $GITHUB_OUTPUT
-            echo "default_task=Analyze /workspace for security issues" >> $GITHUB_OUTPUT
-            ;;
+        VERSION="${{ inputs.version }}"
+
+        if [ "$VERSION" = "latest" ]; then
+          echo "📦 Fetching latest Station version..."
+          VERSION=$(curl -sS https://api.github.com/repos/cloudshipai/station/releases/latest | grep '"tag_name"' | cut -d'"' -f4)
+        fi
+
+        echo "📦 Installing Station CLI ${VERSION}..."
+
+        # Detect OS and architecture
+        OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+        ARCH=$(uname -m)
+
+        case "$ARCH" in
+          x86_64) ARCH="amd64" ;;
+          aarch64|arm64) ARCH="arm64" ;;
+          armv7l) ARCH="arm" ;;
         esac
 
-        # Use custom task if provided, otherwise use default
-        if [ -n "${{ inputs.task }}" ]; then
-          echo "task=${{ inputs.task }}" >> $GITHUB_OUTPUT
-        else
-          echo "task=$(cat $GITHUB_OUTPUT | grep default_task | cut -d= -f2-)" >> $GITHUB_OUTPUT
-        fi
+        # Download and install
+        VERSION_NO_V="${VERSION#v}"
+        DOWNLOAD_URL="https://github.com/cloudshipai/station/releases/download/${VERSION}/station_${VERSION_NO_V}_${OS}_${ARCH}.tar.gz"
 
-    - name: Sync Station environment
+        echo "Downloading from: $DOWNLOAD_URL"
+        curl -fsSL "$DOWNLOAD_URL" -o /tmp/station.tar.gz
+        tar -xzf /tmp/station.tar.gz -C /tmp
+        chmod +x /tmp/stn
+        sudo mv /tmp/stn /usr/local/bin/stn
+        rm /tmp/station.tar.gz
+
+        echo "✅ Station CLI ${VERSION} installed"
+        stn --version
+
+        echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+    # =========================================================================
+    # Step 2: Prepare Bundle/Environment
+    # =========================================================================
+    - name: Prepare environment
+      id: prepare
       shell: bash
+      env:
+        BUNDLE_URL: ${{ inputs.bundle-url }}
+        BUNDLE_ID: ${{ inputs.bundle-id }}
+        CLOUDSHIP_API_KEY: ${{ inputs.cloudship-api-key }}
+        ENVIRONMENT: ${{ inputs.environment }}
       run: |
-        docker run --rm \
-          -v ${{ github.workspace }}:/workspace \
-          ${{ inputs.docker_image }} \
-          stn sync default -i=false || echo "Sync completed with warnings (non-blocking)"
+        WORKSPACE_DIR="${{ github.workspace }}"
 
-    - name: Run Station Agent
-      id: scan
-      shell: bash
-      run: |
-        set +e  # Don't fail immediately on non-zero exit
+        # Determine source type and prepare accordingly
+        if [ -n "$BUNDLE_URL" ]; then
+          echo "📦 Downloading bundle from URL..."
+          mkdir -p /tmp/station-bundle
+          curl -fsSL "$BUNDLE_URL" -o /tmp/station-bundle/bundle.tar.gz
+          cd /tmp/station-bundle
+          tar -xzf bundle.tar.gz
+          rm bundle.tar.gz
+          BUNDLE_PATH="/tmp/station-bundle"
+          echo "bundle_path=$BUNDLE_PATH" >> $GITHUB_OUTPUT
+          echo "source_type=bundle" >> $GITHUB_OUTPUT
 
-        OPENAI_KEY="${{ inputs.openai_api_key }}"
-        if [ -z "$OPENAI_KEY" ]; then
-          OPENAI_KEY="${{ env.OPENAI_API_KEY }}"
-        fi
+        elif [ -n "$BUNDLE_ID" ]; then
+          if [ -z "$CLOUDSHIP_API_KEY" ]; then
+            echo "❌ Error: cloudship-api-key required when using bundle-id"
+            exit 1
+          fi
 
-        if [ -z "$OPENAI_KEY" ]; then
-          echo "::error::OPENAI_API_KEY is not set. Please provide it via input or environment variable."
-          exit 1
-        fi
+          echo "📦 Downloading bundle from CloudShip: $BUNDLE_ID"
+          CLOUDSHIP_API_URL="${CLOUDSHIP_API_URL:-https://api.cloudshipai.com}"
+          DOWNLOAD_URL="${CLOUDSHIP_API_URL}/api/public/bundles/${BUNDLE_ID}/download/"
 
-        # Build environment variables for Docker
-        DOCKER_ENV_VARS="-e OPENAI_API_KEY=${OPENAI_KEY} -e PROJECT_ROOT=/workspace"
+          mkdir -p /tmp/station-bundle
+          HTTP_CODE=$(curl -sS -w "%{http_code}" \
+            -H "X-Registration-Key: ${CLOUDSHIP_API_KEY}" \
+            -o /tmp/station-bundle/bundle.tar.gz \
+            "$DOWNLOAD_URL")
 
-        # Add CloudShip key if provided
-        CLOUDSHIP_KEY="${{ inputs.cloudship_key }}"
-        if [ -z "$CLOUDSHIP_KEY" ]; then
-          CLOUDSHIP_KEY="${{ env.STN_CLOUDSHIP_KEY }}"
-        fi
-        if [ -n "$CLOUDSHIP_KEY" ]; then
-          DOCKER_ENV_VARS="$DOCKER_ENV_VARS -e STN_CLOUDSHIP_KEY=${CLOUDSHIP_KEY}"
-        fi
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "❌ Error: Failed to download bundle (HTTP $HTTP_CODE)"
+            exit 1
+          fi
 
-        echo "::group::Running CloudShip AI Security Agent: ${{ steps.config.outputs.agent_name }}"
+          cd /tmp/station-bundle
+          tar -xzf bundle.tar.gz
+          rm bundle.tar.gz
+          BUNDLE_PATH="/tmp/station-bundle"
+          echo "bundle_path=$BUNDLE_PATH" >> $GITHUB_OUTPUT
+          echo "source_type=bundle" >> $GITHUB_OUTPUT
 
-        if [ "${{ steps.config.outputs.agent_name }}" = "all" ]; then
-          # Run all agents sequentially
-          docker run --rm \
-            --privileged \
-            -v /var/run/docker.sock:/var/run/docker.sock \
-            -v ${{ github.workspace }}:/workspace \
-            $DOCKER_ENV_VARS \
-            ${{ inputs.docker_image }} \
-            bash -c "
-              for agent in 'Infrastructure Security Auditor' 'PR Security Reviewer' 'Supply Chain Guardian'; do
-                echo '═══════════════════════════════════════════════════════'
-                echo \"Running: \$agent\"
-                echo '═══════════════════════════════════════════════════════'
-                stn agent run \"\$agent\" '${{ steps.config.outputs.task }}' --tail || echo \"Agent \$agent completed with warnings\"
-              done
-            "
         else
-          # Run single agent
-          docker run --rm \
-            --privileged \
-            -v /var/run/docker.sock:/var/run/docker.sock \
-            -v ${{ github.workspace }}:/workspace \
-            $DOCKER_ENV_VARS \
-            ${{ inputs.docker_image }} \
-            stn agent run "${{ steps.config.outputs.agent_name }}" "${{ steps.config.outputs.task }}" --tail
+          # Use local environment
+          ENV_PATH="$WORKSPACE_DIR/environments/$ENVIRONMENT"
+          if [ -d "$ENV_PATH" ]; then
+            echo "📂 Using local environment: $ENVIRONMENT"
+            echo "env_path=$ENV_PATH" >> $GITHUB_OUTPUT
+            echo "source_type=environment" >> $GITHUB_OUTPUT
+          else
+            echo "⚠️ Environment directory not found: $ENV_PATH"
+            echo "   Creating minimal config..."
+            echo "source_type=minimal" >> $GITHUB_OUTPUT
+          fi
         fi
 
-        SCAN_EXIT_CODE=$?
-        echo "exit_code=$SCAN_EXIT_CODE" >> $GITHUB_OUTPUT
+    # =========================================================================
+    # Step 3: Initialize Station
+    # =========================================================================
+    - name: Initialize Station
+      shell: bash
+      env:
+        # AI Provider Configuration
+        STN_AI_PROVIDER: ${{ inputs.provider }}
+        STN_AI_MODEL: ${{ inputs.model }}
+        STN_AI_BASE_URL: ${{ inputs.base-url }}
+        STN_DEBUG: ${{ inputs.debug }}
+      run: |
+        cd "${{ github.workspace }}"
 
-        echo "::endgroup::"
+        # Create minimal config if no environment exists
+        stn init --config ./config.yaml --yes 2>/dev/null || true
 
-        # Only fail if critical issues AND fail_on_critical is true
-        if [ "${{ inputs.fail_on_critical }}" = "true" ] && [ $SCAN_EXIT_CODE -ne 0 ]; then
-          echo "::error::Critical security issues found and fail_on_critical is enabled"
-          exit 1
+        echo "✅ Station initialized"
+
+    # =========================================================================
+    # Step 4: Run Agent
+    # =========================================================================
+    - name: Run agent
+      id: run
+      shell: bash
+      env:
+        # AI Provider Configuration (from inputs)
+        STN_AI_PROVIDER: ${{ inputs.provider }}
+        STN_AI_MODEL: ${{ inputs.model }}
+        STN_AI_BASE_URL: ${{ inputs.base-url }}
+        STN_DEBUG: ${{ inputs.debug }}
+        # Execution config
+        AGENT_NAME: ${{ inputs.agent }}
+        AGENT_TASK: ${{ inputs.task }}
+        ENVIRONMENT: ${{ inputs.environment }}
+        MAX_STEPS: ${{ inputs.max-steps }}
+        TIMEOUT: ${{ inputs.timeout }}
+        SOURCE_TYPE: ${{ steps.prepare.outputs.source_type }}
+        BUNDLE_PATH: ${{ steps.prepare.outputs.bundle_path }}
+      run: |
+        set +e  # Don't exit on error, capture exit code
+
+        cd "${{ github.workspace }}"
+
+        echo "🤖 Running agent: $AGENT_NAME"
+        echo "📝 Task: $AGENT_TASK"
+        echo "🔧 Provider: ${STN_AI_PROVIDER:-openai}"
+        [ -n "$STN_AI_MODEL" ] && echo "🧠 Model: $STN_AI_MODEL"
+
+        # Build command based on source type
+        if [ "$SOURCE_TYPE" = "bundle" ]; then
+          # Run from bundle directory
+          cd "$BUNDLE_PATH"
+          stn init --config ./config.yaml --yes 2>/dev/null || true
         fi
 
-        exit 0
+        # Execute agent
+        RESULT=$(stn agent run "$AGENT_NAME" "$AGENT_TASK" \
+          --env "$ENVIRONMENT" \
+          --max-steps "$MAX_STEPS" \
+          --timeout "${TIMEOUT}s" \
+          --tail \
+          --json 2>&1) || true
 
-    - name: Comment on PR
-      if: github.event_name == 'pull_request' && inputs.comment_pr == 'true'
+        EXIT_CODE=$?
+
+        # Extract run ID from output if available
+        RUN_ID=$(echo "$RESULT" | grep -o 'run_id.*' | head -1 | cut -d'"' -f3 || echo "")
+
+        echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
+        echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
+
+        # Store result (escape for GitHub Actions)
+        EOF_MARKER="EOF_$(date +%s)"
+        echo "result<<$EOF_MARKER" >> $GITHUB_OUTPUT
+        echo "$RESULT" >> $GITHUB_OUTPUT
+        echo "$EOF_MARKER" >> $GITHUB_OUTPUT
+
+        if [ $EXIT_CODE -eq 0 ]; then
+          echo "✅ Agent completed successfully"
+        else
+          echo "⚠️ Agent completed with exit code: $EXIT_CODE"
+        fi
+
+        # Return exit code for fail-on-error handling
+        exit $EXIT_CODE
+
+    # =========================================================================
+    # Step 5: Post PR Comment (Optional)
+    # =========================================================================
+    - name: Post PR comment
+      if: github.event_name == 'pull_request' && inputs.comment-pr == 'true'
       uses: actions/github-script@v7
       with:
         script: |
-          const agentName = '${{ steps.config.outputs.agent_name }}';
-          const exitCode = '${{ steps.scan.outputs.exit_code }}';
-
-          let agentEmoji = '🔒';
-          let agentDescription = 'Security Analysis';
-
-          if (agentName.includes('Infrastructure')) {
-            agentEmoji = '🏗️';
-            agentDescription = 'Infrastructure Security';
-          } else if (agentName.includes('PR Security')) {
-            agentEmoji = '🔍';
-            agentDescription = 'PR Security Review';
-          } else if (agentName.includes('Supply Chain')) {
-            agentEmoji = '🔗';
-            agentDescription = 'Supply Chain Security';
-          } else if (agentName.includes('Deployment')) {
-            agentEmoji = '🚀';
-            agentDescription = 'Deployment Security Gate';
-          }
+          const agentName = '${{ inputs.agent }}';
+          const exitCode = '${{ steps.run.outputs.exit_code }}';
+          const runId = '${{ steps.run.outputs.run_id }}';
 
           const statusEmoji = exitCode === '0' ? '✅' : '⚠️';
-          const statusText = exitCode === '0' ? 'Passed' : 'Issues Found';
+          const statusText = exitCode === '0' ? 'Completed' : 'Completed with warnings';
 
-          const body = '## ' + agentEmoji + ' CloudShip AI ' + agentDescription + '\n\n' +
-            statusEmoji + ' **Status**: ' + statusText + '\n\n' +
-            'Your pull request has been analyzed by **' + agentName + '**.\n\n' +
-            '**View detailed findings:** [CloudShip Dashboard](https://cloudshipai.com/dashboard)\n\n' +
-            '**Workflow run:** https://github.com/' + context.repo.owner + '/' + context.repo.repo + '/actions/runs/' + context.runId + '\n\n' +
-            '_Powered by [CloudShip AI](https://cloudshipai.com)_';
+          const body = `## 🤖 Station Agent: ${agentName}
+
+          ${statusEmoji} **Status**: ${statusText}
+
+          **Task**: ${{ inputs.task }}
+
+          **Workflow run**: https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}
+
+          ---
+          _Powered by [Station](https://github.com/cloudshipai/station)_`;
 
           await github.rest.issues.createComment({
             issue_number: context.issue.number,
@@ -217,7 +375,12 @@ runs:
             body: body
           });
 
-outputs:
-  exit_code:
-    description: 'Exit code from the security scan (0 = clean, non-zero = issues found)'
-    value: ${{ steps.scan.outputs.exit_code }}
+    # =========================================================================
+    # Step 6: Handle Failure
+    # =========================================================================
+    - name: Check for failure
+      if: steps.run.outputs.exit_code != '0' && inputs.fail-on-error == 'true'
+      shell: bash
+      run: |
+        echo "❌ Agent execution failed with exit code: ${{ steps.run.outputs.exit_code }}"
+        exit 1

@@ -1,29 +1,29 @@
-# Station + CircleCI Integration
+# Station + CircleCI
 
-Run Station security agents in CircleCI pipelines.
+Run Station agents in CircleCI pipelines.
 
 ## Quick Start
 
-Add to your `.circleci/config.yml`:
+Add to `.circleci/config.yml`:
 
 ```yaml
 version: 2.1
 
 jobs:
-  security-scan:
+  analyze:
     docker:
-      - image: ghcr.io/cloudshipai/station-security:latest
+      - image: ghcr.io/cloudshipai/station:latest
     steps:
       - checkout
       - run:
-          name: Security Scan
-          command: stn agent run "Infrastructure Security Auditor" "Scan for security issues"
+          name: Run Agent
+          command: stn agent run "Code Reviewer" "Review the code"
 
 workflows:
-  security:
+  main:
     jobs:
-      - security-scan:
-          context: station-security
+      - analyze:
+          context: station
 ```
 
 ## Complete Example
@@ -32,60 +32,35 @@ workflows:
 version: 2.1
 
 jobs:
-  infrastructure-security:
+  code-review:
     docker:
-      - image: ghcr.io/cloudshipai/station-security:latest
+      - image: ghcr.io/cloudshipai/station:latest
     steps:
       - checkout
       - run:
-          name: Infrastructure Security Scan
-          command: |
-            stn agent run "Infrastructure Security Auditor" \
-              "Scan terraform, kubernetes, and docker for security vulnerabilities"
+          name: Code Review
+          command: stn agent run "Code Reviewer" "Review code for bugs and best practices"
 
-  supply-chain-security:
+  security-scan:
     docker:
-      - image: ghcr.io/cloudshipai/station-security:latest
+      - image: ghcr.io/cloudshipai/station:latest
     steps:
       - checkout
       - run:
-          name: Supply Chain Scan
-          command: |
-            stn agent run "Supply Chain Guardian" \
-              "Generate SBOM and scan dependencies for vulnerabilities"
-
-  deployment-gate:
-    docker:
-      - image: ghcr.io/cloudshipai/station-security:latest
-    steps:
-      - checkout
-      - run:
-          name: Deployment Security Gate
-          command: |
-            stn agent run "Deployment Security Gate" \
-              "Validate security posture before deployment"
+          name: Security Scan
+          command: stn agent run "Security Analyst" "Scan for security vulnerabilities"
 
 workflows:
   version: 2
-  security-pipeline:
+  
+  pr-checks:
     jobs:
-      - infrastructure-security:
-          context: station-security
-          filters:
-            branches:
-              only:
-                - main
-                - develop
-      - supply-chain-security:
-          context: station-security
-      - deployment-gate:
-          context: station-security
+      - code-review:
+          context: station
+      - security-scan:
+          context: station
           requires:
-            - infrastructure-security
-            - supply-chain-security
-          filters:
-            branches:
-              only: main
+            - code-review
 
   daily-analysis:
     triggers:
@@ -95,36 +70,34 @@ workflows:
             branches:
               only: main
     jobs:
-      - cost-analysis:
-          context: station-finops
+      - code-review:
+          context: station
 ```
+
+## Using Different AI Providers
+
+### Anthropic Claude
+
+Create a context with:
+- `ANTHROPIC_API_KEY`
+- `STN_AI_PROVIDER=anthropic`
+- `STN_AI_MODEL=claude-3-5-sonnet-20241022`
+
+### Google Gemini
+
+Create a context with:
+- `GOOGLE_API_KEY`
+- `STN_AI_PROVIDER=gemini`
+- `STN_AI_MODEL=gemini-2.0-flash-exp`
 
 ## Setup
 
-1. **Create Context** (Organization Settings → Contexts):
-   - Name: `station-security`
-   - Add environment variables:
-     - `OPENAI_API_KEY`
-     - `STN_CLOUDSHIP_KEY` (optional)
+1. **Create Context** (Organization Settings > Contexts):
+   - Name: `station`
+   - Variables: `OPENAI_API_KEY`
 
-2. **Copy config** to `.circleci/config.yml`
+2. **Create your agents** in `environments/default/template.json`
 
-3. **Commit and push** - Pipeline runs automatically
+3. **Add config** to `.circleci/config.yml`
 
-## Orb (Future)
-
-Station will provide an official CircleCI Orb:
-
-```yaml
-version: 2.1
-
-orbs:
-  station: cloudshipai/station@1.0.0
-
-workflows:
-  security:
-    jobs:
-      - station/scan:
-          agent: infrastructure-security
-          context: station-security
-```
+4. **Push** - pipeline runs automatically

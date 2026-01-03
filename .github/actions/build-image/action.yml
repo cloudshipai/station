@@ -1,4 +1,4 @@
-name: 'Build Station Deployment Image'
+name: 'Build Station Docker Image'
 description: 'Build a Docker image from a Station environment or bundle'
 branding:
   icon: 'box'
@@ -6,58 +6,64 @@ branding:
 
 inputs:
   source-type:
-    description: 'Source type: environment (local dir) or bundle (tar.gz URL)'
-    required: true
+    description: 'Source type: environment (local dir) or bundle (tar.gz URL/CloudShip ID)'
+    required: false
     default: 'environment'
-  
+
   environment:
     description: 'Environment name (required if source-type=environment)'
     required: false
-  
+    default: 'default'
+
   bundle-url:
     description: 'Bundle URL (required if source-type=bundle and bundle-id not set)'
     required: false
-  
+
   bundle-id:
-    description: 'CloudShip bundle ID (UUID). Alternative to bundle-url when source-type=bundle'
+    description: 'CloudShip bundle ID (UUID). Alternative to bundle-url'
     required: false
-  
+
   cloudship-api-key:
     description: 'CloudShip API key for downloading bundles by ID'
     required: false
-  
+
   image-name:
-    description: 'Docker image name (e.g., station-production)'
+    description: 'Docker image name (e.g., my-org/station-production)'
     required: true
-  
+
   image-tag:
     description: 'Docker image tag (e.g., v1.0.0, latest)'
-    required: true
+    required: false
     default: 'latest'
-  
+
   registry:
-    description: 'Container registry (e.g., ghcr.io)'
+    description: 'Container registry (e.g., ghcr.io, docker.io)'
     required: false
     default: 'ghcr.io'
-  
+
   registry-username:
     description: 'Registry username'
     required: false
-  
+
   registry-password:
     description: 'Registry password/token'
     required: false
-  
+
   push:
-    description: 'Push image to registry'
+    description: 'Push image to registry after building'
     required: false
     default: 'false'
+
+  platforms:
+    description: 'Target platforms (e.g., linux/amd64,linux/arm64)'
+    required: false
+    default: 'linux/amd64'
 
 outputs:
   image-name:
     description: 'Built image name with tag'
     value: ${{ steps.build.outputs.image-name }}
-  
+
   image-digest:
     description: 'Image digest (SHA256)'
     value: ${{ steps.build.outputs.image-digest }}
@@ -67,7 +73,7 @@ runs:
   steps:
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
-    
+
     - name: Log in to Container Registry
       if: inputs.push == 'true' && inputs.registry-username != '' && inputs.registry-password != ''
       uses: docker/login-action@v3
@@ -75,150 +81,130 @@ runs:
         registry: ${{ inputs.registry }}
         username: ${{ inputs.registry-username }}
         password: ${{ inputs.registry-password }}
-    
+
     - name: Prepare build context
+      id: prepare
       shell: bash
+      env:
+        SOURCE_TYPE: ${{ inputs.source-type }}
+        BUNDLE_URL: ${{ inputs.bundle-url }}
+        BUNDLE_ID: ${{ inputs.bundle-id }}
+        CLOUDSHIP_API_KEY: ${{ inputs.cloudship-api-key }}
+        ENVIRONMENT: ${{ inputs.environment }}
       run: |
-        SOURCE_TYPE="${{ inputs.source-type }}"
-        
         if [ "$SOURCE_TYPE" = "bundle" ]; then
-          BUNDLE_URL="${{ inputs.bundle-url }}"
-          BUNDLE_ID="${{ inputs.bundle-id }}"
-          CLOUDSHIP_API_KEY="${{ inputs.cloudship-api-key }}"
-          
-          # Determine download method
+          # Download bundle
+          mkdir -p /tmp/station-bundle
+
           if [ -n "$BUNDLE_ID" ]; then
             # Download from CloudShip by bundle ID
             if [ -z "$CLOUDSHIP_API_KEY" ]; then
               echo "❌ Error: cloudship-api-key required when using bundle-id"
               exit 1
             fi
-            
-            CLOUDSHIP_API_URL="${CLOUDSHIP_API_URL:-https://app.cloudshipai.com}"
+
+            CLOUDSHIP_API_URL="${CLOUDSHIP_API_URL:-https://api.cloudshipai.com}"
             DOWNLOAD_URL="${CLOUDSHIP_API_URL}/api/public/bundles/${BUNDLE_ID}/download/"
-            
+
             echo "📦 Downloading bundle from CloudShip: $BUNDLE_ID"
-            mkdir -p /tmp/station-bundle
-            
             HTTP_CODE=$(curl -sS -w "%{http_code}" \
               -H "X-Registration-Key: ${CLOUDSHIP_API_KEY}" \
               -o /tmp/station-bundle/bundle.tar.gz \
               "$DOWNLOAD_URL")
-            
-            if [ "$HTTP_CODE" = "401" ] || [ "$HTTP_CODE" = "403" ]; then
-              echo "❌ Error: Unauthorized - check your CloudShip API key"
-              exit 1
-            elif [ "$HTTP_CODE" = "404" ]; then
-              echo "❌ Error: Bundle not found: $BUNDLE_ID"
-              exit 1
-            elif [ "$HTTP_CODE" != "200" ]; then
+
+            if [ "$HTTP_CODE" != "200" ]; then
               echo "❌ Error: CloudShip API error (HTTP $HTTP_CODE)"
               exit 1
             fi
-            
+
           elif [ -n "$BUNDLE_URL" ]; then
-            # Download from URL
             echo "📦 Downloading bundle: $BUNDLE_URL"
-            mkdir -p /tmp/station-bundle
             curl -fsSL "$BUNDLE_URL" -o /tmp/station-bundle/bundle.tar.gz
-            
           else
             echo "❌ Error: bundle-url or bundle-id required when source-type=bundle"
             exit 1
           fi
-          
+
           echo "📂 Extracting bundle..."
           cd /tmp/station-bundle
           tar -xzf bundle.tar.gz
           rm bundle.tar.gz
-          
-          echo "BUILD_CONTEXT=/tmp/station-bundle" >> $GITHUB_ENV
-          
+
+          echo "build_context=/tmp/station-bundle" >> $GITHUB_OUTPUT
+
         elif [ "$SOURCE_TYPE" = "environment" ]; then
-          ENV_NAME="${{ inputs.environment }}"
-          if [ -z "$ENV_NAME" ]; then
-            echo "❌ Error: environment required when source-type=environment"
+          ENV_PATH="./environments/$ENVIRONMENT"
+          if [ ! -d "$ENV_PATH" ]; then
+            echo "❌ Error: Environment not found: $ENV_PATH"
             exit 1
           fi
-          
-          if [ ! -d "./environments/$ENV_NAME" ]; then
-            echo "❌ Error: Environment directory not found: ./environments/$ENV_NAME"
-            exit 1
-          fi
-          
-          echo "BUILD_CONTEXT=./environments/$ENV_NAME" >> $GITHUB_ENV
+          echo "📂 Using environment: $ENVIRONMENT"
+          echo "build_context=$ENV_PATH" >> $GITHUB_OUTPUT
         else
-          echo "❌ Error: Invalid source-type: $SOURCE_TYPE (must be 'environment' or 'bundle')"
+          echo "❌ Error: Invalid source-type: $SOURCE_TYPE"
           exit 1
         fi
-    
+
     - name: Create Dockerfile
       shell: bash
       run: |
         cat > /tmp/Dockerfile.station <<'EOF'
         FROM ghcr.io/cloudshipai/station:latest
-        
-        # Copy environment configuration
+
+        # Copy environment/bundle configuration
         COPY . /home/station/.config/station/environments/runtime/
-        
-        # Set working directory
+
         WORKDIR /home/station/.config/station
-        
-        # Set environment variables
+
         ENV STATION_ENV=runtime
         ENV STATION_MODE=production
-        
-        # Expose ports
+
         EXPOSE 8585 2222 8587
-        
-        # Health check
+
         HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
           CMD stn status || exit 1
-        
-        # Run Station server
+
         CMD ["stn", "up"]
         EOF
-        
-        echo "📝 Dockerfile created"
-    
+
     - name: Build Docker image
       id: build
       shell: bash
+      env:
+        BUILD_CONTEXT: ${{ steps.prepare.outputs.build_context }}
       run: |
         IMAGE_NAME="${{ inputs.image-name }}"
         IMAGE_TAG="${{ inputs.image-tag }}"
         REGISTRY="${{ inputs.registry }}"
-        
+
         # Build full image name
         if [ "${{ inputs.push }}" = "true" ] && [ -n "$REGISTRY" ]; then
           FULL_IMAGE="${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
         else
           FULL_IMAGE="${IMAGE_NAME}:${IMAGE_TAG}"
         fi
-        
-        echo "🔨 Building Docker image: $FULL_IMAGE"
-        
+
+        echo "🔨 Building: $FULL_IMAGE"
+
         docker buildx build \
           --file /tmp/Dockerfile.station \
           --tag "$FULL_IMAGE" \
+          --platform "${{ inputs.platforms }}" \
           --load \
           "$BUILD_CONTEXT"
-        
-        # Get image digest
-        IMAGE_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "$FULL_IMAGE" 2>/dev/null || echo "none")
-        
+
+        IMAGE_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "$FULL_IMAGE" 2>/dev/null || echo "local-build")
+
         echo "✅ Image built: $FULL_IMAGE"
-        echo "   Digest: $IMAGE_DIGEST"
-        
+
         echo "image-name=$FULL_IMAGE" >> $GITHUB_OUTPUT
         echo "image-digest=$IMAGE_DIGEST" >> $GITHUB_OUTPUT
-    
+
     - name: Push to registry
       if: inputs.push == 'true'
       shell: bash
       run: |
         IMAGE_NAME="${{ steps.build.outputs.image-name }}"
-        
-        echo "📤 Pushing image: $IMAGE_NAME"
+        echo "📤 Pushing: $IMAGE_NAME"
         docker push "$IMAGE_NAME"
-        echo "✅ Image pushed successfully"
+        echo "✅ Pushed successfully"

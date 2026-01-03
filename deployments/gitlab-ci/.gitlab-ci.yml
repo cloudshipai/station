@@ -1,40 +1,13 @@
 stages:
-  - security
-  - compliance
+  - analyze
 
-# Security scan on every MR and main branch push
-infrastructure-security:
-  stage: security
-  image: ghcr.io/cloudshipai/station-security:latest
+code-review:
+  stage: analyze
+  image: ghcr.io/cloudshipai/station:latest
   script:
-    - stn agent run "Infrastructure Security Auditor" "Scan terraform, kubernetes, and docker configurations for security vulnerabilities and misconfigurations"
+    - stn agent run "Code Reviewer" "Review the merge request for bugs and best practices"
   variables:
     OPENAI_API_KEY: $OPENAI_API_KEY
-    PROJECT_ROOT: /builds/$CI_PROJECT_PATH
-  only:
-    - merge_requests
-    - main
-
-# Supply chain security
-supply-chain-security:
-  stage: security
-  image: ghcr.io/cloudshipai/station-security:latest
-  script:
-    - stn agent run "Supply Chain Guardian" "Generate SBOM and scan dependencies for known vulnerabilities"
-  variables:
-    OPENAI_API_KEY: $OPENAI_API_KEY
-  only:
-    - merge_requests
-    - main
-
-# Compliance gate before deployment
-compliance-gate:
-  stage: compliance
-  image: ghcr.io/cloudshipai/station-security:latest
-  script:
-    - stn agent run "Deployment Security Gate" "Validate security posture and compliance requirements before deployment"
-  variables:
-    OPENAI_API_KEY: $OPENAI_API_KEY
-  only:
-    - main
-  when: manual  # Require manual approval
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"

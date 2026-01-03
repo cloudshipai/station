@@ -6,34 +6,38 @@ branding:
 
 inputs:
   version:
-    description: 'Station version to install (e.g., v0.21.1, latest)'
+    description: 'Station version to install (e.g., v0.22.0, latest)'
     required: false
     default: 'latest'
-  
+
   provider:
-    description: 'AI provider (openai, gemini, anthropic)'
+    description: 'AI provider: openai, anthropic, gemini, or ollama'
     required: false
     default: 'openai'
-  
+
   model:
-    description: 'AI model to use (e.g., gpt-4o-mini, gemini-2.0-flash-exp)'
+    description: 'AI model to use (e.g., gpt-4o-mini, claude-3-5-sonnet-20241022)'
     required: false
-    default: 'gpt-4o-mini'
-  
-  api-key-secret:
-    description: 'GitHub secret name containing API key (e.g., OPENAI_API_KEY)'
-    required: true
-  
+
+  base-url:
+    description: 'Custom API base URL (for Azure OpenAI, Ollama, etc.)'
+    required: false
+
   workspace-path:
     description: 'Path to Station workspace/config directory'
     required: false
     default: '.'
 
+  skip-init:
+    description: 'Skip Station initialization (just install CLI)'
+    required: false
+    default: 'false'
+
 outputs:
   version:
     description: 'Installed Station version'
     value: ${{ steps.install.outputs.version }}
-  
+
   cli-path:
     description: 'Path to Station CLI binary'
     value: ${{ steps.install.outputs.cli-path }}
@@ -46,59 +50,59 @@ runs:
       shell: bash
       run: |
         VERSION="${{ inputs.version }}"
-        
+
         if [ "$VERSION" = "latest" ]; then
-          echo "📦 Installing latest Station CLI..."
-          LATEST_RELEASE=$(curl -s https://api.github.com/repos/cloudshipai/station/releases/latest | grep "tag_name" | cut -d '"' -f 4)
-          VERSION="$LATEST_RELEASE"
+          echo "📦 Fetching latest Station version..."
+          VERSION=$(curl -sS https://api.github.com/repos/cloudshipai/station/releases/latest | grep '"tag_name"' | cut -d'"' -f4)
         fi
-        
-        echo "Downloading Station CLI ${VERSION}..."
-        
+
+        echo "📦 Installing Station CLI ${VERSION}..."
+
         # Detect OS and architecture
         OS=$(uname -s | tr '[:upper:]' '[:lower:]')
         ARCH=$(uname -m)
-        
+
         case "$ARCH" in
           x86_64) ARCH="amd64" ;;
           aarch64|arm64) ARCH="arm64" ;;
           armv7l) ARCH="arm" ;;
         esac
-        
+
         # Download and install
-        VERSION_NO_V="${VERSION#v}"  # Remove 'v' prefix for filename
+        VERSION_NO_V="${VERSION#v}"
         DOWNLOAD_URL="https://github.com/cloudshipai/station/releases/download/${VERSION}/station_${VERSION_NO_V}_${OS}_${ARCH}.tar.gz"
-        
+
+        echo "Downloading from: $DOWNLOAD_URL"
         curl -fsSL "$DOWNLOAD_URL" -o /tmp/station.tar.gz
         tar -xzf /tmp/station.tar.gz -C /tmp
         chmod +x /tmp/stn
         sudo mv /tmp/stn /usr/local/bin/stn
         rm /tmp/station.tar.gz
-        
-        echo "✅ Station CLI ${VERSION} installed successfully"
-        
+
+        echo "✅ Station CLI ${VERSION} installed"
+
         # Set outputs
         echo "version=${VERSION}" >> $GITHUB_OUTPUT
         echo "cli-path=/usr/local/bin/stn" >> $GITHUB_OUTPUT
-    
+
     - name: Verify Installation
       shell: bash
-      run: |
-        stn --version
-    
+      run: stn --version
+
     - name: Initialize Station
+      if: inputs.skip-init != 'true'
       shell: bash
       env:
-        OPENAI_API_KEY: ${{ inputs.api-key-secret }}
-        GEMINI_API_KEY: ${{ inputs.api-key-secret }}
-        ANTHROPIC_API_KEY: ${{ inputs.api-key-secret }}
+        STN_AI_PROVIDER: ${{ inputs.provider }}
+        STN_AI_MODEL: ${{ inputs.model }}
+        STN_AI_BASE_URL: ${{ inputs.base-url }}
       run: |
         cd "${{ inputs.workspace-path }}"
-        
+
         echo "🔧 Initializing Station..."
-        stn init --config . --yes
-        
-        echo "✅ Station initialized with:"
-        echo "   Provider: ${{ inputs.provider }}"
-        echo "   Model: ${{ inputs.model }}"
+        stn init --config ./config.yaml --yes 2>/dev/null || true
+
+        echo "✅ Station initialized"
+        echo "   Provider: ${STN_AI_PROVIDER:-openai}"
+        [ -n "$STN_AI_MODEL" ] && echo "   Model: $STN_AI_MODEL"
         echo "   Workspace: ${{ inputs.workspace-path }}"

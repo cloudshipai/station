@@ -1,19 +1,28 @@
 # Station Reusable GitHub Actions
 
-This directory contains reusable GitHub Actions that simplify Station deployment and bundle management workflows.
+This directory contains reusable GitHub Actions for Station workflows.
 
 ## Available Actions
 
+| Action | Purpose |
+|--------|---------|
+| [`setup-station`](./setup-station) | Install Station CLI |
+| [`build-bundle`](./build-bundle) | Create agent bundles from environments |
+| [`build-image`](./build-image) | Build Docker images from environments/bundles |
+
+**For running agents**, use the published [station-action](https://github.com/cloudshipai/station-action).
+
 ### 1. `setup-station` - Install and Configure Station CLI
 
-Sets up Station CLI in GitHub Actions runners with automatic installation and configuration.
+Sets up Station CLI in GitHub Actions runners.
 
 **Inputs:**
 - `version`: Station version (default: `latest`)
-- `provider`: AI provider (`openai`, `gemini`, `anthropic`) 
-- `model`: AI model name (default: `gpt-4o-mini`)
-- `api-key-secret`: **Required** - GitHub secret containing API key
+- `provider`: AI provider (`openai`, `anthropic`, `gemini`, `ollama`)
+- `model`: AI model name (optional, uses provider default)
+- `base-url`: Custom API base URL (for Azure OpenAI, Ollama, etc.)
 - `workspace-path`: Workspace directory (default: `.`)
+- `skip-init`: Skip Station initialization (default: `false`)
 
 **Outputs:**
 - `version`: Installed Station version
@@ -26,8 +35,8 @@ Sets up Station CLI in GitHub Actions runners with automatic installation and co
   with:
     version: 'latest'
     provider: 'openai'
-    model: 'gpt-4o-mini'
-    api-key-secret: ${{ secrets.OPENAI_API_KEY }}
+  env:
+    OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 ```
 
 ---
@@ -173,11 +182,6 @@ jobs:
     
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Setup Station
-        uses: cloudshipai/station/.github/actions/setup-station@main
-        with:
-          api-key-secret: ${{ secrets.OPENAI_API_KEY }}
       
       - name: Build and Push Image
         uses: cloudshipai/station/.github/actions/build-image@main

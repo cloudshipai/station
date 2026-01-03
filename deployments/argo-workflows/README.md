@@ -1,28 +1,26 @@
-# Station + Argo Workflows Integration
+# Station + Argo Workflows
 
-Run Station security agents in Argo Workflows (Kubernetes-native workflow engine).
+Run Station agents in Argo Workflows (Kubernetes-native workflow engine).
 
 ## Quick Start
-
-Create a workflow:
 
 ```yaml
 apiVersion: argoproj.io/v1alpha1
 kind: Workflow
 metadata:
-  name: station-security-scan
+  name: station-agent
 spec:
-  entrypoint: security-scan
+  entrypoint: run-agent
   templates:
-  - name: security-scan
+  - name: run-agent
     container:
-      image: ghcr.io/cloudshipai/station-security:latest
+      image: ghcr.io/cloudshipai/station:latest
       command: [stn]
       args:
         - agent
         - run
-        - "Infrastructure Security Auditor"
-        - "Scan for security vulnerabilities"
+        - "Code Reviewer"
+        - "Review the code"
       env:
       - name: OPENAI_API_KEY
         valueFrom:
@@ -37,30 +35,44 @@ spec:
 apiVersion: argoproj.io/v1alpha1
 kind: Workflow
 metadata:
-  generateName: station-security-pipeline-
-  namespace: security
+  generateName: station-pipeline-
 spec:
-  entrypoint: security-pipeline
+  entrypoint: analysis-pipeline
+  arguments:
+    parameters:
+    - name: repo-url
+      value: https://github.com/your-org/your-repo.git
+
   volumeClaimTemplates:
   - metadata:
       name: workspace
     spec:
-      accessModes: [ "ReadWriteOnce" ]
+      accessModes: ["ReadWriteOnce"]
       resources:
         requests:
           storage: 1Gi
 
   templates:
-  - name: security-pipeline
+  - name: analysis-pipeline
     steps:
     - - name: checkout
         template: git-checkout
-    - - name: infrastructure-scan
-        template: infrastructure-security
-      - name: supply-chain-scan
-        template: supply-chain-security
-    - - name: deployment-gate
-        template: deployment-gate
+    - - name: code-review
+        template: run-agent
+        arguments:
+          parameters:
+          - name: agent
+            value: "Code Reviewer"
+          - name: task
+            value: "Review code for bugs and best practices"
+      - name: security-scan
+        template: run-agent
+        arguments:
+          parameters:
+          - name: agent
+            value: "Security Analyst"
+          - name: task
+            value: "Scan for security vulnerabilities"
 
   - name: git-checkout
     container:
@@ -72,55 +84,19 @@ spec:
       - name: workspace
         mountPath: /workspace
 
-  - name: infrastructure-security
+  - name: run-agent
+    inputs:
+      parameters:
+      - name: agent
+      - name: task
     container:
-      image: ghcr.io/cloudshipai/station-security:latest
+      image: ghcr.io/cloudshipai/station:latest
       command: [stn]
       args:
         - agent
         - run
-        - "Infrastructure Security Auditor"
-        - "Scan terraform, kubernetes, and docker for security issues"
-      env:
-      - name: OPENAI_API_KEY
-        valueFrom:
-          secretKeyRef:
-            name: station-secrets
-            key: openai-api-key
-      - name: PROJECT_ROOT
-        value: /workspace
-      volumeMounts:
-      - name: workspace
-        mountPath: /workspace
-
-  - name: supply-chain-security
-    container:
-      image: ghcr.io/cloudshipai/station-security:latest
-      command: [stn]
-      args:
-        - agent
-        - run
-        - "Supply Chain Guardian"
-        - "Generate SBOM and scan dependencies"
-      env:
-      - name: OPENAI_API_KEY
-        valueFrom:
-          secretKeyRef:
-            name: station-secrets
-            key: openai-api-key
-      volumeMounts:
-      - name: workspace
-        mountPath: /workspace
-
-  - name: deployment-gate
-    container:
-      image: ghcr.io/cloudshipai/station-security:latest
-      command: [stn]
-      args:
-        - agent
-        - run
-        - "Deployment Security Gate"
-        - "Validate security posture before deployment"
+        - "{{inputs.parameters.agent}}"
+        - "{{inputs.parameters.task}}"
       env:
       - name: OPENAI_API_KEY
         valueFrom:
@@ -134,45 +110,64 @@ spec:
 
 ## Scheduled Workflows (CronWorkflow)
 
-Daily FinOps analysis:
-
 ```yaml
 apiVersion: argoproj.io/v1alpha1
 kind: CronWorkflow
 metadata:
-  name: daily-cost-analysis
-  namespace: finops
+  name: daily-analysis
 spec:
-  schedule: "0 9 * * *"  # 9 AM daily
+  schedule: "0 9 * * *"
   timezone: "America/Los_Angeles"
   workflowSpec:
-    entrypoint: cost-analysis
+    entrypoint: run-agent
     templates:
-    - name: cost-analysis
+    - name: run-agent
       container:
-        image: ghcr.io/cloudshipai/station-security:latest
+        image: ghcr.io/cloudshipai/station:latest
         command: [stn]
         args:
           - agent
           - run
-          - "AWS Cost Analyzer"
-          - "Analyze AWS costs and identify optimization opportunities"
+          - "Report Generator"
+          - "Generate daily summary report"
         env:
         - name: OPENAI_API_KEY
           valueFrom:
             secretKeyRef:
               name: station-secrets
               key: openai-api-key
-        - name: AWS_ACCESS_KEY_ID
-          valueFrom:
-            secretKeyRef:
-              name: aws-credentials
-              key: access-key-id
-        - name: AWS_SECRET_ACCESS_KEY
-          valueFrom:
-            secretKeyRef:
-              name: aws-credentials
-              key: secret-access-key
+```
+
+## Using Different AI Providers
+
+### Anthropic Claude
+
+```yaml
+env:
+- name: ANTHROPIC_API_KEY
+  valueFrom:
+    secretKeyRef:
+      name: station-secrets
+      key: anthropic-api-key
+- name: STN_AI_PROVIDER
+  value: anthropic
+- name: STN_AI_MODEL
+  value: claude-3-5-sonnet-20241022
+```
+
+### Google Gemini
+
+```yaml
+env:
+- name: GOOGLE_API_KEY
+  valueFrom:
+    secretKeyRef:
+      name: station-secrets
+      key: google-api-key
+- name: STN_AI_PROVIDER
+  value: gemini
+- name: STN_AI_MODEL
+  value: gemini-2.0-flash-exp
 ```
 
 ## Setup
@@ -180,8 +175,7 @@ spec:
 1. **Create Secret**:
 ```bash
 kubectl create secret generic station-secrets \
-  --from-literal=openai-api-key=$OPENAI_API_KEY \
-  -n security
+  --from-literal=openai-api-key=$OPENAI_API_KEY
 ```
 
 2. **Submit Workflow**:
@@ -191,28 +185,25 @@ argo submit workflow.yaml
 
 3. **Watch Progress**:
 ```bash
-argo watch station-security-scan
+argo watch station-agent
 ```
 
 ## WorkflowTemplate (Reusable)
-
-Create reusable template:
 
 ```yaml
 apiVersion: argoproj.io/v1alpha1
 kind: WorkflowTemplate
 metadata:
-  name: station-security-scan
-  namespace: security
+  name: station-agent
 spec:
   templates:
-  - name: scan
+  - name: run
     inputs:
       parameters:
       - name: agent
       - name: task
     container:
-      image: ghcr.io/cloudshipai/station-security:latest
+      image: ghcr.io/cloudshipai/station:latest
       command: [stn]
       args:
         - agent
@@ -230,23 +221,14 @@ spec:
 Use in workflows:
 
 ```yaml
-apiVersion: argoproj.io/v1alpha1
-kind: Workflow
-metadata:
-  generateName: security-scan-
-spec:
-  entrypoint: main
-  templates:
-  - name: main
-    steps:
-    - - name: infrastructure
-        templateRef:
-          name: station-security-scan
-          template: scan
-        arguments:
-          parameters:
-          - name: agent
-            value: "Infrastructure Security Auditor"
-          - name: task
-            value: "Scan for security issues"
+- name: analyze
+  templateRef:
+    name: station-agent
+    template: run
+  arguments:
+    parameters:
+    - name: agent
+      value: "Code Reviewer"
+    - name: task
+      value: "Review the code"
 ```

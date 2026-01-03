@@ -1,16 +1,16 @@
-# Station + GitLab CI Integration
+# Station + GitLab CI
 
-Run Station security agents in GitLab CI pipelines.
+Run Station agents in GitLab CI pipelines.
 
 ## Quick Start
 
-Add to your `.gitlab-ci.yml`:
+Add to `.gitlab-ci.yml`:
 
 ```yaml
-security-scan:
-  image: ghcr.io/cloudshipai/station-security:latest
+analyze:
+  image: ghcr.io/cloudshipai/station:latest
   script:
-    - stn agent run "Infrastructure Security Auditor" "Scan for security vulnerabilities"
+    - stn agent run "Code Reviewer" "Review the merge request changes"
   variables:
     OPENAI_API_KEY: $OPENAI_API_KEY
 ```
@@ -19,75 +19,91 @@ security-scan:
 
 ```yaml
 stages:
-  - security
-  - compliance
+  - analyze
+  - report
 
-infrastructure-security:
-  stage: security
-  image: ghcr.io/cloudshipai/station-security:latest
+code-review:
+  stage: analyze
+  image: ghcr.io/cloudshipai/station:latest
   script:
-    - stn agent run "Infrastructure Security Auditor" "Scan terraform, kubernetes, and docker configurations for security issues"
+    - stn agent run "Code Reviewer" "Review code changes for bugs and best practices"
   variables:
     OPENAI_API_KEY: $OPENAI_API_KEY
-    PROJECT_ROOT: /builds/$CI_PROJECT_PATH
-  only:
-    - merge_requests
-    - main
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
 
-supply-chain-security:
-  stage: security
-  image: ghcr.io/cloudshipai/station-security:latest
+security-scan:
+  stage: analyze
+  image: ghcr.io/cloudshipai/station:latest
   script:
-    - stn agent run "Supply Chain Guardian" "Generate SBOM and scan dependencies for vulnerabilities"
+    - stn agent run "Security Analyst" "Scan for security vulnerabilities"
   variables:
     OPENAI_API_KEY: $OPENAI_API_KEY
-  only:
-    - merge_requests
-    - main
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
 
-compliance-audit:
-  stage: compliance
-  image: ghcr.io/cloudshipai/station-security:latest
+daily-report:
+  stage: report
+  image: ghcr.io/cloudshipai/station:latest
   script:
-    - stn agent run "Deployment Security Gate" "Validate compliance requirements before deployment"
+    - stn agent run "Report Generator" "Generate daily summary report"
   variables:
     OPENAI_API_KEY: $OPENAI_API_KEY
-  only:
-    - main
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
 ```
 
-## Scheduled Scans
+## Using Different AI Providers
 
-Run agents on a schedule for FinOps and compliance:
+### Anthropic Claude
 
 ```yaml
-daily-cost-analysis:
-  image: ghcr.io/cloudshipai/station-security:latest
+analyze:
+  image: ghcr.io/cloudshipai/station:latest
   script:
-    - stn agent run "AWS Cost Analyzer" "Analyze AWS costs and identify optimization opportunities"
+    - stn agent run "Code Reviewer" "Review the code"
   variables:
-    OPENAI_API_KEY: $OPENAI_API_KEY
-    AWS_ACCESS_KEY_ID: $AWS_ACCESS_KEY_ID
-    AWS_SECRET_ACCESS_KEY: $AWS_SECRET_ACCESS_KEY
-  only:
-    - schedules
+    ANTHROPIC_API_KEY: $ANTHROPIC_API_KEY
+    STN_AI_PROVIDER: anthropic
+    STN_AI_MODEL: claude-3-5-sonnet-20241022
+```
+
+### Google Gemini
+
+```yaml
+analyze:
+  image: ghcr.io/cloudshipai/station:latest
+  script:
+    - stn agent run "Code Reviewer" "Review the code"
+  variables:
+    GOOGLE_API_KEY: $GOOGLE_API_KEY
+    STN_AI_PROVIDER: gemini
+    STN_AI_MODEL: gemini-2.0-flash-exp
 ```
 
 ## Setup
 
-1. **Add CI/CD Variables** (Settings → CI/CD → Variables):
-   - `OPENAI_API_KEY` - Your OpenAI API key
-   - `STN_CLOUDSHIP_KEY` - (Optional) CloudShip telemetry key
+1. **Add CI/CD Variables** (Settings > CI/CD > Variables):
+   - `OPENAI_API_KEY` (or `ANTHROPIC_API_KEY` / `GOOGLE_API_KEY`)
 
-2. **Copy template** to your repository as `.gitlab-ci.yml`
+2. **Create your agents** in `environments/default/template.json`
 
-3. **Commit and push** - Pipeline runs automatically
+3. **Add pipeline config** to `.gitlab-ci.yml`
 
-## Available Agents
+4. **Push** - pipeline runs automatically
 
-- `Infrastructure Security Auditor` - Terraform, K8s, Docker
-- `PR Security Reviewer` - Code security review
-- `Supply Chain Guardian` - SBOM + dependencies
-- `Deployment Security Gate` - Pre-deployment checks
-- `Security Improvement Advisor` - Recommendations
-- `Security Metrics Reporter` - KPIs and metrics
+## Loading Bundles from URL
+
+```yaml
+analyze:
+  image: ghcr.io/cloudshipai/station:latest
+  script:
+    - curl -fsSL $BUNDLE_URL -o bundle.tar.gz
+    - tar -xzf bundle.tar.gz
+    - stn init --config ./config.yaml --yes
+    - stn agent run "My Agent" "Run the task"
+  variables:
+    OPENAI_API_KEY: $OPENAI_API_KEY
+    BUNDLE_URL: https://example.com/my-bundle.tar.gz
+```

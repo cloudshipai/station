@@ -1,99 +1,126 @@
-# Station CICD Deployments
+# Station CI/CD Deployments
 
-Station agents can run in any CICD platform that supports Docker containers. This directory contains integration guides and templates for various CICD platforms.
+Run Station agents in any CI/CD platform that supports Docker containers.
 
 ## Available Integrations
 
-### ✅ Production Ready
+### GitHub Actions (Recommended)
 
-- **[GitHub Actions](./github-actions/)** - Composite Action with 3-line integration
-  - `uses: cloudshipai/station-action@v1`
-  - Automatic PR comments, multiple agent support
-  - Published to GitHub Marketplace
-
-### 🚧 Templates Available
-
-- **[GitLab CI](./gitlab-ci/)** - GitLab CI/CD templates
-- **[CircleCI](./circleci/)** - CircleCI Orb configuration
-- **[Jenkins](./jenkins/)** - Jenkins Pipeline examples
-- **[Argo Workflows](./argo-workflows/)** - Argo Workflow templates
-- **[Tekton](./tekton/)** - Tekton Task definitions
-- **[Concourse](./concourse/)** - Concourse pipeline templates
-- **[Dagger](./dagger/)** - Dagger module integration
-
-## Quick Start
-
-### Using Station Security Image
-
-All integrations use the same Docker image:
-```
-ghcr.io/cloudshipai/station-security:latest
-```
-
-This image contains:
-- 6 pre-configured security agents
-- 97+ security tools (checkov, trivy, semgrep, gitleaks, etc.)
-- Station CLI for agent execution
-
-### Basic Command
-
-```bash
-stn agent run "<Agent Name>" "<Task Description>"
-```
-
-### Available Agents
-
-1. **Infrastructure Security Auditor** - Terraform, K8s, Docker scanning
-2. **PR Security Reviewer** - Code review for security issues
-3. **Supply Chain Guardian** - SBOM + dependency scanning
-4. **Deployment Security Gate** - Pre-deployment validation
-5. **Security Improvement Advisor** - Security recommendations
-6. **Security Metrics Reporter** - Security KPIs and reporting
-
-### Required Environment Variables
-
-- `OPENAI_API_KEY` - Required for AI analysis
-- `STN_CLOUDSHIP_KEY` - Optional for telemetry/monitoring
-- `PROJECT_ROOT` - Path to scan (default: `/workspace`)
-
-## Integration Examples
-
-### GitHub Actions (3 lines)
 ```yaml
 - uses: cloudshipai/station-action@v1
   with:
-    agent: infrastructure-security
+    agent: 'My Agent'
+    task: 'Analyze the codebase'
+  env:
+    OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 ```
 
+See [GitHub Actions README](./github-actions/) for full documentation.
+
+### Other Platforms
+
+| Platform | Status | Documentation |
+|----------|--------|---------------|
+| [GitLab CI](./gitlab-ci/) | Template | `.gitlab-ci.yml` examples |
+| [CircleCI](./circleci/) | Template | `config.yml` examples |
+| [Jenkins](./jenkins/) | Template | Jenkinsfile examples |
+| [Argo Workflows](./argo-workflows/) | Template | Workflow manifests |
+| [Tekton](./tekton/) | Template | Task/Pipeline definitions |
+| [Kubernetes](./kubernetes/) | Template | Deployment manifests |
+
+## Quick Start
+
+All platforms use the same Docker image and CLI:
+
+```bash
+docker run -e OPENAI_API_KEY=$OPENAI_API_KEY \
+  -v $(pwd):/workspace \
+  ghcr.io/cloudshipai/station:latest \
+  stn agent run "My Agent" "Analyze the code"
+```
+
+## Using Your Own Agents
+
+Station runs YOUR agents from YOUR bundles. Define agents in your environment:
+
+```
+your-repo/
+├── environments/
+│   └── default/
+│       └── template.json    # Your agent definitions
+└── .gitlab-ci.yml           # CI/CD config
+```
+
+Example `template.json`:
+```json
+{
+  "agents": [
+    {
+      "name": "Code Reviewer",
+      "description": "Reviews code for bugs and best practices",
+      "model": "gpt-4o",
+      "prompt": "You are an expert code reviewer..."
+    }
+  ]
+}
+```
+
+## Environment Variables
+
+### Required (pick one provider)
+
+| Variable | Provider |
+|----------|----------|
+| `OPENAI_API_KEY` | OpenAI (GPT-4, GPT-4o) |
+| `ANTHROPIC_API_KEY` | Anthropic (Claude) |
+| `GOOGLE_API_KEY` | Google (Gemini) |
+
+### Optional
+
+| Variable | Description |
+|----------|-------------|
+| `STN_AI_PROVIDER` | Override provider: `openai`, `anthropic`, `gemini` |
+| `STN_AI_MODEL` | Override model name |
+| `STN_AI_BASE_URL` | Custom API endpoint (Azure, Ollama) |
+| `STN_CLOUDSHIP_KEY` | CloudShip telemetry key |
+| `STN_DEBUG` | Enable debug logging |
+
+## Platform Examples
+
 ### GitLab CI
+
 ```yaml
-security-scan:
-  image: ghcr.io/cloudshipai/station-security:latest
+agent-task:
+  image: ghcr.io/cloudshipai/station:latest
   script:
-    - stn agent run "Infrastructure Security Auditor" "Scan for security issues"
+    - stn agent run "Code Reviewer" "Review the merge request"
+  variables:
+    OPENAI_API_KEY: $OPENAI_API_KEY
 ```
 
 ### CircleCI
+
 ```yaml
 jobs:
-  security-scan:
+  analyze:
     docker:
-      - image: ghcr.io/cloudshipai/station-security:latest
+      - image: ghcr.io/cloudshipai/station:latest
     steps:
       - checkout
-      - run: stn agent run "Infrastructure Security Auditor" "Scan for issues"
+      - run: stn agent run "Code Reviewer" "Review the code"
 ```
 
 ### Jenkins
+
 ```groovy
 pipeline {
   agent {
-    docker { image 'ghcr.io/cloudshipai/station-security:latest' }
+    docker { image 'ghcr.io/cloudshipai/station:latest' }
   }
   stages {
-    stage('Security') {
+    stage('Analyze') {
       steps {
-        sh 'stn agent run "Infrastructure Security Auditor" "Scan for issues"'
+        sh 'stn agent run "Code Reviewer" "Review the code"'
       }
     }
   }
@@ -102,43 +129,31 @@ pipeline {
 
 ## Use Cases
 
-### Security Scanning (on push/PR)
-Run security agents on every code change to catch vulnerabilities early.
-
-### FinOps Analysis (daily cron)
-Schedule cost analysis and resource optimization agents to run daily.
-
-### Compliance Auditing (weekly)
-Regular compliance checks for SOC2, ISO27001, CIS benchmarks.
-
-### Platform Monitoring (hourly)
-Monitor platform health, SLAs, and operational metrics continuously.
+| Use Case | Trigger | Example Agent |
+|----------|---------|---------------|
+| Code Review | PR/MR | Code Reviewer, Security Analyst |
+| Cost Analysis | Daily cron | FinOps Analyzer, Cost Optimizer |
+| Compliance | Weekly cron | Compliance Auditor, Policy Checker |
+| Monitoring | Hourly | Health Monitor, SLA Tracker |
 
 ## Architecture
 
 ```
-CICD Platform
+CI/CD Platform
     ↓
-Docker Container (ghcr.io/cloudshipai/station-security:latest)
+Docker: ghcr.io/cloudshipai/station:latest
     ↓
-Station CLI (stn)
+Station CLI: stn agent run "<name>" "<task>"
     ↓
-Agent Execution (with 97+ tools)
+Your Bundle/Environment (agents, tools, prompts)
     ↓
-AI Analysis (OpenAI/Anthropic/Gemini)
+AI Provider (OpenAI/Anthropic/Gemini)
     ↓
-Results (PR comments, reports, metrics)
+Results
 ```
-
-## Contributing
-
-Each CICD integration should include:
-1. `README.md` - Setup instructions and examples
-2. Template files - Ready-to-use configuration
-3. Examples - Common use cases (security, finops, compliance)
 
 ## Support
 
-- **Documentation**: https://docs.cloudshipai.com
+- **Documentation**: https://github.com/cloudshipai/station
 - **Issues**: https://github.com/cloudshipai/station/issues
 - **Discord**: https://discord.gg/cloudshipai

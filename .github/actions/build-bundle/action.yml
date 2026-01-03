@@ -1,28 +1,28 @@
 name: 'Build Station Bundle'
-description: 'Create a Station agent bundle from an environment using stn bundle create'
+description: 'Create a Station agent bundle from an environment'
 branding:
   icon: 'package'
   color: 'purple'
 
 inputs:
   environment:
-    description: 'Environment name to bundle (e.g., production, staging)'
+    description: 'Environment name to bundle (e.g., production, default)'
     required: true
-  
+
   version:
     description: 'Bundle version (e.g., 1.0.0)'
-    required: true
+    required: false
     default: '1.0.0'
-  
+
   output-path:
     description: 'Output path for bundle file (defaults to <environment>-<version>.tar.gz)'
     required: false
-  
+
   workspace-path:
     description: 'Path to Station workspace directory (where environments/ is located)'
     required: false
     default: '.'
-  
+
   station-version:
     description: 'Station CLI version to use (default: latest)'
     required: false
@@ -32,11 +32,11 @@ outputs:
   bundle-path:
     description: 'Path to the created bundle file'
     value: ${{ steps.bundle.outputs.bundle-path }}
-  
+
   bundle-size:
     description: 'Size of the created bundle'
     value: ${{ steps.bundle.outputs.bundle-size }}
-  
+
   metadata-path:
     description: 'Path to bundle metadata JSON'
     value: ${{ steps.metadata.outputs.metadata-path }}
@@ -45,51 +45,47 @@ runs:
   using: 'composite'
   steps:
     - name: Install Station CLI
+      id: install
       shell: bash
       run: |
         VERSION="${{ inputs.station-version }}"
-        
+
         if [ "$VERSION" = "latest" ]; then
-          LATEST_RELEASE=$(curl -s https://api.github.com/repos/cloudshipai/station/releases/latest | grep "tag_name" | cut -d '"' -f 4)
-          VERSION="$LATEST_RELEASE"
+          VERSION=$(curl -sS https://api.github.com/repos/cloudshipai/station/releases/latest | grep '"tag_name"' | cut -d'"' -f4)
         fi
-        
+
         echo "📦 Installing Station CLI ${VERSION}..."
-        
+
         # Detect OS and architecture
         OS=$(uname -s | tr '[:upper:]' '[:lower:]')
         ARCH=$(uname -m)
-        
+
         case "$ARCH" in
           x86_64) ARCH="amd64" ;;
           aarch64|arm64) ARCH="arm64" ;;
+          armv7l) ARCH="arm" ;;
         esac
-        
+
         # Download and install
-        VERSION_NO_V="${VERSION#v}"  # Remove 'v' prefix for filename
+        VERSION_NO_V="${VERSION#v}"
         DOWNLOAD_URL="https://github.com/cloudshipai/station/releases/download/${VERSION}/station_${VERSION_NO_V}_${OS}_${ARCH}.tar.gz"
-        
+
         curl -fsSL "$DOWNLOAD_URL" -o /tmp/station.tar.gz
         tar -xzf /tmp/station.tar.gz -C /tmp
         chmod +x /tmp/stn
         sudo mv /tmp/stn /usr/local/bin/stn
         rm /tmp/station.tar.gz
-        
+
         echo "✅ Station CLI ${VERSION} installed"
         stn --version
-    
+
     - name: Initialize Station workspace
       shell: bash
       run: |
         cd "${{ inputs.workspace-path }}"
-        
-        # Initialize Station to create config.yaml
-        # stn init --config ./config.yaml sets workspace to current directory automatically
-        stn init --config ./config.yaml --yes
-        
-        echo "📝 Station workspace initialized:"
-        cat config.yaml
-    
+        stn init --config ./config.yaml --yes 2>/dev/null || true
+        echo "✅ Station workspace initialized"
+
     - name: Create bundle
       id: bundle
       shell: bash
@@ -98,32 +94,33 @@ runs:
         ENV_NAME="${{ inputs.environment }}"
         VERSION="${{ inputs.version }}"
         OUTPUT_PATH="${{ inputs.output-path }}"
-        
+
         # Use default output path if not provided
         if [ -z "$OUTPUT_PATH" ]; then
           OUTPUT_PATH="${ENV_NAME}-${VERSION}.tar.gz"
         fi
-        
-        echo "📦 Creating bundle using stn bundle create..."
-        
+
+        echo "📦 Creating bundle: $ENV_NAME → $OUTPUT_PATH"
+
         # Create bundle using Station CLI
         stn bundle create "$ENV_NAME" \
           --output "$OUTPUT_PATH" \
           --config ./config.yaml
-        
+
         # Verify bundle was created
         if [ ! -f "$OUTPUT_PATH" ]; then
           echo "❌ Error: Bundle creation failed"
           exit 1
         fi
-        
+
         BUNDLE_SIZE=$(ls -lh "$OUTPUT_PATH" | awk '{print $5}')
         echo "✅ Bundle created: $OUTPUT_PATH ($BUNDLE_SIZE)"
-        
-        # Set outputs
-        echo "bundle-path=$OUTPUT_PATH" >> $GITHUB_OUTPUT
+
+        # Set outputs (use absolute path for reliability)
+        ABSOLUTE_PATH="$(pwd)/$OUTPUT_PATH"
+        echo "bundle-path=$ABSOLUTE_PATH" >> $GITHUB_OUTPUT
         echo "bundle-size=$BUNDLE_SIZE" >> $GITHUB_OUTPUT
-    
+
     - name: Generate metadata
       id: metadata
       shell: bash
@@ -132,26 +129,28 @@ runs:
         ENV_NAME="${{ inputs.environment }}"
         VERSION="${{ inputs.version }}"
         OUTPUT_PATH="${{ inputs.output-path }}"
-        
+
         if [ -z "$OUTPUT_PATH" ]; then
           OUTPUT_PATH="${ENV_NAME}-${VERSION}.tar.gz"
         fi
-        
+
         METADATA_PATH="${OUTPUT_PATH%.tar.gz}.json"
-        
+
+        # Create metadata JSON
         cat > "$METADATA_PATH" <<EOF
-        {
-          "name": "$ENV_NAME",
-          "version": "$VERSION",
-          "created_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-          "git_commit": "${{ github.sha }}",
-          "git_ref": "${{ github.ref }}",
-          "repository": "${{ github.repository }}",
-          "bundle_size": "$(stat -c%s "$OUTPUT_PATH" 2>/dev/null || stat -f%z "$OUTPUT_PATH")"
-        }
-        EOF
-        
-        echo "📝 Metadata created: $METADATA_PATH"
+{
+  "name": "$ENV_NAME",
+  "version": "$VERSION",
+  "created_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "git_commit": "${{ github.sha }}",
+  "git_ref": "${{ github.ref }}",
+  "repository": "${{ github.repository }}",
+  "bundle_size": $(stat -c%s "$OUTPUT_PATH" 2>/dev/null || stat -f%z "$OUTPUT_PATH")
+}
+EOF
+
+        echo "📝 Metadata: $METADATA_PATH"
         cat "$METADATA_PATH"
-        
-        echo "metadata-path=$METADATA_PATH" >> $GITHUB_OUTPUT
+
+        ABSOLUTE_PATH="$(pwd)/$METADATA_PATH"
+        echo "metadata-path=$ABSOLUTE_PATH" >> $GITHUB_OUTPUT

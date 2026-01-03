@@ -1,17 +1,16 @@
 apiVersion: tekton.dev/v1beta1
 kind: Pipeline
 metadata:
-  name: station-security-pipeline
-  namespace: security
+  name: station-pipeline
 spec:
-  description: Complete security pipeline with Station agents
+  description: Run Station agents for code analysis
   workspaces:
   - name: source
     description: Workspace for source code
   params:
   - name: repo-url
     type: string
-    description: Git repository URL to clone
+    description: Git repository URL
 
   tasks:
   - name: git-clone
@@ -24,41 +23,28 @@ spec:
     - name: url
       value: $(params.repo-url)
 
-  - name: infrastructure-security
+  - name: code-review
     runAfter: [git-clone]
     taskRef:
-      name: station-security-scan
+      name: station-agent
     workspaces:
     - name: source
       workspace: source
     params:
     - name: agent
-      value: "Infrastructure Security Auditor"
+      value: "Code Reviewer"
     - name: task
-      value: "Scan terraform, kubernetes, and docker configurations for security vulnerabilities and compliance violations"
+      value: "Review code for bugs and best practices"
 
-  - name: supply-chain-security
+  - name: security-scan
     runAfter: [git-clone]
     taskRef:
-      name: station-security-scan
+      name: station-agent
     workspaces:
     - name: source
       workspace: source
     params:
     - name: agent
-      value: "Supply Chain Guardian"
+      value: "Security Analyst"
     - name: task
-      value: "Generate SBOM and scan dependencies for known vulnerabilities and malicious packages"
-
-  - name: deployment-gate
-    runAfter: [infrastructure-security, supply-chain-security]
-    taskRef:
-      name: station-security-scan
-    workspaces:
-    - name: source
-      workspace: source
-    params:
-    - name: agent
-      value: "Deployment Security Gate"
-    - name: task
-      value: "Validate security posture and compliance requirements before deployment"
+      value: "Scan for security vulnerabilities"

@@ -1,6 +1,6 @@
-# Station + Tekton Integration
+# Station + Tekton
 
-Run Station security agents in Tekton Pipelines (Kubernetes-native CI/CD).
+Run Station agents in Tekton Pipelines (Kubernetes-native CI/CD).
 
 ## Quick Start
 
@@ -10,7 +10,7 @@ Create a Task:
 apiVersion: tekton.dev/v1beta1
 kind: Task
 metadata:
-  name: station-security-scan
+  name: station-agent
 spec:
   params:
   - name: agent
@@ -18,8 +18,8 @@ spec:
   - name: task
     type: string
   steps:
-  - name: scan
-    image: ghcr.io/cloudshipai/station-security:latest
+  - name: run
+    image: ghcr.io/cloudshipai/station:latest
     script: |
       stn agent run "$(params.agent)" "$(params.task)"
     env:
@@ -36,7 +36,7 @@ spec:
 apiVersion: tekton.dev/v1beta1
 kind: Pipeline
 metadata:
-  name: station-security-pipeline
+  name: station-pipeline
 spec:
   workspaces:
   - name: source
@@ -55,44 +55,31 @@ spec:
     - name: url
       value: $(params.repo-url)
 
-  - name: infrastructure-security
+  - name: code-review
     runAfter: [git-clone]
     taskRef:
-      name: station-security-scan
+      name: station-agent
     workspaces:
     - name: source
       workspace: source
     params:
     - name: agent
-      value: "Infrastructure Security Auditor"
+      value: "Code Reviewer"
     - name: task
-      value: "Scan terraform, kubernetes, and docker for security vulnerabilities"
+      value: "Review code for bugs and best practices"
 
-  - name: supply-chain-security
+  - name: security-scan
     runAfter: [git-clone]
     taskRef:
-      name: station-security-scan
+      name: station-agent
     workspaces:
     - name: source
       workspace: source
     params:
     - name: agent
-      value: "Supply Chain Guardian"
+      value: "Security Analyst"
     - name: task
-      value: "Generate SBOM and scan dependencies"
-
-  - name: deployment-gate
-    runAfter: [infrastructure-security, supply-chain-security]
-    taskRef:
-      name: station-security-scan
-    workspaces:
-    - name: source
-      workspace: source
-    params:
-    - name: agent
-      value: "Deployment Security Gate"
-    - name: task
-      value: "Validate security posture before deployment"
+      value: "Scan for security vulnerabilities"
 ```
 
 ## Task Definition
@@ -101,27 +88,26 @@ spec:
 apiVersion: tekton.dev/v1beta1
 kind: Task
 metadata:
-  name: station-security-scan
-  namespace: security
+  name: station-agent
 spec:
   params:
   - name: agent
     type: string
-    description: Station agent to run
+    description: Agent name to run
   - name: task
     type: string
-    description: Task description for the agent
+    description: Task description
   workspaces:
   - name: source
-    description: Workspace containing source code
+    description: Source code workspace
   steps:
-  - name: security-scan
-    image: ghcr.io/cloudshipai/station-security:latest
+  - name: run-agent
+    image: ghcr.io/cloudshipai/station:latest
     workingDir: $(workspaces.source.path)
     script: |
       #!/bin/sh
       set -e
-      echo "Running Station agent: $(params.agent)"
+      echo "Running agent: $(params.agent)"
       stn agent run "$(params.agent)" "$(params.task)"
     env:
     - name: OPENAI_API_KEY
@@ -129,21 +115,50 @@ spec:
         secretKeyRef:
           name: station-secrets
           key: openai-api-key
-    - name: PROJECT_ROOT
-      value: $(workspaces.source.path)
 ```
 
-## Trigger with PipelineRun
+## Using Different AI Providers
+
+### Anthropic Claude
+
+```yaml
+env:
+- name: ANTHROPIC_API_KEY
+  valueFrom:
+    secretKeyRef:
+      name: station-secrets
+      key: anthropic-api-key
+- name: STN_AI_PROVIDER
+  value: anthropic
+- name: STN_AI_MODEL
+  value: claude-3-5-sonnet-20241022
+```
+
+### Google Gemini
+
+```yaml
+env:
+- name: GOOGLE_API_KEY
+  valueFrom:
+    secretKeyRef:
+      name: station-secrets
+      key: google-api-key
+- name: STN_AI_PROVIDER
+  value: gemini
+- name: STN_AI_MODEL
+  value: gemini-2.0-flash-exp
+```
+
+## Run Pipeline
 
 ```yaml
 apiVersion: tekton.dev/v1beta1
 kind: PipelineRun
 metadata:
-  generateName: station-security-
-  namespace: security
+  generateName: station-run-
 spec:
   pipelineRef:
-    name: station-security-pipeline
+    name: station-pipeline
   params:
   - name: repo-url
     value: https://github.com/your-org/your-repo.git
@@ -151,40 +166,10 @@ spec:
   - name: source
     volumeClaimTemplate:
       spec:
-        accessModes:
-        - ReadWriteOnce
+        accessModes: [ReadWriteOnce]
         resources:
           requests:
             storage: 1Gi
-```
-
-## Scheduled Scans (CronJob + Tekton)
-
-```yaml
-apiVersion: batch/v1
-kind: CronJob
-metadata:
-  name: daily-cost-analysis
-  namespace: finops
-spec:
-  schedule: "0 9 * * *"
-  jobTemplate:
-    spec:
-      template:
-        spec:
-          serviceAccountName: tekton-triggers-sa
-          containers:
-          - name: trigger
-            image: curlimages/curl
-            command:
-            - sh
-            - -c
-            - |
-              curl -X POST \
-                -H "Content-Type: application/json" \
-                -d '{"params":[{"name":"agent","value":"AWS Cost Analyzer"}]}' \
-                http://el-station-listener.finops.svc.cluster.local:8080
-          restartPolicy: OnFailure
 ```
 
 ## Setup
@@ -192,8 +177,7 @@ spec:
 1. **Create Secret**:
 ```bash
 kubectl create secret generic station-secrets \
-  --from-literal=openai-api-key=$OPENAI_API_KEY \
-  -n security
+  --from-literal=openai-api-key=$OPENAI_API_KEY
 ```
 
 2. **Install Task**:
@@ -206,62 +190,12 @@ kubectl apply -f task.yaml
 kubectl apply -f pipeline.yaml
 ```
 
-4. **Run Pipeline**:
+4. **Run**:
 ```bash
 kubectl create -f pipelinerun.yaml
 ```
 
-5. **Watch Progress**:
+5. **Watch**:
 ```bash
-tkn pipelinerun logs -f -n security
-```
-
-## Multi-Agent Task
-
-Run multiple agents in sequence:
-
-```yaml
-apiVersion: tekton.dev/v1beta1
-kind: Task
-metadata:
-  name: station-multi-agent-scan
-spec:
-  workspaces:
-  - name: source
-  steps:
-  - name: infrastructure
-    image: ghcr.io/cloudshipai/station-security:latest
-    workingDir: $(workspaces.source.path)
-    script: |
-      stn agent run "Infrastructure Security Auditor" "Scan infrastructure"
-    env:
-    - name: OPENAI_API_KEY
-      valueFrom:
-        secretKeyRef:
-          name: station-secrets
-          key: openai-api-key
-
-  - name: supply-chain
-    image: ghcr.io/cloudshipai/station-security:latest
-    workingDir: $(workspaces.source.path)
-    script: |
-      stn agent run "Supply Chain Guardian" "Scan dependencies"
-    env:
-    - name: OPENAI_API_KEY
-      valueFrom:
-        secretKeyRef:
-          name: station-secrets
-          key: openai-api-key
-
-  - name: deployment-gate
-    image: ghcr.io/cloudshipai/station-security:latest
-    workingDir: $(workspaces.source.path)
-    script: |
-      stn agent run "Deployment Security Gate" "Validate deployment"
-    env:
-    - name: OPENAI_API_KEY
-      valueFrom:
-        secretKeyRef:
-          name: station-secrets
-          key: openai-api-key
+tkn pipelinerun logs -f
 ```
