@@ -7,6 +7,19 @@ description: Get Station running in 2 minutes
 
 Get Station running with your AI provider in 2 minutes.
 
+## Prerequisites
+
+- **Docker** - Required for:
+  - [Jaeger](https://www.jaegertracing.io/) - OTEL tracing backend for observability
+  - [Ship CLI](https://github.com/cloudshipai/ship) - MCP tools for filesystem operations
+  - [Sandbox](/station/en/sandbox) - Isolated container for agent code execution
+  - [`stn up`](/station/en/deployment/docker) - Run environments/bundles in containers
+
+- **AI Provider** - Choose one:
+  - **Claude Max/Pro** subscription (recommended - no API billing)
+  - **OpenAI API Key** - gpt-5, gpt-5-mini, gpt-4o, etc.
+  - **Google Gemini API Key**
+
 ## 1. Install Station
 
 ```bash
@@ -65,7 +78,7 @@ Select a model for your Claude Max/Pro subscription:
 # Set your API key
 export OPENAI_API_KEY="sk-..."
 
-# Initialize (defaults to gpt-4o-mini)
+# Initialize (defaults to gpt-5-mini)
 stn init --provider openai --ship
 ```
 
@@ -85,6 +98,28 @@ stn init --provider gemini --ship
 </details>
 
 > **What is Ship?** [Ship](https://github.com/cloudshipai/ship) is an MCP CLI tool by the CloudShip AI team that provides filesystem and development tools for Station agents.
+
+### Optional: Git-Backed Workspace
+
+For version-controlled agent configurations, initialize Station in a specific directory:
+
+```bash
+# Initialize in a git-backed workspace
+stn init --provider openai --ship --config ~/my-station-workspace
+
+# Your agents, MCP configs, and variables are now in ~/my-station-workspace
+cd ~/my-station-workspace
+git init && git add . && git commit -m "Initial Station config"
+```
+
+When connecting your MCP client, point to your workspace:
+
+```bash
+# Claude Code CLI with custom workspace
+claude mcp add station -e OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 --scope user -- stn stdio --config ~/my-station-workspace
+```
+
+See [GitOps Workflow](/station/en/gitops) for team collaboration patterns.
 
 ## 3. Start Jaeger (Tracing)
 
@@ -299,7 +334,7 @@ Start now with the todo list and Section 1. Make it engaging!
 
 ## Next Steps
 
-- **[Running with Docker (stn up)](/station/en/stn-up)** - Containerized option with bundles
+- **[Running with Docker (stn up)](/station/en/deployment/docker)** - Containerized option with bundles
 - **[Create Your First Agent](/station/en/agents/creating)** - Build custom agents
 - **[MCP Tools Reference](/station/en/mcp/tools)** - All 41 available tools
 - **[Architecture Overview](/station/en/architecture)** - Understand how Station works

@@ -6,7 +6,7 @@
 
 **Build, test, and deploy intelligent agent teams. Self-hosted. Git-backed. Production-ready.**
 
-[Quick Start](#quick-start) | [Real Example](#real-example-sre-incident-response-team) | [Deploy](#deploy-to-production) | [Documentation](./docs/station/)
+[Quick Start](#quick-start) | [Real Example](#real-example-sre-incident-response-team) | [Deploy](#deploy-to-production) | [Documentation](https://docs.cloudshipai.com)
 
 ---
 
@@ -31,7 +31,7 @@ Build multi-agent systems that coordinate like real teams. Test with realistic s
 - **Docker** - Required for Jaeger (traces and observability)
 - **AI Provider** - Choose one:
   - Claude Max/Pro subscription (no API billing)
-  - `OPENAI_API_KEY` - OpenAI (gpt-4o-mini, gpt-4o, etc.)
+  - `OPENAI_API_KEY` - OpenAI (gpt-5-mini, gpt-5, etc.)
   - `GEMINI_API_KEY` - Google Gemini
 
 ### 1. Install Station
@@ -81,7 +81,7 @@ Select a model for your Claude Max/Pro subscription:
 
 ```bash
 export OPENAI_API_KEY="sk-..."
-stn init --provider openai --ship  # defaults to gpt-4o-mini
+stn init --provider openai --ship  # defaults to gpt-5-mini
 ```
 
 </details>
@@ -332,7 +332,7 @@ This lets you validate that your agents work correctly in the same containerized
 stn up
 
 # Start with specific AI provider
-stn up --provider openai --model gpt-4o
+stn up --provider openai --model gpt-5
 
 # Check status
 stn status
@@ -356,7 +356,7 @@ stn down --remove-volume
 | Agent MCP | 8587 | Dynamic agent execution |
 | Jaeger UI | 16686 | Distributed tracing |
 
-**[See Container Lifecycle](./docs/station/container-lifecycle.md) for detailed architecture.**
+**[See Container Lifecycle](https://docs.cloudshipai.com/station/container-lifecycle) for detailed architecture.**
 
 ---
 
@@ -608,7 +608,7 @@ Agents are simple `.prompt` files using GenKit's dotprompt format:
 metadata:
   name: "incident_coordinator"
   description: "Orchestrates specialist agents to investigate production incidents"
-model: gpt-4o-mini
+model: gpt-5-mini
 max_steps: 20
 agents:
   - "logs_investigator"         # Delegate to logs specialist
@@ -639,7 +639,7 @@ You are an expert SRE incident coordinator. When presented with a production iss
 metadata:
   name: "logs_investigator"
   description: "Deep dive into logs to identify error patterns"
-model: gpt-4o-mini
+model: gpt-5-mini
 max_steps: 8
 tools:
   - "__logs_query"      # Query Datadog/Elasticsearch logs
@@ -906,7 +906,7 @@ spec:
 # Build with specific model configuration
 stn build env station-sre \
   --provider openai \
-  --model gpt-4o-mini
+  --model gpt-5-mini
 
 # Or use environment variables at runtime
 docker run -e STN_AI_PROVIDER=gemini \
@@ -1049,7 +1049,7 @@ export STN_WEBHOOK_ENABLED=true
 export STN_WEBHOOK_API_KEY="your-secret-key"
 ```
 
-[Webhook API Reference →](./docs/station/webhook-execute.md)
+[Webhook API Reference →](https://docs.cloudshipai.com/station/notifications)
 
 ---
 
@@ -1063,7 +1063,7 @@ Simple `.prompt` files define intelligent behavior:
 metadata:
   name: "metrics_investigator"
   description: "Analyze performance metrics and identify anomalies"
-model: gpt-4o-mini
+model: gpt-5-mini
 max_steps: 8
 tools:
   - "__get_metrics"           # Datadog metrics API
@@ -1186,7 +1186,7 @@ export STATION_SANDBOX_ENABLED=true
 export STATION_SANDBOX_CODE_MODE_ENABLED=true
 ```
 
-[Sandbox Documentation →](./docs/station/sandbox.md)
+[Sandbox Documentation →](https://docs.cloudshipai.com/station/sandbox)
 
 ---
 
@@ -1304,7 +1304,7 @@ Create an agent that manages Station itself using the Station API:
 metadata:
   name: "Station Admin"
   description: "Manages Station environments, agents, and MCP servers"
-model: gpt-4o-mini
+model: gpt-5-mini
 max_steps: 10
 tools:
   - "__listEnvironments"    # From station-api OpenAPI spec
@@ -1334,7 +1334,7 @@ stn agent run station-admin "Show me all environments and their agents"
 
 The agent will use the OpenAPI-generated tools to query the Station API and provide a comprehensive overview.
 
-[OpenAPI MCP Documentation →](./docs/station/openapi-mcp-servers.md) | [Station Admin Agent Guide →](./docs/station/station-admin-agent.md)
+[OpenAPI MCP Documentation →](https://docs.cloudshipai.com/station/openapi-mcp)
 
 ---
 
@@ -1365,7 +1365,7 @@ Station automatically configures:
 - Kubernetes
 - AWS Lambda (coming soon)
 
-[Zero-Config Deployment Guide →](./docs/station/zero-config-deployments.md) | [Docker Compose Examples →](./docs/station/docker-compose-deployments.md)
+[Deployment Guide →](https://docs.cloudshipai.com/station/docker)
 
 ---
 
@@ -1406,7 +1406,7 @@ open http://localhost:16686
 ```
 aws-cost-spike-analyzer (18.2s)
 ├─ generate (17ms)
-│  ├─ openai/gpt-4o-mini (11ms) - "Analyze cost data"
+│  ├─ openai/gpt-5-mini (11ms) - "Analyze cost data"
 │  └─ __get_cost_anomalies (0ms) - AWS Cost Explorer
 ├─ generate (11ms)
 │  └─ __get_cost_and_usage_comparisons (0ms)
@@ -1422,7 +1422,7 @@ export OTEL_EXPORTER_OTLP_ENDPOINT=http://your-collector:4318
 otel_endpoint: "http://your-collector:4318"
 ```
 
-[Complete OTEL Setup Guide →](./docs/OTEL_SETUP.md) - Includes Jaeger, Tempo, Datadog, Honeycomb, AWS X-Ray, New Relic, Azure Monitor examples
+[Complete OTEL Setup Guide →](https://docs.cloudshipai.com/station/observability) - Includes Jaeger, Tempo, Datadog, Honeycomb, AWS X-Ray, New Relic, Azure Monitor examples
 
 ---
 
@@ -1446,7 +1446,7 @@ otel_endpoint: "http://your-collector:4318"
 - Incident response automation
 - Change impact analysis
 
-[See Example Agents →](./docs/station/examples.md)
+[See Example Agents →](https://docs.cloudshipai.com/station/multi-agent-teams)
 
 ---
 
@@ -1669,7 +1669,7 @@ docker run \
 - Point-in-time recovery
 - Zero data loss on server failures
 
-[Database Replication Guide →](./docs/station/DATABASE_REPLICATION.md)
+[Database Replication Guide →](https://docs.cloudshipai.com/station/database)
 
 ---
 
@@ -1706,7 +1706,7 @@ stn stdio
 
 All agent `.prompt` files, MCP `template.json` configs, and `variables.yml` are version-controlled and reviewable in Pull Requests.
 
-[GitOps Workflow Guide →](./docs/station/GITOPS_WORKFLOW.md)
+[GitOps Workflow Guide →](https://docs.cloudshipai.com/station/gitops)
 
 ---
 
@@ -1735,7 +1735,7 @@ We believe teams should own their agentic automation, from development to produc
 
 ## Resources
 
-- 📚 **[Documentation](./docs/station/)** - Complete guides and tutorials
+- 📚 **[Documentation](https://docs.cloudshipai.com)** - Complete guides and tutorials
 - 🐛 **[Issues](https://github.com/cloudshipai/station/issues)** - Bug reports and feature requests
 - 💬 **[Discord](https://discord.gg/station-ai)** - Community support
 
