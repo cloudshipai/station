@@ -55,9 +55,16 @@ func (b *OpenCodeBackend) CreateSession(ctx context.Context, opts SessionOptions
 		workspacePath = opts.WorkspacePath
 	}
 
-	backendID, err := b.client.CreateSession(ctx, "", opts.Title)
-	if err != nil {
-		return nil, &Error{Op: "CreateSession", Err: err}
+	var backendID string
+	var err error
+
+	if opts.ExistingSessionID != "" {
+		backendID = opts.ExistingSessionID
+	} else {
+		backendID, err = b.client.CreateSession(ctx, "", opts.Title)
+		if err != nil {
+			return nil, &Error{Op: "CreateSession", Err: err}
+		}
 	}
 
 	session := &Session{
@@ -320,6 +327,41 @@ func (b *OpenCodeBackend) GitPush(ctx context.Context, sessionID string, remote,
 	}
 
 	return pushResult, nil
+}
+
+func (b *OpenCodeBackend) GitBranch(ctx context.Context, sessionID string, branch string, create bool) (*GitBranchResult, error) {
+	session, err := b.GetSession(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	var task string
+	if create {
+		task = fmt.Sprintf("Create and switch to a new git branch named '%s' using: git checkout -b %s", branch, branch)
+	} else {
+		task = fmt.Sprintf("Switch to existing git branch named '%s' using: git checkout %s", branch, branch)
+	}
+
+	result, err := b.executeInternal(ctx, session, Task{Instruction: task})
+	if err != nil {
+		return nil, err
+	}
+
+	branchResult := &GitBranchResult{
+		Success:    result.Success,
+		Branch:     branch,
+		Created:    create,
+		SwitchedTo: result.Success,
+	}
+
+	if !result.Success {
+		branchResult.Error = result.Error
+		if branchResult.Error == "" {
+			branchResult.Error = result.Summary
+		}
+	}
+
+	return branchResult, nil
 }
 
 func parseGitOutputFromSummary(summary string) (hash string, files, insertions, deletions int) {

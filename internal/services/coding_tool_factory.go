@@ -33,6 +33,8 @@ func NewCodingToolFactory(cfg config.CodingConfig) *CodingToolFactory {
 			logging.Error("Failed to create NATS backend: %v, coding tools disabled", err)
 			return &CodingToolFactory{enabled: false}
 		}
+	case "opencode-cli":
+		backend = coding.NewCLIBackend(cfg)
 	default:
 		logging.Debug("Coding backend not configured or unsupported (%s), coding tools disabled", cfg.Backend)
 		return &CodingToolFactory{enabled: false}
@@ -69,9 +71,16 @@ func NewCodingToolFactory(cfg config.CodingConfig) *CodingToolFactory {
 		coding.WithPushTimeout(pushTimeout),
 	)
 
-	if cfg.Backend == "opencode-nats" {
+	switch cfg.Backend {
+	case "opencode-nats":
 		logging.Info("Coding tool factory initialized with NATS backend (NATS: %s, workspace: %s)", cfg.NATS.URL, basePath)
-	} else {
+	case "opencode-cli":
+		binaryPath := cfg.CLI.BinaryPath
+		if binaryPath == "" {
+			binaryPath = "opencode"
+		}
+		logging.Info("Coding tool factory initialized with CLI backend (binary: %s, workspace: %s)", binaryPath, basePath)
+	default:
 		logging.Info("Coding tool factory initialized with OpenCode backend (URL: %s, workspace: %s)", cfg.OpenCode.URL, basePath)
 	}
 

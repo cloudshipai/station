@@ -145,12 +145,13 @@ func (f *ToolFactory) CreateCodeTool() ai.Tool {
 }
 
 type CodingOpenInput struct {
-	WorkspacePath string `json:"workspace_path,omitempty"`
-	RepoURL       string `json:"repo_url,omitempty"`
-	Branch        string `json:"branch,omitempty"`
-	Title         string `json:"title,omitempty"`
-	Scope         string `json:"scope,omitempty"`
-	ScopeID       string `json:"scope_id,omitempty"`
+	WorkspacePath     string `json:"workspace_path,omitempty"`
+	RepoURL           string `json:"repo_url,omitempty"`
+	Branch            string `json:"branch,omitempty"`
+	Title             string `json:"title,omitempty"`
+	Scope             string `json:"scope,omitempty"`
+	ScopeID           string `json:"scope_id,omitempty"`
+	ExistingSessionID string `json:"existing_session_id,omitempty"`
 }
 
 type CodingOpenOutput struct {
@@ -190,6 +191,10 @@ func (f *ToolFactory) CreateOpenTool() ai.Tool {
 				"type":        "string",
 				"description": "Scope identifier (workflow ID for workflow scope, auto-generated for agent scope)",
 			},
+			"existing_session_id": map[string]any{
+				"type":        "string",
+				"description": "Continue an existing OpenCode session by ID (from previous coding_open call or --coding-session flag)",
+			},
 		},
 		"required": []string{},
 	}
@@ -206,6 +211,7 @@ func (f *ToolFactory) CreateOpenTool() ai.Tool {
 		title, _ := inputMap["title"].(string)
 		scopeStr, _ := inputMap["scope"].(string)
 		scopeID, _ := inputMap["scope_id"].(string)
+		existingSessionID, _ := inputMap["existing_session_id"].(string)
 
 		if scopeStr == "" && f.execContext.WorkflowRunID != "" {
 			scopeStr = "workflow"
@@ -249,11 +255,12 @@ func (f *ToolFactory) CreateOpenTool() ai.Tool {
 		}
 
 		opts := SessionOptions{
-			WorkspacePath:  workspacePath,
-			Title:          title,
-			RepoURL:        repoURL,
-			Branch:         branch,
-			GitCredentials: gitCreds,
+			WorkspacePath:     workspacePath,
+			Title:             title,
+			RepoURL:           repoURL,
+			Branch:            branch,
+			GitCredentials:    gitCreds,
+			ExistingSessionID: existingSessionID,
 		}
 
 		session, err := f.backend.CreateSession(toolCtx.Context, opts)
@@ -498,6 +505,68 @@ func (f *ToolFactory) CreatePushTool() ai.Tool {
 	)
 }
 
+type CodingBranchInput struct {
+	SessionID string `json:"session_id"`
+	Branch    string `json:"branch"`
+	Create    bool   `json:"create,omitempty"`
+}
+
+func (f *ToolFactory) CreateBranchTool() ai.Tool {
+	schema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"session_id": map[string]any{
+				"type":        "string",
+				"description": "Coding session ID from coding_open",
+			},
+			"branch": map[string]any{
+				"type":        "string",
+				"description": "Branch name to create or switch to",
+			},
+			"create": map[string]any{
+				"type":        "boolean",
+				"description": "Create a new branch (true) or switch to existing (false). Default: true",
+			},
+		},
+		"required": []string{"session_id", "branch"},
+	}
+
+	toolFunc := func(toolCtx *ai.ToolContext, input any) (any, error) {
+		inputMap, ok := input.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("coding_branch: expected map input")
+		}
+
+		sessionID, _ := inputMap["session_id"].(string)
+		branch, _ := inputMap["branch"].(string)
+		create := true
+		if v, ok := inputMap["create"].(bool); ok {
+			create = v
+		}
+
+		if sessionID == "" {
+			return nil, fmt.Errorf("coding_branch: session_id is required")
+		}
+		if branch == "" {
+			return nil, fmt.Errorf("coding_branch: branch is required")
+		}
+
+		result, err := f.backend.GitBranch(toolCtx.Context, sessionID, branch, create)
+		if err != nil {
+			return nil, fmt.Errorf("coding_branch: %w", err)
+		}
+
+		return result, nil
+	}
+
+	return ai.NewToolWithInputSchema(
+		"coding_branch",
+		"Create or switch to a git branch in the coding session workspace.",
+		schema,
+		toolFunc,
+	)
+}
+
 func (f *ToolFactory) CreateAllTools() []ai.Tool {
 	return []ai.Tool{
 		f.CreateOpenTool(),
@@ -505,5 +574,6 @@ func (f *ToolFactory) CreateAllTools() []ai.Tool {
 		f.CreateCloseTool(),
 		f.CreateCommitTool(),
 		f.CreatePushTool(),
+		f.CreateBranchTool(),
 	}
 }

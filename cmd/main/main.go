@@ -153,6 +153,11 @@ func init() {
 
 	// MCP Add command flags
 	mcpAddCmd.Flags().StringP("environment", "e", "default", "Environment to add configuration to")
+	mcpAddCmd.Flags().StringP("command", "c", "", "Command to execute the MCP server (required unless -i)")
+	mcpAddCmd.Flags().StringSliceP("args", "a", nil, "Command arguments (comma-separated or multiple -a flags)")
+	mcpAddCmd.Flags().StringToStringP("env", "E", nil, "Environment variables (KEY=VALUE, can use {{.VAR}} for templates)")
+	mcpAddCmd.Flags().StringP("description", "d", "", "Description of the MCP server")
+	mcpAddCmd.Flags().BoolP("interactive", "i", false, "Open editor for interactive configuration")
 	mcpAddCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
 
 	// MCP command flags
@@ -172,6 +177,7 @@ func init() {
 	syncCmd.Flags().Bool("dry-run", false, "Show what would be synced without making changes")
 	syncCmd.Flags().Bool("validate", false, "Validate configurations only without syncing")
 	syncCmd.Flags().BoolP("interactive", "i", true, "Prompt for missing variables (default: true)")
+	syncCmd.Flags().Bool("browser", false, "Open browser for secure variable input (useful for LLM agents)")
 
 	// Bootstrap command flags
 	bootstrapCmd.Flags().Bool("openai", false, "Bootstrap with OpenAI provider (runs stn init --ship --provider openai --model gpt-5)")
@@ -218,6 +224,7 @@ func init() {
 	agentRunCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
 	agentRunCmd.Flags().String("env", "default", "Environment name for the agent")
 	agentRunCmd.Flags().Bool("tail", false, "Follow the agent execution with real-time output")
+	agentRunCmd.Flags().String("coding-session", "", "Existing OpenCode session ID to continue (for coding_open tool)")
 	agentDeleteCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
 	agentDeleteCmd.Flags().Bool("confirm", false, "Confirm deletion without prompt")
 
@@ -290,6 +297,7 @@ func init() {
 	viper.BindPFlag("database_url", serveCmd.Flags().Lookup("database"))
 	viper.BindPFlag("debug", serveCmd.Flags().Lookup("debug"))
 	viper.BindPFlag("local_mode", serveCmd.Flags().Lookup("local"))
+	viper.BindPFlag("dev_mode", serveCmd.Flags().Lookup("dev"))
 
 	// Set default values
 	viper.SetDefault("telemetry_enabled", false)

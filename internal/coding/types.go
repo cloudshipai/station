@@ -101,3 +101,13 @@ type GitPushResult struct {
 	Message string `json:"message,omitempty"`
 	Error   string `json:"error,omitempty"`
 }
+
+// GitBranchResult represents the result of a git branch operation.
+type GitBranchResult struct {
+	Success        bool   `json:"success"`
+	Branch         string `json:"branch"`
+	Created        bool   `json:"created"`
+	SwitchedTo     bool   `json:"switched_to"`
+	PreviousBranch string `json:"previous_branch,omitempty"`
+	Error          string `json:"error,omitempty"`
+}

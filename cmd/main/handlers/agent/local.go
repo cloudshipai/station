@@ -331,7 +331,7 @@ func (h *AgentHandler) showAgentLocal(agentID int64) error {
 	return nil
 }
 
-func (h *AgentHandler) runAgentLocal(agentID int64, task string, tail bool) error {
+func (h *AgentHandler) runAgentLocal(agentID int64, task string, tail bool, codingSession ...string) error {
 	styles := getCLIStyles(h.themeManager)
 
 	// Load configuration and connect to database (including environment variables)
@@ -366,7 +366,12 @@ func (h *AgentHandler) runAgentLocal(agentID int64, task string, tail bool) erro
 
 	// Server not available, use self-bootstrapping stdio MCP execution
 	fmt.Printf("💡 Server not available, using self-bootstrapping stdio MCP execution\n\n")
-	return h.runAgentWithStdioMCP(agentID, task, tail, cfg, agent)
+
+	var sessionID string
+	if len(codingSession) > 0 {
+		sessionID = codingSession[0]
+	}
+	return h.runAgentWithStdioMCP(agentID, task, tail, cfg, agent, sessionID)
 }
 
 func (h *AgentHandler) deleteAgentLocal(agentID int64) error {
@@ -437,8 +442,7 @@ func (h *AgentHandler) tryServerExecution(agentID int64, task string, tail bool,
 	}
 }
 
-// runAgentWithStdioMCP executes an agent using self-bootstrapping stdio MCP architecture
-func (h *AgentHandler) runAgentWithStdioMCP(agentID int64, task string, tail bool, cfg *config.Config, agent *models.Agent) error {
+func (h *AgentHandler) runAgentWithStdioMCP(agentID int64, task string, tail bool, cfg *config.Config, agent *models.Agent, codingSessionID string) error {
 	// Create execution context
 	ctx := context.Background()
 
@@ -568,8 +572,13 @@ func (h *AgentHandler) runAgentWithStdioMCP(agentID int64, task string, tail boo
 
 	fmt.Printf("🤖 Executing agent using self-bootstrapping architecture...\n")
 
-	// Execute the agent using our stdio MCP approach
-	result, err := agentService.GetExecutionEngine().Execute(ctx, agent, task, agentRun.ID, map[string]interface{}{})
+	variables := make(map[string]interface{})
+	if codingSessionID != "" {
+		variables["coding_session_id"] = codingSessionID
+		fmt.Printf("🔗 Using existing coding session: %s\n", codingSessionID)
+	}
+
+	result, err := agentService.GetExecutionEngine().Execute(ctx, agent, task, agentRun.ID, variables)
 	if err != nil {
 		// Store original error before it gets overwritten
 		originalErr := err

@@ -30,6 +30,9 @@ type Backend interface {
 
 	// GitPush pushes commits to the remote repository.
 	GitPush(ctx context.Context, sessionID string, remote, branch string, setUpstream bool) (*GitPushResult, error)
+
+	// GitBranch creates and/or switches to a branch.
+	GitBranch(ctx context.Context, sessionID string, branch string, create bool) (*GitBranchResult, error)
 }
 
 // SessionOptions configures how a coding session is created.
@@ -50,4 +53,9 @@ type SessionOptions struct {
 
 	// GitCredentials contains authentication for git operations.
 	GitCredentials *GitCredentials
+
+	// ExistingSessionID allows continuing an existing OpenCode session.
+	// If provided, CreateSession will attach to this session instead of creating a new one.
+	// This enables session continuity across multiple coding tool invocations.
+	ExistingSessionID string
 }

@@ -56,9 +56,14 @@ func (b *NATSBackend) CreateSession(ctx context.Context, opts SessionOptions) (*
 		workspaceName = opts.WorkspacePath
 	}
 
+	var backendSessionID string
+	if opts.ExistingSessionID != "" {
+		backendSessionID = opts.ExistingSessionID
+	}
+
 	session := &Session{
 		ID:               sessionName,
-		BackendSessionID: "",
+		BackendSessionID: backendSessionID,
 		WorkspacePath:    workspaceName,
 		Title:            opts.Title,
 		CreatedAt:        time.Now(),
@@ -437,6 +442,41 @@ func (b *NATSBackend) GitPush(ctx context.Context, sessionID string, remote, bra
 	}
 
 	return pushResult, nil
+}
+
+func (b *NATSBackend) GitBranch(ctx context.Context, sessionID string, branch string, create bool) (*GitBranchResult, error) {
+	session, err := b.GetSession(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	var task string
+	if create {
+		task = fmt.Sprintf("Create and switch to a new git branch named '%s' using: git checkout -b %s", branch, branch)
+	} else {
+		task = fmt.Sprintf("Switch to existing git branch named '%s' using: git checkout %s", branch, branch)
+	}
+
+	result, err := b.executeTask(ctx, session, Task{Instruction: task})
+	if err != nil {
+		return nil, err
+	}
+
+	branchResult := &GitBranchResult{
+		Success:    result.Success,
+		Branch:     branch,
+		Created:    create,
+		SwitchedTo: result.Success,
+	}
+
+	if !result.Success {
+		branchResult.Error = result.Error
+		if branchResult.Error == "" {
+			branchResult.Error = result.Summary
+		}
+	}
+
+	return branchResult, nil
 }
 
 func (b *NATSBackend) Close() error {

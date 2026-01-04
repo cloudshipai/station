@@ -16,6 +16,7 @@ import (
 // This delegates to existing working implementations
 func (h *AgentHandler) RunAgentRun(cmd *cobra.Command, args []string) error {
 	tail, _ := cmd.Flags().GetBool("tail")
+	codingSession, _ := cmd.Flags().GetString("coding-session")
 
 	// Validate arguments
 	if len(args) != 2 {
@@ -35,7 +36,7 @@ func (h *AgentHandler) RunAgentRun(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	return h.runAgentLocal(agentID, task, tail)
+	return h.runAgentLocal(agentID, task, tail, codingSession)
 }
 
 // displayExecutionResults shows the results of an agent execution
