@@ -288,3 +288,26 @@ func (s *Server) handleUpdateEnvironmentFileConfig(ctx context.Context, request 
 	resultJSON, _ := json.MarshalIndent(response, "", "  ")
 	return mcp.NewToolResultText(string(resultJSON)), nil
 }
+
+func (s *Server) handleSaveMCPTemplate(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	environmentName, err := request.RequireString("environment_name")
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Missing 'environment_name' parameter: %v", err)), nil
+	}
+
+	templateName, err := request.RequireString("template_name")
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Missing 'template_name' parameter: %v", err)), nil
+	}
+
+	configJSON, err := request.RequireString("config")
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Missing 'config' parameter: %v", err)), nil
+	}
+
+	mcpService := services.NewMCPServerManagementService(s.repos)
+	result := mcpService.SaveRawMCPTemplate(environmentName, templateName, configJSON)
+
+	resultJSON, _ := json.MarshalIndent(result, "", "  ")
+	return mcp.NewToolResultText(string(resultJSON)), nil
+}

@@ -495,5 +495,22 @@ func (s *Server) setupTools() {
 	)
 	s.mcpServer.AddTool(rejectWorkflowStepTool, s.handleRejectWorkflowStep)
 
-	log.Printf("MCP tools setup complete - %d tools registered", 53)
+	syncEnvironmentTool := mcp.NewTool("sync_environment",
+		mcp.WithDescription("Sync an environment to activate MCP servers and agents. Use browser=true for secure variable input via browser UI (recommended for LLM agents to avoid exposing secrets in prompts)."),
+		mcp.WithString("environment_name", mcp.Required(), mcp.Description("Name of the environment to sync")),
+		mcp.WithBoolean("browser", mcp.Description("Open browser for secure variable input. User enters secrets directly in browser UI - secrets never appear in LLM context. (default: false)")),
+		mcp.WithBoolean("dry_run", mcp.Description("Show what would be synced without making changes (default: false)")),
+		mcp.WithBoolean("validate", mcp.Description("Validate configurations only, don't sync (default: false)")),
+	)
+	s.mcpServer.AddTool(syncEnvironmentTool, s.handleSyncEnvironment)
+
+	saveMCPTemplateTool := mcp.NewTool("save_mcp_template",
+		mcp.WithDescription("Save a raw MCP server template configuration to an environment. Accepts any valid MCP server config JSON and saves it as {template_name}.json. Use this for maximum flexibility when creating MCP servers with custom configurations."),
+		mcp.WithString("environment_name", mcp.Required(), mcp.Description("Name of the environment")),
+		mcp.WithString("template_name", mcp.Required(), mcp.Description("Name for the template file (will be saved as {template_name}.json)")),
+		mcp.WithString("config", mcp.Required(), mcp.Description("Raw JSON configuration for the MCP server. Must be valid JSON matching the MCP template schema: {\"name\": \"...\", \"description\": \"...\", \"mcpServers\": {\"server-name\": {\"command\": \"...\", \"args\": [...], \"env\": {...}}}}")),
+	)
+	s.mcpServer.AddTool(saveMCPTemplateTool, s.handleSaveMCPTemplate)
+
+	log.Printf("MCP tools setup complete - %d tools registered", 55)
 }

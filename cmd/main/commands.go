@@ -53,21 +53,29 @@ Use --ship flag to bootstrap with ship CLI MCP integration for filesystem access
 	}
 
 	mcpAddCmd = &cobra.Command{
-		Use:   "add [config-name]",
-		Short: "Add a new MCP configuration via editor",
-		Long: `Add a new MCP configuration by opening your default editor.
+		Use:   "add <server-name>",
+		Short: "Add an MCP server configuration",
+		Long: `Add an MCP server configuration to an environment.
 
-This command opens your default text editor (vim, nano, code, etc.) where you can:
-1. Paste an MCP configuration from documentation or examples
-2. Use template variables that will be detected automatically
-3. Save and close to create the configuration file
+By default, uses CLI flags for non-interactive scripting. Use -i for interactive editor mode.
 
-The configuration will be saved as <config-name>.json in your current environment.
-When you run 'stn sync', you'll be prompted for any template variables found.
+The configuration will be saved as <server-name>.json in your environment directory.
+Run 'stn sync' to activate the server (use --browser for secure variable input).
 
 Examples:
-  stn mcp add filesystem          # Creates filesystem.json via editor
-  stn mcp add --env prod database # Creates database.json in prod environment`,
+  # Non-interactive (default) - great for scripting
+  stn mcp add filesystem --command npx --args "-y,@modelcontextprotocol/server-filesystem,/tmp"
+  stn mcp add github --command npx --args "-y,@modelcontextprotocol/server-github" --env "GITHUB_TOKEN={{.GITHUB_TOKEN}}"
+  
+  # With description
+  stn mcp add slack --command npx --args "-y,@anthropic/mcp-server-slack" --description "Slack integration"
+  
+  # Interactive mode - opens editor
+  stn mcp add myserver -i
+  
+  # Different environment
+  stn mcp add database --env prod --command docker --args "run,--rm,postgres-mcp"`,
+		Args: cobra.ExactArgs(1),
 		RunE: runMCPAdd,
 	}
 
@@ -1064,14 +1072,30 @@ See \` + "`" + `docs/GITOPS-DEPLOYMENT.md\` + "`" + ` for the complete GitOps de
 	return nil
 }
 
-// runSync handles the top-level sync command
 func runSync(cmd *cobra.Command, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("environment name is required")
 	}
 
 	environment := args[0]
+	browserMode, _ := cmd.Flags().GetBool("browser")
+
+	if browserMode {
+		return runSyncWithBrowser(environment)
+	}
+
 	return runSyncForEnvironment(environment)
+}
+
+func runSyncWithBrowser(environment string) error {
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	browserSync := services.NewBrowserSyncService(cfg.APIPort)
+	_, err = browserSync.SyncWithBrowser(context.Background(), environment)
+	return err
 }
 
 // setupShipIntegration installs latest ship CLI only (no MCP configuration)

@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"text/template"
@@ -340,37 +341,151 @@ func runUI(cmd *cobra.Command, args []string) error {
 
 // runMCPAdd implements the "station mcp add" command
 func runMCPAdd(cmd *cobra.Command, args []string) error {
-	return fmt.Errorf("mcp add editor functionality removed with load command deprecation - use 'stn sync' with file-based configuration instead")
+	serverName := args[0]
+	interactive, _ := cmd.Flags().GetBool("interactive")
+
+	if interactive {
+		return runMCPAddEditor(cmd, serverName)
+	}
+
+	return runMCPAddNonInteractive(cmd, serverName)
 }
 
-// runMCPAddFlags handles flag-based mode
-func runMCPAddFlags(cmd *cobra.Command, args []string) error {
-	// Get flags (unused but kept for compatibility)
-	_, _ = cmd.Flags().GetString("environment")
-	configID, _ := cmd.Flags().GetString("config-id")
-	serverName, _ := cmd.Flags().GetString("server-name")
+func runMCPAddNonInteractive(cmd *cobra.Command, serverName string) error {
+	envName, _ := cmd.Flags().GetString("environment")
 	command, _ := cmd.Flags().GetString("command")
-	_, _ = cmd.Flags().GetStringSlice("args")
-	_, _ = cmd.Flags().GetStringToString("env")
+	cmdArgs, _ := cmd.Flags().GetStringSlice("args")
+	envVars, _ := cmd.Flags().GetStringToString("env")
+	description, _ := cmd.Flags().GetString("description")
 
-	// Validate required flags
-	if configID == "" {
-		return fmt.Errorf("--config-id is required")
-	}
-	if serverName == "" {
-		return fmt.Errorf("--server-name is required")
-	}
 	if command == "" {
-		return fmt.Errorf("--command is required")
+		return fmt.Errorf("--command is required (or use -i for interactive mode)")
 	}
 
-	// Show banner
-	styles := getCLIStyles(nil)
-	banner := styles.Banner.Render("🔧 Add MCP Server to Configuration")
-	fmt.Println(banner)
+	mcpConfig := map[string]interface{}{
+		"name": serverName,
+		"mcpServers": map[string]interface{}{
+			serverName: map[string]interface{}{
+				"command": command,
+			},
+		},
+	}
 
-	// MCP server addition via CLI form is deprecated
-	return fmt.Errorf("MCP server addition via CLI deprecated - use file-based configuration in ~/.config/station/environments/<env>/template.json and run 'stn sync'")
+	if description != "" {
+		mcpConfig["description"] = description
+	}
+
+	serverConfig := mcpConfig["mcpServers"].(map[string]interface{})[serverName].(map[string]interface{})
+	if len(cmdArgs) > 0 {
+		serverConfig["args"] = cmdArgs
+	}
+	if len(envVars) > 0 {
+		serverConfig["env"] = envVars
+	}
+
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	envDir := filepath.Join(cfg.Workspace, "environments", envName)
+	if err := os.MkdirAll(envDir, 0755); err != nil {
+		return fmt.Errorf("failed to create environment directory: %w", err)
+	}
+
+	configPath := filepath.Join(envDir, serverName+".json")
+	configJSON, err := json.MarshalIndent(mcpConfig, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal config: %w", err)
+	}
+
+	if err := os.WriteFile(configPath, configJSON, 0644); err != nil {
+		return fmt.Errorf("failed to write config file: %w", err)
+	}
+
+	styles := getCLIStyles(nil)
+	fmt.Println(styles.Success.Render(fmt.Sprintf("✅ Created MCP server config: %s", configPath)))
+	fmt.Println(styles.Info.Render(fmt.Sprintf("   Run 'stn sync %s' to activate (use --browser for secure variable input)", envName)))
+
+	return nil
+}
+
+func runMCPAddEditor(cmd *cobra.Command, serverName string) error {
+	envName, _ := cmd.Flags().GetString("environment")
+
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	envDir := filepath.Join(cfg.Workspace, "environments", envName)
+	if err := os.MkdirAll(envDir, 0755); err != nil {
+		return fmt.Errorf("failed to create environment directory: %w", err)
+	}
+
+	configPath := filepath.Join(envDir, serverName+".json")
+
+	templateContent := fmt.Sprintf(`{
+  "name": "%s",
+  "description": "TODO: Add description",
+  "mcpServers": {
+    "%s": {
+      "command": "npx",
+      "args": ["-y", "@example/mcp-server"],
+      "env": {
+        "API_KEY": "{{.API_KEY}}"
+      }
+    }
+  }
+}
+`, serverName, serverName)
+
+	if err := os.WriteFile(configPath, []byte(templateContent), 0644); err != nil {
+		return fmt.Errorf("failed to write template file: %w", err)
+	}
+
+	editor := os.Getenv("EDITOR")
+	if editor == "" {
+		editor = os.Getenv("VISUAL")
+	}
+	if editor == "" {
+		for _, e := range []string{"vim", "nano", "vi", "code"} {
+			if _, err := exec.LookPath(e); err == nil {
+				editor = e
+				break
+			}
+		}
+	}
+	if editor == "" {
+		return fmt.Errorf("no editor found - set EDITOR environment variable")
+	}
+
+	styles := getCLIStyles(nil)
+	fmt.Println(styles.Info.Render(fmt.Sprintf("📝 Opening %s in %s...", configPath, editor)))
+
+	editorCmd := exec.Command(editor, configPath)
+	editorCmd.Stdin = os.Stdin
+	editorCmd.Stdout = os.Stdout
+	editorCmd.Stderr = os.Stderr
+
+	if err := editorCmd.Run(); err != nil {
+		return fmt.Errorf("editor exited with error: %w", err)
+	}
+
+	content, err := os.ReadFile(configPath)
+	if err != nil {
+		return fmt.Errorf("failed to read config file: %w", err)
+	}
+
+	var parsed map[string]interface{}
+	if err := json.Unmarshal(content, &parsed); err != nil {
+		return fmt.Errorf("invalid JSON in config file: %w", err)
+	}
+
+	fmt.Println(styles.Success.Render(fmt.Sprintf("✅ Saved MCP server config: %s", configPath)))
+	fmt.Println(styles.Info.Render(fmt.Sprintf("   Run 'stn sync %s' to activate (use --browser for secure variable input)", envName)))
+
+	return nil
 }
 
 // runMCPAddInteractive handles interactive mode with beautiful forms

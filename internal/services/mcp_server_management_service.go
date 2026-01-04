@@ -565,8 +565,55 @@ STATION_API_URL: http://localhost:8585/api/v1
 	}
 }
 
-// InstallTemplateFromDirectory installs a complete MCP template from the mcp-servers directory
-// This preserves all metadata including description, tags, variables, etc.
+func (s *MCPServerManagementService) SaveRawMCPTemplate(environmentName, templateName, configJSON string) *MCPServerOperationResult {
+	if templateName == "" {
+		return &MCPServerOperationResult{
+			Success: false,
+			Message: "Template name cannot be empty",
+		}
+	}
+
+	envDir := config.GetEnvironmentDir(environmentName)
+
+	if _, err := os.Stat(envDir); os.IsNotExist(err) {
+		return &MCPServerOperationResult{
+			Success: false,
+			Message: fmt.Sprintf("Environment '%s' not found", environmentName),
+		}
+	}
+
+	var parsed map[string]interface{}
+	if err := json.Unmarshal([]byte(configJSON), &parsed); err != nil {
+		return &MCPServerOperationResult{
+			Success: false,
+			Message: fmt.Sprintf("Invalid JSON config: %v", err),
+		}
+	}
+
+	formatted, err := json.MarshalIndent(parsed, "", "  ")
+	if err != nil {
+		return &MCPServerOperationResult{
+			Success: false,
+			Message: fmt.Sprintf("Failed to format JSON: %v", err),
+		}
+	}
+
+	templatePath := filepath.Join(envDir, fmt.Sprintf("%s.json", templateName))
+	if err := os.WriteFile(templatePath, formatted, 0644); err != nil {
+		return &MCPServerOperationResult{
+			Success: false,
+			Message: fmt.Sprintf("Failed to write template file: %v", err),
+		}
+	}
+
+	return &MCPServerOperationResult{
+		Success:     true,
+		ServerName:  templateName,
+		Environment: environmentName,
+		Message:     fmt.Sprintf("MCP template '%s' saved to environment '%s' as %s.json", templateName, environmentName, templateName),
+	}
+}
+
 func (s *MCPServerManagementService) InstallTemplateFromDirectory(environmentName, templateID, openapiSpecFile string) *MCPServerOperationResult {
 	// Find the mcp-servers directory
 	mcpServersDirs := []string{

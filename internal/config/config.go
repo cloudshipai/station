@@ -131,9 +131,10 @@ type SandboxConfig struct {
 }
 
 type CodingConfig struct {
-	Backend           string               `yaml:"backend"` // "opencode" (HTTP) or "opencode-nats" (NATS)
+	Backend           string               `yaml:"backend"` // "opencode" (HTTP), "opencode-nats" (NATS), or "opencode-cli" (CLI subprocess)
 	OpenCode          CodingOpenCodeConfig `yaml:"opencode"`
-	NATS              CodingNATSConfig     `yaml:"nats"` // NATS configuration for opencode-nats backend
+	NATS              CodingNATSConfig     `yaml:"nats"`
+	CLI               CodingCLIConfig      `yaml:"cli"`
 	MaxAttempts       int                  `yaml:"max_attempts"`
 	TaskTimeoutMin    int                  `yaml:"task_timeout_min"`
 	CloneTimeoutSec   int                  `yaml:"clone_timeout_sec"`
@@ -197,6 +198,11 @@ type CodingGitConfig struct {
 type CodingOpenCodeConfig struct {
 	URL   string `yaml:"url"`
 	Model string `yaml:"model"`
+}
+
+type CodingCLIConfig struct {
+	BinaryPath string `yaml:"binary_path"`
+	TimeoutSec int    `yaml:"timeout_sec"`
 }
 
 // TelemetryProvider defines the type of telemetry backend
