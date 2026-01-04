@@ -596,6 +596,7 @@ func (h *APIHandlers) RegisterRoutes(router *gin.RouterGroup) {
 	syncGroup.POST("/interactive", h.startInteractiveSync)
 	syncGroup.GET("/status/:id", h.getSyncStatus)
 	syncGroup.POST("/variables", h.submitVariables)
+	syncGroup.POST("/cancel/:id", h.cancelSync)
 
 	// Bundles route - admin only in server mode
 	bundlesGroup := router.Group("/bundles")

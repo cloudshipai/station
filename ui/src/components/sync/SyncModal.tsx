@@ -7,7 +7,10 @@ interface SyncModalProps {
   onClose: () => void;
   environment: string;
   onSyncComplete?: () => void;
+  onSyncFailed?: () => void;
   autoStart?: boolean;
+  syncId?: string;
+  standalone?: boolean;
 }
 
 interface SyncStatus {
@@ -37,7 +40,16 @@ interface SyncStatus {
   updated_at: string;
 }
 
-export const SyncModal: React.FC<SyncModalProps> = ({ isOpen, onClose, environment, onSyncComplete, autoStart = false }) => {
+export const SyncModal: React.FC<SyncModalProps> = ({ 
+  isOpen, 
+  onClose, 
+  environment, 
+  onSyncComplete, 
+  onSyncFailed,
+  autoStart = false,
+  syncId: externalSyncId,
+  standalone = false
+}) => {
   const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmittingVariables, setIsSubmittingVariables] = useState(false);
@@ -51,14 +63,21 @@ export const SyncModal: React.FC<SyncModalProps> = ({ isOpen, onClose, environme
   // Auto-start sync when modal opens if autoStart is true
   // Use a composite key of isOpen + environment to prevent re-triggering for the same environment
   useEffect(() => {
-    const autoStartKey = `${isOpen}-${environment}`;
+    const autoStartKey = `${isOpen}-${environment}-${externalSyncId || 'new'}`;
 
     if (isOpen && autoStart && environment && lastAutoStartKey.current !== autoStartKey) {
-      console.log('[SyncModal] Auto-starting sync for environment:', environment);
+      console.log('[SyncModal] Auto-starting sync for environment:', environment, 'externalSyncId:', externalSyncId);
       lastAutoStartKey.current = autoStartKey;
-      startSync();
+      
+      if (externalSyncId) {
+        // Attach to existing sync session - just start polling
+        attachToExistingSync(externalSyncId);
+      } else {
+        // Start a new sync
+        startSync();
+      }
     }
-  }, [isOpen, autoStart, environment]);
+  }, [isOpen, autoStart, environment, externalSyncId]);
 
   // Clean up polling on unmount or modal close
   useEffect(() => {
@@ -77,6 +96,101 @@ export const SyncModal: React.FC<SyncModalProps> = ({ isOpen, onClose, environme
     }
   }, [isOpen, pollInterval]);
 
+  const startPolling = (syncId: string) => {
+    const interval = setInterval(async () => {
+      try {
+        const statusResponse = await syncApi.getStatus(syncId);
+        const newStatus = statusResponse.data;
+        console.log('[SyncModal] Poll result - status:', newStatus.status, 'progress:', newStatus.progress);
+
+        setSyncStatus(prevStatus => {
+          if (!prevStatus ||
+              prevStatus.status !== newStatus.status ||
+              prevStatus.updated_at !== newStatus.updated_at ||
+              JSON.stringify(prevStatus.variables) !== JSON.stringify(newStatus.variables)) {
+            return newStatus;
+          }
+          return prevStatus;
+        });
+
+        if (newStatus.status !== 'waiting_for_input' && isSubmittingVariables) {
+          setIsSubmittingVariables(false);
+        }
+
+        if (newStatus.status === 'waiting_for_input' && newStatus.variables && !variablesInitialized) {
+          const initialVars: Record<string, string> = {};
+          newStatus.variables.variables.forEach(variable => {
+            if (variable.default) {
+              initialVars[variable.name] = variable.default;
+              if (inputRefs.current[variable.name]) {
+                inputRefs.current[variable.name].value = variable.default;
+              }
+            }
+          });
+          setVariables(initialVars);
+          setVariablesInitialized(true);
+        }
+
+        if (newStatus.status === 'completed' || newStatus.status === 'failed') {
+          console.log('[SyncModal] Sync finished with status:', newStatus.status);
+          clearInterval(interval);
+          setPollInterval(null);
+
+          if (newStatus.status === 'completed' && onSyncComplete) {
+            onSyncComplete();
+          }
+          if (newStatus.status === 'failed' && onSyncFailed) {
+            onSyncFailed();
+          }
+        }
+      } catch (error: any) {
+        if (error.response?.status === 404) {
+          console.log('[SyncModal] Sync operation not found (404), assuming completed and stopping polling');
+          clearInterval(interval);
+          setPollInterval(null);
+          setSyncStatus(prev => {
+            if (prev) {
+              return {
+                ...prev,
+                status: 'completed',
+                progress: {
+                  ...prev.progress,
+                  steps_complete: prev.progress.steps_total,
+                  current_step: 'Completed',
+                  message: 'Sync completed successfully'
+                }
+              };
+            }
+            return prev;
+          });
+          if (onSyncComplete) {
+            onSyncComplete();
+          }
+        } else {
+          console.error('[SyncModal] Failed to poll sync status:', error);
+        }
+      }
+    }, 1000);
+
+    setPollInterval(interval);
+    return interval;
+  };
+
+  const attachToExistingSync = async (syncId: string) => {
+    setIsLoading(true);
+    try {
+      console.log('[SyncModal] Attaching to existing sync:', syncId);
+      const statusResponse = await syncApi.getStatus(syncId);
+      setSyncStatus(statusResponse.data);
+      startPolling(syncId);
+    } catch (error) {
+      console.error('[SyncModal] Failed to attach to sync:', error);
+      onSyncFailed?.();
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const startSync = async () => {
     setIsLoading(true);
     try {
@@ -86,89 +200,7 @@ export const SyncModal: React.FC<SyncModalProps> = ({ isOpen, onClose, environme
       console.log('[SyncModal] Sync started with ID:', sync_id, 'status:', status);
       setSyncStatus(status);
 
-      // Start polling for status updates
-      const interval = setInterval(async () => {
-        try {
-          const statusResponse = await syncApi.getStatus(sync_id);
-          const newStatus = statusResponse.data;
-          console.log('[SyncModal] Poll result - status:', newStatus.status, 'progress:', newStatus.progress);
-
-          // Only update state if status actually changed to avoid unnecessary re-renders
-          setSyncStatus(prevStatus => {
-            if (!prevStatus ||
-                prevStatus.status !== newStatus.status ||
-                prevStatus.updated_at !== newStatus.updated_at ||
-                JSON.stringify(prevStatus.variables) !== JSON.stringify(newStatus.variables)) {
-              return newStatus;
-            }
-            return prevStatus;
-          });
-
-          // Clear submitting state when status changes away from waiting_for_input
-          if (newStatus.status !== 'waiting_for_input' && isSubmittingVariables) {
-            setIsSubmittingVariables(false);
-          }
-
-          // Initialize variables form when waiting for input (only once)
-          if (newStatus.status === 'waiting_for_input' && newStatus.variables && !variablesInitialized) {
-            const initialVars: Record<string, string> = {};
-            newStatus.variables.variables.forEach(variable => {
-              if (variable.default) {
-                initialVars[variable.name] = variable.default;
-                // Set default value in input ref if available
-                if (inputRefs.current[variable.name]) {
-                  inputRefs.current[variable.name].value = variable.default;
-                }
-              }
-            });
-            setVariables(initialVars);
-            setVariablesInitialized(true);
-          }
-
-          // Stop polling when sync is complete or failed
-          if (newStatus.status === 'completed' || newStatus.status === 'failed') {
-            console.log('[SyncModal] Sync finished with status:', newStatus.status);
-            clearInterval(interval);
-            setPollInterval(null);
-
-            // Call onSyncComplete callback when sync completes successfully
-            if (newStatus.status === 'completed' && onSyncComplete) {
-              onSyncComplete();
-            }
-          }
-        } catch (error: any) {
-          // Handle 404 errors gracefully - sync might have been cleaned up
-          if (error.response?.status === 404) {
-            console.log('[SyncModal] Sync operation not found (404), assuming completed and stopping polling');
-            clearInterval(interval);
-            setPollInterval(null);
-            // Mark as completed since backend cleaned it up (means it finished)
-            setSyncStatus(prev => {
-              if (prev) {
-                return {
-                  ...prev,
-                  status: 'completed',
-                  progress: {
-                    ...prev.progress,
-                    steps_complete: prev.progress.steps_total,
-                    current_step: 'Completed',
-                    message: 'Sync completed successfully'
-                  }
-                };
-              }
-              return prev;
-            });
-            // Call onSyncComplete callback since sync completed
-            if (onSyncComplete) {
-              onSyncComplete();
-            }
-          } else {
-            console.error('[SyncModal] Failed to poll sync status:', error);
-          }
-        }
-      }, 1000);
-
-      setPollInterval(interval);
+      startPolling(sync_id);
     } catch (error) {
       console.error('[SyncModal] Failed to start sync:', error);
     } finally {
@@ -266,16 +298,15 @@ export const SyncModal: React.FC<SyncModalProps> = ({ isOpen, onClose, environme
 
   if (!isOpen) return null;
 
-  return (
+  const content = (
     <div 
-      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 animate-in fade-in duration-200"
-      onClick={onClose}
+      className={standalone 
+        ? "bg-white border border-gray-200 rounded-lg p-6 w-full shadow-lg" 
+        : "bg-white border border-gray-200 rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto shadow-lg animate-in zoom-in-95 fade-in slide-in-from-bottom-4 duration-300"
+      }
+      onClick={(e) => e.stopPropagation()}
     >
-      <div 
-        className="bg-white border border-gray-200 rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto shadow-lg animate-in zoom-in-95 fade-in slide-in-from-bottom-4 duration-300"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
+      {!standalone && (
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
             {getStatusIcon()}
@@ -293,6 +324,7 @@ export const SyncModal: React.FC<SyncModalProps> = ({ isOpen, onClose, environme
             <X className="h-5 w-5 text-gray-500 hover:text-gray-900" />
           </button>
         </div>
+      )}
 
         {/* Content */}
         <div className="space-y-6">
@@ -492,8 +524,7 @@ export const SyncModal: React.FC<SyncModalProps> = ({ isOpen, onClose, environme
           )}
         </div>
 
-        {/* Footer */}
-        {syncStatus && (syncStatus.status === 'completed' || syncStatus.status === 'failed') && (
+        {!standalone && syncStatus && (syncStatus.status === 'completed' || syncStatus.status === 'failed') && (
           <div className="flex justify-end mt-6">
             <button
               onClick={handleClose}
@@ -504,6 +535,18 @@ export const SyncModal: React.FC<SyncModalProps> = ({ isOpen, onClose, environme
           </div>
         )}
       </div>
+  );
+
+  if (standalone) {
+    return content;
+  }
+
+  return (
+    <div 
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 animate-in fade-in duration-200"
+      onClick={onClose}
+    >
+      {content}
     </div>
   );
 };

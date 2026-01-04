@@ -36,6 +36,7 @@ import CloudShipStatus from './components/CloudShipStatus';
 import VersionStatus from './components/VersionStatus';
 import { RunsPage as RunsPageComponent } from './components/runs/RunsPage';
 import { SyncModal } from './components/sync/SyncModal';
+import { SyncPage } from './components/sync/SyncPage';
 import { AddServerModal } from './components/modals/AddServerModal';
 import { BundleEnvironmentModal } from './components/modals/BundleEnvironmentModal';
 import BuildImageModal from './components/modals/BuildImageModal';
@@ -4163,37 +4164,49 @@ function App() {
       <EnvironmentProvider>
         <ReactFlowProvider>
           <BrowserRouter>
-            <div className="min-h-screen bg-background">
-              <Layout>
-                <Routes>
-                  <Route path="/" element={<AgentsPage />} />
-                  <Route path="/getting-started" element={<GettingStartedPage />} />
-                  <Route path="/agents" element={<AgentsPage />} />
-                  <Route path="/agents/:env" element={<AgentsPage />} />
-                  <Route path="/agents/:env/:agentId" element={<AgentsPage />} />
-                  <Route path="/agent/:agentId" element={<AgentsPage />} />
-                  <Route path="/mcps" element={<MCPServersPage />} />
-                  <Route path="/mcps/:env" element={<MCPServersPage />} />
-                  <Route path="/mcp-directory" element={<MCPDirectoryPage />} />
-                  <Route path="/runs" element={<RunsPage />} />
-                  <Route path="/workflows" element={<WorkflowsPage />} />
-                  <Route path="/workflows/:workflowId" element={<WorkflowDetailPage />} />
-                  <Route path="/reports" element={<ReportsPageWrapper />} />
-                  <Route path="/reports/:reportId" element={<ReportDetailPageWrapper />} />
-                  <Route path="/environments" element={<EnvironmentsPage />} />
-                  <Route path="/bundles" element={<BundlesPage />} />
-                  <Route path="/live-demo" element={<LiveDemoPage />} />
-                  <Route path="/settings" element={<SettingsPage />} />
-                  <Route path="/agent-editor/:agentId" element={<AgentEditor />} />
-                  <Route path="*" element={<AgentsPage />} />
-                </Routes>
-              </Layout>
-            </div>
+            <AppRoutes />
           </BrowserRouter>
         </ReactFlowProvider>
       </EnvironmentProvider>
     </QueryClientProvider>
   );
 }
+
+const LayoutWrapper = ({ children }: { children: React.ReactNode }) => (
+  <div className="min-h-screen bg-background">
+    <Layout>{children}</Layout>
+  </div>
+);
+
+const AppRoutes = () => {
+  return (
+    <Routes>
+      {/* Sync routes WITHOUT Layout wrapper - standalone browser experience */}
+      <Route path="/sync/:env" element={<SyncPage />} />
+      
+      {/* All other routes WITH Layout wrapper */}
+      <Route path="/" element={<LayoutWrapper><AgentsPage /></LayoutWrapper>} />
+      <Route path="/getting-started" element={<LayoutWrapper><GettingStartedPage /></LayoutWrapper>} />
+      <Route path="/agents" element={<LayoutWrapper><AgentsPage /></LayoutWrapper>} />
+      <Route path="/agents/:env" element={<LayoutWrapper><AgentsPage /></LayoutWrapper>} />
+      <Route path="/agents/:env/:agentId" element={<LayoutWrapper><AgentsPage /></LayoutWrapper>} />
+      <Route path="/agent/:agentId" element={<LayoutWrapper><AgentsPage /></LayoutWrapper>} />
+      <Route path="/mcps" element={<LayoutWrapper><MCPServersPage /></LayoutWrapper>} />
+      <Route path="/mcps/:env" element={<LayoutWrapper><MCPServersPage /></LayoutWrapper>} />
+      <Route path="/mcp-directory" element={<LayoutWrapper><MCPDirectoryPage /></LayoutWrapper>} />
+      <Route path="/runs" element={<LayoutWrapper><RunsPage /></LayoutWrapper>} />
+      <Route path="/workflows" element={<LayoutWrapper><WorkflowsPage /></LayoutWrapper>} />
+      <Route path="/workflows/:workflowId" element={<LayoutWrapper><WorkflowDetailPage /></LayoutWrapper>} />
+      <Route path="/reports" element={<LayoutWrapper><ReportsPageWrapper /></LayoutWrapper>} />
+      <Route path="/reports/:reportId" element={<LayoutWrapper><ReportDetailPageWrapper /></LayoutWrapper>} />
+      <Route path="/environments" element={<LayoutWrapper><EnvironmentsPage /></LayoutWrapper>} />
+      <Route path="/bundles" element={<LayoutWrapper><BundlesPage /></LayoutWrapper>} />
+      <Route path="/live-demo" element={<LayoutWrapper><LiveDemoPage /></LayoutWrapper>} />
+      <Route path="/settings" element={<LayoutWrapper><SettingsPage /></LayoutWrapper>} />
+      <Route path="/agent-editor/:agentId" element={<LayoutWrapper><AgentEditor /></LayoutWrapper>} />
+      <Route path="*" element={<LayoutWrapper><AgentsPage /></LayoutWrapper>} />
+    </Routes>
+  );
+};
 
 export default App;

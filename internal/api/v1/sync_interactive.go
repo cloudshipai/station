@@ -150,7 +150,6 @@ func (h *APIHandlers) submitVariables(c *gin.Context) {
 		return
 	}
 
-	// Store variables and continue sync by sending them through the channel
 	if variableChannel, exists := variableChannels[req.SyncID]; exists {
 		variableChannel.Variables <- req.Variables
 	} else {
@@ -168,11 +167,9 @@ func (h *APIHandlers) submitVariables(c *gin.Context) {
 func (h *APIHandlers) executeSyncWithVariablePrompts(syncID string, req SyncRequest) {
 	variableChannel := variableChannels[syncID]
 
-	// Cleanup channels when done - delay cleanup to allow final status polling
 	defer func() {
-		// Wait a bit before cleanup to allow final polling requests
 		go func() {
-			time.Sleep(3 * time.Second)
+			time.Sleep(30 * time.Second)
 			log.Printf("Cleaning up sync operation %s", syncID)
 			delete(variableChannels, syncID)
 			delete(activeSyncs, syncID)
@@ -226,9 +223,10 @@ func (h *APIHandlers) executeSyncWithVariablePrompts(syncID string, req SyncRequ
 		// Update sync status to waiting for input
 		h.updateSyncStatusWithVariables(syncID, "waiting_for_input", "Waiting for variables", variableRequest)
 
-		// Wait for user to provide variables
 		select {
 		case newVars := <-variableChannel.Variables:
+			h.updateSyncProgress(syncID, "Processing variables", 2, "Variables received, continuing sync...")
+			h.updateSyncStatusWithVariables(syncID, "processing", "Processing templates", nil)
 			return newVars, nil
 		case err := <-variableChannel.Error:
 			return nil, err
@@ -237,11 +235,9 @@ func (h *APIHandlers) executeSyncWithVariablePrompts(syncID string, req SyncRequ
 		}
 	}
 
-	// Use the existing DeclarativeSync service and inject the UI variable resolver
 	syncer := services.NewDeclarativeSync(repos, cfg)
 	syncer.SetVariableResolver(variableResolver)
 
-	// Create sync options with interactive mode
 	syncOptions := services.SyncOptions{
 		DryRun:      req.DryRun,
 		Validate:    false,
@@ -251,17 +247,14 @@ func (h *APIHandlers) executeSyncWithVariablePrompts(syncID string, req SyncRequ
 		Confirm:     true,
 	}
 
-	// Update progress
 	h.updateSyncProgress(syncID, "Starting sync operation", 2, "Running declarative sync with interactive variable resolution...")
 
-	// Execute the real sync using existing service
 	result, err := syncer.SyncEnvironment(context.Background(), req.Environment, syncOptions)
 	if err != nil {
 		h.updateSyncStatus(syncID, "failed", "Sync operation failed", nil, err.Error())
 		return
 	}
 
-	// Update progress and final status
 	h.updateSyncProgress(syncID, "Processing results", 3, "Finalizing sync results...")
 	h.updateSyncProgress(syncID, "Completed", 4, "Sync operation completed successfully")
 	h.updateSyncStatus(syncID, "completed", "Sync completed successfully", result, "")
@@ -290,7 +283,6 @@ func (h *APIHandlers) updateSyncProgress(syncID, step string, stepNum int, messa
 	}
 }
 
-// Helper function to update sync status with variable request
 func (h *APIHandlers) updateSyncStatusWithVariables(syncID, status, message string, variables *VariableRequest) {
 	if syncStatus, exists := activeSyncs[syncID]; exists {
 		syncStatus.Status = status
@@ -298,4 +290,30 @@ func (h *APIHandlers) updateSyncStatusWithVariables(syncID, status, message stri
 		syncStatus.Variables = variables
 		syncStatus.UpdatedAt = time.Now()
 	}
+}
+
+func (h *APIHandlers) cancelSync(c *gin.Context) {
+	syncID := c.Param("id")
+
+	syncStatus, exists := activeSyncs[syncID]
+	if !exists {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Sync operation not found"})
+		return
+	}
+
+	if syncStatus.Status == "completed" || syncStatus.Status == "failed" || syncStatus.Status == "cancelled" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Sync already finished"})
+		return
+	}
+
+	if variableChannel, exists := variableChannels[syncID]; exists {
+		variableChannel.Error <- fmt.Errorf("sync cancelled by user")
+	}
+
+	h.updateSyncStatus(syncID, "cancelled", "Sync cancelled by user", nil, "Cancelled")
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":  "cancelled",
+		"message": "Sync operation cancelled",
+	})
 }
