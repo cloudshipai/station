@@ -24,6 +24,8 @@ type mockBackend struct {
 	gitCommitErr    error
 	gitPushResult   *GitPushResult
 	gitPushErr      error
+	gitBranchResult *GitBranchResult
+	gitBranchErr    error
 	lastTask        Task
 	lastSessionID   string
 	lastWorkspace   string
@@ -100,6 +102,23 @@ func (m *mockBackend) GitPush(ctx context.Context, sessionID string, remote, bra
 		Success: true,
 		Remote:  remote,
 		Branch:  branch,
+	}, nil
+}
+
+func (m *mockBackend) GitBranch(ctx context.Context, sessionID string, branch string, create bool) (*GitBranchResult, error) {
+	m.lastSessionID = sessionID
+	if m.gitBranchErr != nil {
+		return nil, m.gitBranchErr
+	}
+	if m.gitBranchResult != nil {
+		return m.gitBranchResult, nil
+	}
+	return &GitBranchResult{
+		Success:        true,
+		Branch:         branch,
+		Created:        create,
+		SwitchedTo:     true,
+		PreviousBranch: "main",
 	}, nil
 }
 
@@ -334,8 +353,8 @@ func TestToolFactory_CreateAllTools(t *testing.T) {
 	factory := NewToolFactory(mock)
 	tools := factory.CreateAllTools()
 
-	if len(tools) != 5 {
-		t.Errorf("CreateAllTools() returned %d tools, want 5", len(tools))
+	if len(tools) != 6 {
+		t.Errorf("CreateAllTools() returned %d tools, want 6", len(tools))
 	}
 
 	names := make(map[string]bool)
@@ -343,7 +362,7 @@ func TestToolFactory_CreateAllTools(t *testing.T) {
 		names[tool.Name()] = true
 	}
 
-	expected := []string{"coding_open", "code", "coding_close", "coding_commit", "coding_push"}
+	expected := []string{"coding_open", "code", "coding_close", "coding_commit", "coding_push", "coding_branch"}
 	for _, name := range expected {
 		if !names[name] {
 			t.Errorf("missing tool: %s", name)
