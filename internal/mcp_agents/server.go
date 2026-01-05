@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"station/internal/auth"
 	"station/internal/auth/oauth"
@@ -276,27 +277,100 @@ func (das *DynamicAgentServer) handleExecuteWebhook(w http.ResponseWriter, r *ht
 		return
 	}
 
-	// Execute agent asynchronously
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("PANIC in webhook execution goroutine (Run ID: %d, Agent: %s): %v", agentRun.ID, agent.Name, r)
+				completedAt := time.Now()
+				errorMsg := fmt.Sprintf("panic: %v", r)
+				das.repos.AgentRuns.UpdateCompletionWithMetadata(
+					context.Background(), agentRun.ID, errorMsg, 0, nil, nil, "failed", &completedAt,
+					nil, nil, nil, nil, nil, nil, &errorMsg,
+				)
+			}
+		}()
+
 		ctx := context.Background()
+		startTime := time.Now()
 		metadata := map[string]interface{}{
 			"source":       "webhook",
 			"triggered_by": "webhook",
 			"user_id":      userID,
 		}
 
-		// Merge variables into metadata
 		if req.Variables != nil {
 			for k, v := range req.Variables {
 				metadata[k] = v
 			}
 		}
 
-		_, err := das.agentService.ExecuteAgentWithRunID(ctx, agent.ID, req.Task, agentRun.ID, metadata)
+		result, err := das.agentService.ExecuteAgentWithRunID(ctx, agent.ID, req.Task, agentRun.ID, metadata)
+		completedAt := time.Now()
+		duration := completedAt.Sub(startTime).Seconds()
+
 		if err != nil {
 			log.Printf("Webhook agent execution failed (Run ID: %d, Agent: %s): %v", agentRun.ID, agent.Name, err)
-		} else {
-			log.Printf("Webhook agent execution completed (Run ID: %d, Agent: %s)", agentRun.ID, agent.Name)
+			errorMsg := err.Error()
+			das.repos.AgentRuns.UpdateCompletionWithMetadata(
+				ctx, agentRun.ID, errorMsg, 0, nil, nil, "failed", &completedAt,
+				nil, nil, nil, nil, nil, nil, &errorMsg,
+			)
+			return
+		}
+
+		log.Printf("Webhook agent execution completed (Run ID: %d, Agent: %s)", agentRun.ID, agent.Name)
+
+		var stepsTaken int64
+		var toolCalls, executionSteps *models.JSONArray
+		var inputTokens, outputTokens, totalTokens, toolsUsed *int64
+		var modelName *string
+
+		if result != nil && result.Extra != nil {
+			if st, ok := result.Extra["steps_taken"].(int64); ok {
+				stepsTaken = st
+			} else if st, ok := result.Extra["steps_taken"].(int); ok {
+				stepsTaken = int64(st)
+			}
+
+			if tc, ok := result.Extra["tool_calls"].(*models.JSONArray); ok {
+				toolCalls = tc
+			}
+
+			if es, ok := result.Extra["execution_steps"].(*models.JSONArray); ok {
+				executionSteps = es
+			}
+
+			if tu, ok := result.Extra["token_usage"].(map[string]interface{}); ok {
+				if it, ok := tu["input_tokens"].(int); ok {
+					val := int64(it)
+					inputTokens = &val
+				}
+				if ot, ok := tu["output_tokens"].(int); ok {
+					val := int64(ot)
+					outputTokens = &val
+				}
+				if tt, ok := tu["total_tokens"].(int); ok {
+					val := int64(tt)
+					totalTokens = &val
+				}
+			}
+
+			if mn, ok := result.Extra["model_name"].(string); ok {
+				modelName = &mn
+			}
+
+			if tuCount, ok := result.Extra["tools_used"].(int); ok {
+				val := int64(tuCount)
+				toolsUsed = &val
+			}
+		}
+
+		if err := das.repos.AgentRuns.UpdateCompletionWithMetadata(
+			ctx, agentRun.ID, result.Content, stepsTaken, toolCalls, executionSteps,
+			"completed", &completedAt, inputTokens, outputTokens, totalTokens,
+			&duration, modelName, toolsUsed, nil,
+		); err != nil {
+			log.Printf("Webhook: failed to update run completion (Run ID: %d): %v", agentRun.ID, err)
 		}
 	}()
 
