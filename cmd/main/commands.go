@@ -1511,7 +1511,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	}
 
 	ctx := context.Background()
-	return handlers.HandleDeploy(ctx, envName, target, region, sleepAfter, instanceType, destroy)
+	return handlers.HandleDeploy(ctx, envName, target, region, sleepAfter, instanceType, destroy, alwaysOn)
 }
 
 // bootstrapGitHubWorkflows creates GitHub Actions workflow files in .github/workflows/

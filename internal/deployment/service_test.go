@@ -77,28 +77,63 @@ func TestGenerateCloudflareTemplate(t *testing.T) {
 }
 
 func TestGenerateFlyTemplate(t *testing.T) {
-	config := DeploymentConfig{
-		EnvironmentName:      "test-env",
-		DockerImage:          "station:test",
-		APIPort:              "8585",
-		MCPPort:              "8586",
-		AIProvider:           "openai",
-		AIModel:              "gpt-4o-mini",
-		FlyRegion:            "ord",
-		EnvironmentVariables: map[string]string{},
-	}
+	t.Run("default auto-stop enabled", func(t *testing.T) {
+		config := DeploymentConfig{
+			EnvironmentName:      "test-env",
+			DockerImage:          "station:test",
+			APIPort:              "8585",
+			MCPPort:              "8586",
+			AIProvider:           "openai",
+			AIModel:              "gpt-4o-mini",
+			FlyRegion:            "ord",
+			FlyAlwaysOn:          false,
+			EnvironmentVariables: map[string]string{},
+		}
 
-	output, err := GenerateDeploymentTemplate("fly", config)
-	if err != nil {
-		t.Fatalf("failed to generate template: %v", err)
-	}
+		output, err := GenerateDeploymentTemplate("fly", config)
+		if err != nil {
+			t.Fatalf("failed to generate template: %v", err)
+		}
 
-	if !strings.Contains(output, `app = "station-test-env"`) {
-		t.Error("expected app name in fly.toml")
-	}
-	if !strings.Contains(output, `primary_region = "ord"`) {
-		t.Error("expected region in fly.toml")
-	}
+		if !strings.Contains(output, `app = "station-test-env"`) {
+			t.Error("expected app name in fly.toml")
+		}
+		if !strings.Contains(output, `primary_region = "ord"`) {
+			t.Error("expected region in fly.toml")
+		}
+		if !strings.Contains(output, `auto_stop_machines = true`) {
+			t.Error("expected auto_stop_machines = true for default mode")
+		}
+		if !strings.Contains(output, `min_machines_running = 0`) {
+			t.Error("expected min_machines_running = 0 for default mode")
+		}
+	})
+
+	t.Run("always-on mode", func(t *testing.T) {
+		config := DeploymentConfig{
+			EnvironmentName:      "test-env",
+			DockerImage:          "station:test",
+			APIPort:              "8585",
+			MCPPort:              "8586",
+			AIProvider:           "openai",
+			AIModel:              "gpt-4o-mini",
+			FlyRegion:            "ord",
+			FlyAlwaysOn:          true,
+			EnvironmentVariables: map[string]string{},
+		}
+
+		output, err := GenerateDeploymentTemplate("fly", config)
+		if err != nil {
+			t.Fatalf("failed to generate template: %v", err)
+		}
+
+		if !strings.Contains(output, `auto_stop_machines = false`) {
+			t.Error("expected auto_stop_machines = false for always-on mode")
+		}
+		if !strings.Contains(output, `min_machines_running = 1`) {
+			t.Error("expected min_machines_running = 1 for always-on mode")
+		}
+	})
 }
 
 func TestUnsupportedProvider(t *testing.T) {

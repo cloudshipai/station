@@ -34,7 +34,7 @@ type EnvironmentConfig struct {
 	Agents    []string
 }
 
-func HandleDeploy(ctx context.Context, envName, target, region, sleepAfter, instanceType string, destroy bool) error {
+func HandleDeploy(ctx context.Context, envName, target, region, sleepAfter, instanceType string, destroy, alwaysOn bool) error {
 	if envName == "" {
 		return fmt.Errorf("environment name is required")
 	}
@@ -86,7 +86,7 @@ func HandleDeploy(ctx context.Context, envName, target, region, sleepAfter, inst
 		if err != nil {
 			return err
 		}
-		return deployToFly(ctx, envName, aiConfig, envConfig, imageName, region)
+		return deployToFly(ctx, envName, aiConfig, envConfig, imageName, region, alwaysOn)
 	case "cloudflare", "cf", "cloudflare-containers":
 		return deployToCloudflare(ctx, envName, aiConfig, envConfig, sleepAfter, instanceType)
 	default:
@@ -250,8 +250,12 @@ func buildDeploymentImage(ctx context.Context, envName string, envConfig *Enviro
 }
 
 // deployToFly deploys the image to Fly.io
-func deployToFly(ctx context.Context, envName string, aiConfig *DeploymentAIConfig, envConfig *EnvironmentConfig, imageName, region string) error {
-	fmt.Printf("🚢 Deploying to Fly.io...\n\n")
+func deployToFly(ctx context.Context, envName string, aiConfig *DeploymentAIConfig, envConfig *EnvironmentConfig, imageName, region string, alwaysOn bool) error {
+	if alwaysOn {
+		fmt.Printf("🚢 Deploying to Fly.io (always-on mode)...\n\n")
+	} else {
+		fmt.Printf("🚢 Deploying to Fly.io (auto-stop enabled)...\n\n")
+	}
 
 	// Check if fly CLI is installed
 	if _, err := exec.LookPath("fly"); err != nil {
@@ -268,6 +272,7 @@ func deployToFly(ctx context.Context, envName string, aiConfig *DeploymentAIConf
 		AIProvider:           aiConfig.Provider,
 		AIModel:              aiConfig.Model,
 		FlyRegion:            region,
+		FlyAlwaysOn:          alwaysOn,
 		EnvironmentVariables: envConfig.Variables,
 	}
 

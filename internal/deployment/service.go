@@ -45,6 +45,7 @@ type DeploymentConfig struct {
 	TelemetryEnabled     string
 	OpenAIAPIKey         string
 	FlyRegion            string
+	FlyAlwaysOn          bool
 	EnvironmentVariables map[string]string
 
 	CloudflareInstanceType string
