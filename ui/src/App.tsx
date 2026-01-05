@@ -37,6 +37,7 @@ import VersionStatus from './components/VersionStatus';
 import { RunsPage as RunsPageComponent } from './components/runs/RunsPage';
 import { SyncModal } from './components/sync/SyncModal';
 import { SyncPage } from './components/sync/SyncPage';
+import { ConfigPage } from './components/config/ConfigPage';
 import { AddServerModal } from './components/modals/AddServerModal';
 import { BundleEnvironmentModal } from './components/modals/BundleEnvironmentModal';
 import BuildImageModal from './components/modals/BuildImageModal';
@@ -4183,6 +4184,7 @@ const AppRoutes = () => {
     <Routes>
       {/* Sync routes WITHOUT Layout wrapper - standalone browser experience */}
       <Route path="/sync/:env" element={<SyncPage />} />
+      <Route path="/config/edit" element={<ConfigPage />} />
       
       {/* All other routes WITH Layout wrapper */}
       <Route path="/" element={<LayoutWrapper><AgentsPage /></LayoutWrapper>} />
