@@ -4,11 +4,7 @@ import type { Hooks, Plugin, PluginInput } from "@opencode-ai/plugin";
 import { tool } from "@opencode-ai/plugin";
 import { NATSClient } from "./nats/client";
 import { TaskHandler } from "./nats/handler";
-import {
-	DEFAULT_CONFIG,
-	type PluginConfig,
-	type SessionState,
-} from "./types";
+import { DEFAULT_CONFIG, type PluginConfig, type SessionState } from "./types";
 
 export type {
 	CodingTask,
@@ -42,12 +38,7 @@ const plugin: Plugin = async (input: PluginInput): Promise<Hooks> => {
 				return;
 			}
 
-			globalTaskHandler = new TaskHandler(
-				client,
-				globalNats,
-				shell,
-				config,
-			);
+			globalTaskHandler = new TaskHandler(client, globalNats, shell, config);
 
 			await globalNats.subscribe(config.subjects.task, async (data) => {
 				await globalTaskHandler?.handle(data);
