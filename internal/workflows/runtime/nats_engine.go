@@ -274,20 +274,50 @@ func NewEmbeddedEngineForTests() (*NATSEngine, error) {
 	serverOpts.Port = -1
 	serverOpts.JetStream = true
 	srv := natsserver_test.RunServer(&serverOpts)
-	opts := Options{
-		Enabled:        true,
-		URL:            srv.ClientURL(),
-		Stream:         "WORKFLOW_EVENTS",
-		SubjectPrefix:  "workflow",
-		ConsumerName:   "test-consumer",
-		Embedded:       false, // Server already started above, don't start another
-		WorkerPoolSize: 10,
-	}
-	engine, err := NewEngine(opts)
+
+	conn, err := nats.Connect(srv.ClientURL())
 	if err != nil {
 		srv.Shutdown()
-		return nil, err
+		return nil, fmt.Errorf("failed to connect: %w", err)
 	}
-	engine.server = srv
+
+	js, err := conn.JetStream()
+	if err != nil {
+		conn.Close()
+		srv.Shutdown()
+		return nil, fmt.Errorf("failed to get jetstream: %w", err)
+	}
+
+	streamName := "WORKFLOW_EVENTS"
+	subjectPrefix := "workflow"
+
+	_ = js.DeleteStream(streamName)
+
+	_, err = js.AddStream(&nats.StreamConfig{
+		Name:     streamName,
+		Subjects: []string{fmt.Sprintf("%s.>", subjectPrefix)},
+		Storage:  nats.MemoryStorage,
+	})
+	if err != nil {
+		conn.Close()
+		srv.Shutdown()
+		return nil, fmt.Errorf("failed to create stream: %w", err)
+	}
+
+	engine := &NATSEngine{
+		opts: Options{
+			Enabled:        true,
+			URL:            srv.ClientURL(),
+			Stream:         streamName,
+			SubjectPrefix:  subjectPrefix,
+			ConsumerName:   "test-consumer",
+			Embedded:       true,
+			WorkerPoolSize: 10,
+		},
+		server: srv,
+		conn:   conn,
+		js:     js,
+	}
+
 	return engine, nil
 }
