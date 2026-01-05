@@ -192,8 +192,12 @@ func init() {
 	syncCmd.Flags().BoolP("verbose", "v", false, "Verbose output showing all operations")
 
 	// Deploy command flags
-	deployCmd.Flags().String("target", "fly", "Deployment target (fly)")
+	deployCmd.Flags().String("target", "fly", "Deployment target (fly, cloudflare)")
 	deployCmd.Flags().String("region", "ord", "Deployment region (e.g., ord, syd, fra)")
+	deployCmd.Flags().String("sleep-after", "10m", "Cloudflare: sleep container after inactivity (e.g., 10m, 1h, 24h)")
+	deployCmd.Flags().Bool("always-on", false, "Cloudflare: keep container always running (sets sleep-after to 168h)")
+	deployCmd.Flags().String("instance-type", "basic", "Cloudflare: container size (lite, basic, standard-1 to standard-4)")
+	deployCmd.Flags().Bool("destroy", false, "Tear down the deployment instead of deploying")
 
 	mcpStatusCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
 	mcpStatusCmd.Flags().String("environment", "default", "Environment to check status for (default shows all)")
