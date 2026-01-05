@@ -192,8 +192,13 @@ CREATE TABLE agent_runs (
     model_name TEXT DEFAULT NULL,
     tools_used INTEGER DEFAULT NULL,
     debug_logs TEXT, -- JSON array of debug log entries for real-time progress tracking
-    error TEXT DEFAULT NULL, -- Error message when execution fails
-    parent_run_id INTEGER DEFAULT NULL, -- Track parent run for hierarchical agent execution
+    error TEXT DEFAULT NULL,
+    parent_run_id INTEGER DEFAULT NULL,
+    orchestrator_run_id TEXT DEFAULT NULL,
+    parent_orchestrator_run_id TEXT DEFAULT NULL,
+    originating_station_id TEXT DEFAULT NULL,
+    trace_id TEXT DEFAULT NULL,
+    work_id TEXT DEFAULT NULL,
     FOREIGN KEY (agent_id) REFERENCES agents (id),
     FOREIGN KEY (user_id) REFERENCES users (id)
 );
