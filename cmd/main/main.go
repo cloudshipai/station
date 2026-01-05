@@ -86,6 +86,7 @@ func init() {
 	mcpCmd.AddCommand(mcpListCmd)
 	mcpCmd.AddCommand(mcpToolsCmd)
 	mcpCmd.AddCommand(mcpAddCmd)
+	mcpCmd.AddCommand(mcpAddOpenapiCmd)
 	mcpCmd.AddCommand(mcpDeleteCmd)
 	mcpCmd.AddCommand(mcpStatusCmd)
 
@@ -159,6 +160,10 @@ func init() {
 	mcpAddCmd.Flags().StringP("description", "d", "", "Description of the MCP server")
 	mcpAddCmd.Flags().BoolP("interactive", "i", false, "Open editor for interactive configuration")
 	mcpAddCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
+
+	mcpAddOpenapiCmd.Flags().StringP("environment", "e", "default", "Environment to add the OpenAPI spec to")
+	mcpAddOpenapiCmd.Flags().StringP("url", "u", "", "URL to download OpenAPI spec from")
+	mcpAddOpenapiCmd.Flags().StringP("file", "f", "", "Local file path to OpenAPI spec")
 
 	// MCP command flags
 	mcpListCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")

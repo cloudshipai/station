@@ -287,20 +287,25 @@ func runMCPDelete(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("environment '%s' not found: %w", environmentName, err)
 	}
 
-	// Get the config to delete
-	mcpConfig, err := repos.FileMCPConfigs.GetByEnvironmentAndName(env.ID, configName)
+	_, err = repos.FileMCPConfigs.GetByEnvironmentAndName(env.ID, configName)
 	if err != nil {
 		return fmt.Errorf("MCP config '%s' not found in environment '%s': %w", configName, environmentName, err)
 	}
 
-	// Delete the file-based config
-	err = repos.FileMCPConfigs.Delete(mcpConfig.ID)
-	if err != nil {
-		return fmt.Errorf("failed to delete MCP config: %w", err)
+	mcpService := services.NewMCPServerManagementService(repos)
+	result := mcpService.DeleteMCPServerFromEnvironment(environmentName, configName)
+
+	if !result.Success {
+		return fmt.Errorf("failed to delete MCP config: %s", result.Message)
 	}
 
 	fmt.Printf("✅ Deleted MCP config '%s' from environment '%s'\n", configName, environmentName)
-	fmt.Printf("Note: You may want to run 'stn sync' to update tool discovery\n")
+	if result.FilesDeleted {
+		fmt.Printf("   - Config file deleted\n")
+	}
+	if result.DatabaseDeleted {
+		fmt.Printf("   - Database records cleaned up\n")
+	}
 
 	return nil
 }
@@ -406,6 +411,77 @@ func runMCPAddNonInteractive(cmd *cobra.Command, serverName string) error {
 	styles := getCLIStyles(nil)
 	fmt.Println(styles.Success.Render(fmt.Sprintf("✅ Created MCP server config: %s", configPath)))
 	fmt.Println(styles.Info.Render(fmt.Sprintf("   Run 'stn sync %s' to activate (use --browser for secure variable input)", envName)))
+
+	return nil
+}
+
+func runMCPAddOpenapi(cmd *cobra.Command, args []string) error {
+	name := args[0]
+	envName, _ := cmd.Flags().GetString("environment")
+	url, _ := cmd.Flags().GetString("url")
+	filePath, _ := cmd.Flags().GetString("file")
+
+	if url == "" && filePath == "" {
+		return fmt.Errorf("either --url or --file is required")
+	}
+	if url != "" && filePath != "" {
+		return fmt.Errorf("cannot specify both --url and --file")
+	}
+
+	envDir := config.GetEnvironmentDir(envName)
+	if err := os.MkdirAll(envDir, 0755); err != nil {
+		return fmt.Errorf("failed to create environment directory: %w", err)
+	}
+
+	destPath := filepath.Join(envDir, name+".openapi.json")
+
+	var specData []byte
+	if url != "" {
+		resp, err := http.Get(url)
+		if err != nil {
+			return fmt.Errorf("failed to download OpenAPI spec: %w", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("failed to download OpenAPI spec: HTTP %d", resp.StatusCode)
+		}
+
+		specData, err = io.ReadAll(resp.Body)
+		if err != nil {
+			return fmt.Errorf("failed to read response: %w", err)
+		}
+	} else {
+		var err error
+		specData, err = os.ReadFile(filePath)
+		if err != nil {
+			return fmt.Errorf("failed to read file: %w", err)
+		}
+	}
+
+	var spec map[string]interface{}
+	if err := json.Unmarshal(specData, &spec); err != nil {
+		return fmt.Errorf("invalid JSON in OpenAPI spec: %w", err)
+	}
+
+	if _, ok := spec["openapi"]; !ok {
+		if _, ok := spec["swagger"]; !ok {
+			return fmt.Errorf("file does not appear to be an OpenAPI spec (missing 'openapi' or 'swagger' field)")
+		}
+	}
+
+	formatted, err := json.MarshalIndent(spec, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to format spec: %w", err)
+	}
+
+	if err := os.WriteFile(destPath, formatted, 0644); err != nil {
+		return fmt.Errorf("failed to write spec file: %w", err)
+	}
+
+	styles := getCLIStyles(nil)
+	fmt.Println(styles.Success.Render(fmt.Sprintf("✅ Added OpenAPI spec: %s", destPath)))
+	fmt.Println(styles.Info.Render(fmt.Sprintf("   Run 'stn sync %s' to convert to MCP tools", envName)))
 
 	return nil
 }

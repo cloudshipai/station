@@ -57,26 +57,100 @@ Use --ship flag to bootstrap with ship CLI MCP integration for filesystem access
 		Short: "Add an MCP server configuration",
 		Long: `Add an MCP server configuration to an environment.
 
-By default, uses CLI flags for non-interactive scripting. Use -i for interactive editor mode.
+OVERVIEW:
+  Creates a JSON configuration file for an MCP (Model Context Protocol) server.
+  The server becomes available to AI agents after running 'stn sync'.
 
-The configuration will be saved as <server-name>.json in your environment directory.
-Run 'stn sync' to activate the server (use --browser for secure variable input).
+MODES:
+  Non-interactive (default): Pass all configuration via flags. Best for scripting and AI agents.
+  Interactive (-i):          Opens your $EDITOR to edit a template. Best for complex configs.
 
-Examples:
-  # Non-interactive (default) - great for scripting
-  stn mcp add filesystem --command npx --args "-y,@modelcontextprotocol/server-filesystem,/tmp"
-  stn mcp add github --command npx --args "-y,@modelcontextprotocol/server-github" --env "GITHUB_TOKEN={{.GITHUB_TOKEN}}"
+OUTPUT:
+  Creates: ~/.config/station/environments/<env>/<server-name>.json
   
-  # With description
-  stn mcp add slack --command npx --args "-y,@anthropic/mcp-server-slack" --description "Slack integration"
+TEMPLATE VARIABLES:
+  Use {{.VAR_NAME}} syntax in --env values for secrets that should be prompted at sync time.
+  Example: --env "API_KEY={{.MY_API_KEY}}"
   
-  # Interactive mode - opens editor
-  stn mcp add myserver -i
-  
-  # Different environment
-  stn mcp add database --env prod --command docker --args "run,--rm,postgres-mcp"`,
+  When you run 'stn sync --browser', users enter these values securely in a browser form.
+  This keeps secrets OUT of CLI history and AI agent context.
+
+COMMON MCP SERVERS:
+  Filesystem:  --command npx --args "-y,@modelcontextprotocol/server-filesystem,/path"
+  GitHub:      --command npx --args "-y,@modelcontextprotocol/server-github" --env "GITHUB_TOKEN={{.GITHUB_TOKEN}}"
+  Slack:       --command npx --args "-y,@anthropic/mcp-server-slack" --env "SLACK_TOKEN={{.SLACK_TOKEN}}"
+  PostgreSQL:  --command npx --args "-y,@modelcontextprotocol/server-postgres" --env "DATABASE_URL={{.DATABASE_URL}}"
+  Playwright:  --command npx --args "-y,@anthropic/mcp-server-playwright"
+
+WORKFLOW:
+  1. Add server:    stn mcp add <name> --command <cmd> --args <args>
+  2. Sync env:      stn sync <env> --browser   # Enter any template variables
+  3. Use tools:     AI agents can now use the MCP server's tools
+
+EXAMPLES:
+  # Add filesystem MCP server (no secrets needed)
+  stn mcp add filesystem --command npx --args "-y,@modelcontextprotocol/server-filesystem,/home/user/projects"
+
+  # Add GitHub MCP server with token template (prompted at sync)
+  stn mcp add github \
+    --command npx \
+    --args "-y,@modelcontextprotocol/server-github" \
+    --env "GITHUB_TOKEN={{.GITHUB_TOKEN}}" \
+    --description "GitHub API integration for repo management"
+
+  # Add to production environment
+  stn mcp add database --env prod \
+    --command npx \
+    --args "-y,@modelcontextprotocol/server-postgres" \
+    --env "DATABASE_URL={{.PROD_DATABASE_URL}}"
+
+  # Interactive mode - opens editor with template
+  stn mcp add complex-server -i
+
+  # After adding, sync to activate (browser mode for secrets)
+  stn sync default --browser`,
 		Args: cobra.ExactArgs(1),
 		RunE: runMCPAdd,
+	}
+
+	mcpAddOpenapiCmd = &cobra.Command{
+		Use:   "add-openapi <name>",
+		Short: "Add an OpenAPI spec as an MCP server",
+		Long: `Add an OpenAPI specification file as an MCP server to an environment.
+
+OVERVIEW:
+  Downloads or copies an OpenAPI spec and creates an MCP server that exposes
+  each API operation as a tool. This is the easiest way to add API integrations.
+
+SOURCES:
+  --url <url>     Download OpenAPI spec from a URL
+  --file <path>   Copy OpenAPI spec from a local file
+
+OUTPUT:
+  Creates: ~/.config/station/environments/<env>/<name>.openapi.json
+  
+  After running 'stn sync', each API operation becomes an available tool.
+
+TEMPLATE VARIABLES:
+  OpenAPI specs can use Go template variables for secrets:
+  Example in spec: "Authorization": "Bearer {{.API_KEY}}"
+  
+  Set variables in ~/.config/station/environments/<env>/variables.yml
+
+EXAMPLES:
+  # Add from URL
+  stn mcp add-openapi petstore --url https://petstore3.swagger.io/api/v3/openapi.json
+
+  # Add from local file
+  stn mcp add-openapi myapi --file ./api-spec.json
+
+  # Add to specific environment
+  stn mcp add-openapi github-api --url https://raw.githubusercontent.com/.../openapi.json -e production
+
+  # After adding, sync to discover tools
+  stn sync default`,
+		Args: cobra.ExactArgs(1),
+		RunE: runMCPAddOpenapi,
 	}
 
 	blastoffCmd = &cobra.Command{
@@ -253,17 +327,66 @@ Perfect for getting started quickly with a fully configured Station instance.`,
 		RunE:  runSettingsSet,
 	}
 
-	// Top-level sync command for all configurations
 	syncCmd = &cobra.Command{
 		Use:   "sync [environment]",
 		Short: "Sync all file-based configurations",
 		Long: `Declaratively synchronize all file-based configurations to the database.
-This includes agents (.prompt files), MCP configurations, and environment settings.`,
-		Example: `  stn sync                    # Sync all environments (interactive)
-  stn sync production         # Sync specific environment  
-  stn sync --dry-run          # Show what would change
-  stn sync --validate         # Validate configurations only
-  stn sync --no-interactive   # Skip prompting for missing variables`,
+
+OVERVIEW:
+  Syncs agents (.prompt files), MCP server configurations (.json), and environment
+  settings from the filesystem to the Station database. After sync, AI agents can
+  use all configured MCP tools.
+
+WHAT GETS SYNCED:
+  ~/.config/station/environments/<env>/
+  ├── *.prompt          → Agent definitions (system prompts, tools, schemas)
+  ├── *.json            → MCP server configurations
+  └── variables.yml     → Template variable values (created by sync)
+
+TEMPLATE VARIABLES:
+  MCP configs can use {{.VAR_NAME}} placeholders for secrets/config values.
+  During sync, you'll be prompted to enter values for any missing variables.
+  
+  --browser MODE (RECOMMENDED FOR AI AGENTS):
+    Opens a browser window where users enter secrets directly.
+    Secrets NEVER appear in terminal output or AI agent context.
+    The CLI polls for completion and continues automatically.
+
+  --interactive MODE (default):
+    Prompts for variables in the terminal.
+    Use --no-interactive to fail on missing variables instead.
+
+SECURITY:
+  The --browser flag is designed for AI agents (Claude, GPT, etc.) that should
+  NOT see secrets in their context. The user enters secrets in their browser,
+  keeping them out of the AI conversation entirely.
+
+WORKFLOW:
+  1. Add MCP servers:  stn mcp add github --command npx --args "..." --env "TOKEN={{.TOKEN}}"
+  2. Sync with vars:   stn sync default --browser   # User enters TOKEN in browser
+  3. Tools available:  AI agents can now call GitHub MCP tools
+
+EXAMPLES:
+  # Sync default environment (prompts in terminal for missing vars)
+  stn sync default
+
+  # Sync with browser-based variable input (RECOMMENDED for AI agents)
+  stn sync default --browser
+
+  # Sync production environment
+  stn sync production --browser
+
+  # Preview what would change without making changes
+  stn sync default --dry-run
+
+  # Validate configurations only (no database writes)
+  stn sync default --validate
+
+  # Fail if any variables are missing (for CI/CD)
+  stn sync default --no-interactive
+
+  # Verbose output showing all operations
+  stn sync default -v`,
 		RunE: runSync,
 	}
 

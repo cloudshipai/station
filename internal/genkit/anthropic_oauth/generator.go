@@ -204,9 +204,11 @@ func (g *Generator) convertTools(tools []*ai.ToolDefinition) []anthropic.ToolUni
 			Description: anthropic.String(tool.Description),
 		}
 
-		if tool.InputSchema != nil {
-			schemaParam := anthropic.ToolInputSchemaParam{}
+		schemaParam := anthropic.ToolInputSchemaParam{
+			Properties: make(map[string]interface{}),
+		}
 
+		if tool.InputSchema != nil {
 			if props, ok := tool.InputSchema["properties"]; ok {
 				schemaParam.Properties = props
 			}
@@ -219,9 +221,9 @@ func (g *Generator) convertTools(tools []*ai.ToolDefinition) []anthropic.ToolUni
 					}
 				}
 			}
-
-			toolParam.InputSchema = schemaParam
 		}
+
+		toolParam.InputSchema = schemaParam
 
 		anthropicTools = append(anthropicTools, anthropic.ToolUnionParam{
 			OfTool: &toolParam,
