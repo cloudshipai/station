@@ -18,14 +18,16 @@ import (
 
 // ServerConfig represents the configuration for the OpenAPI MCP server
 type ServerConfig struct {
-	ConfigPath string `json:"config_path,omitempty"`
-	ConfigData string `json:"config_data,omitempty"`
+	ConfigPath string            `json:"config_path,omitempty"`
+	ConfigData string            `json:"config_data,omitempty"`
+	Variables  map[string]string `json:"variables,omitempty"` // Template variables for security lookups
 }
 
 // Server implements an MCP server that executes OpenAPI-based tools
 type Server struct {
 	config     *models.MCPConfig
 	httpClient *http.Client
+	variables  map[string]string // Variables for security credential lookups
 }
 
 // NewServer creates a new OpenAPI MCP server runtime
@@ -34,9 +36,9 @@ func NewServer(serverConfig ServerConfig) *Server {
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
+		variables: serverConfig.Variables,
 	}
 
-	// Load configuration
 	if serverConfig.ConfigData != "" {
 		_ = server.LoadConfigFromString(serverConfig.ConfigData)
 	} else if serverConfig.ConfigPath != "" {
@@ -429,16 +431,15 @@ func (s *Server) applySecurity(req *http.Request, security *models.ToolSecurityR
 		return fmt.Errorf("security scheme not found: %s", security.ID)
 	}
 
-	// Apply based on scheme type
 	switch scheme.Type {
 	case "apiKey":
-		// Get the API key from environment or default
-		apiKey := os.Getenv(fmt.Sprintf("OPENAPI_%s_KEY", strings.ToUpper(scheme.ID)))
+		envKey := fmt.Sprintf("OPENAPI_%s_KEY", strings.ToUpper(scheme.ID))
+		apiKey := s.getVariable(envKey)
 		if apiKey == "" {
 			apiKey = scheme.DefaultCredential
 		}
 		if apiKey == "" {
-			return fmt.Errorf("API key not configured for scheme: %s", scheme.ID)
+			return fmt.Errorf("API key not configured for scheme: %s (set %s in variables.yml or environment)", scheme.ID, envKey)
 		}
 
 		// Apply based on location
@@ -460,23 +461,24 @@ func (s *Server) applySecurity(req *http.Request, security *models.ToolSecurityR
 		}
 
 	case "http":
-		// Handle HTTP auth (basic, bearer)
 		if scheme.Scheme == "bearer" {
-			token := os.Getenv(fmt.Sprintf("OPENAPI_%s_TOKEN", strings.ToUpper(scheme.ID)))
+			envKey := fmt.Sprintf("OPENAPI_%s_TOKEN", strings.ToUpper(scheme.ID))
+			token := s.getVariable(envKey)
 			if token == "" {
 				token = scheme.DefaultCredential
 			}
 			if token == "" {
-				return fmt.Errorf("Bearer token not configured for scheme: %s", scheme.ID)
+				return fmt.Errorf("Bearer token not configured for scheme: %s (set %s in variables.yml or environment)", scheme.ID, envKey)
 			}
 			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 		} else if scheme.Scheme == "basic" {
-			creds := os.Getenv(fmt.Sprintf("OPENAPI_%s_CREDS", strings.ToUpper(scheme.ID)))
+			envKey := fmt.Sprintf("OPENAPI_%s_CREDS", strings.ToUpper(scheme.ID))
+			creds := s.getVariable(envKey)
 			if creds == "" {
 				creds = scheme.DefaultCredential
 			}
 			if creds == "" {
-				return fmt.Errorf("Basic auth credentials not configured for scheme: %s", scheme.ID)
+				return fmt.Errorf("Basic auth credentials not configured for scheme: %s (set %s in variables.yml or environment)", scheme.ID, envKey)
 			}
 			req.Header.Set("Authorization", fmt.Sprintf("Basic %s", creds))
 		}
@@ -486,6 +488,15 @@ func (s *Server) applySecurity(req *http.Request, security *models.ToolSecurityR
 	}
 
 	return nil
+}
+
+func (s *Server) getVariable(key string) string {
+	if s.variables != nil {
+		if val, ok := s.variables[key]; ok && val != "" {
+			return val
+		}
+	}
+	return os.Getenv(key)
 }
 
 // processResponse processes the HTTP response based on the response template

@@ -61,19 +61,19 @@ func runOpenAPIRuntime(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("failed to read OpenAPI spec: %w", err)
 		}
 
-		// Process template variables in the spec
-		processedSpec, err := processTemplateVariables(string(specData), fullPath)
+		variables, processedSpec, err := processTemplateVariablesWithVars(string(specData), fullPath)
 		if err != nil {
 			log.Printf("Warning: Failed to process template variables: %v", err)
 			log.Printf("Continuing with unprocessed spec...")
 			processedSpec = string(specData)
+			variables = make(map[string]string)
 		} else {
 			log.Printf("Successfully processed template variables in OpenAPI spec")
 		}
 
-		// Pass processed spec data to runtime
 		serverConfig = runtime.ServerConfig{
 			ConfigData: processedSpec,
+			Variables:  variables,
 		}
 	} else {
 		// Fallback to inline config from environment (backwards compatibility)
@@ -218,11 +218,7 @@ func runOpenAPIRuntime(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// processTemplateVariables processes Go template variables in the OpenAPI spec
-// It loads variables from the environment's variables.yml and environment variables
-func processTemplateVariables(specContent, specPath string) (string, error) {
-	// Determine environment name from spec path
-	// Path format: environments/{env_name}/some.openapi.json
+func processTemplateVariablesWithVars(specContent, specPath string) (map[string]string, string, error) {
 	envName := "default"
 	if strings.Contains(specPath, "environments/") {
 		parts := strings.Split(specPath, "environments/")
@@ -236,33 +232,31 @@ func processTemplateVariables(specContent, specPath string) (string, error) {
 
 	log.Printf("Loading variables for environment: %s", envName)
 
-	// Load variables from variables.yml
 	variables, err := loadEnvironmentVariables(envName)
 	if err != nil {
 		log.Printf("No variables.yml found for environment %s, using environment variables only", envName)
 		variables = make(map[string]string)
 	}
 
-	// Load environment variables (these override variables.yml)
 	for _, envPair := range os.Environ() {
 		parts := strings.SplitN(envPair, "=", 2)
 		if len(parts) == 2 {
 			key := parts[0]
 			value := parts[1]
-
-			// Skip internal/system environment variables
 			if isSystemEnvVar(key) {
 				continue
 			}
-
 			variables[key] = value
 		}
 	}
 
 	log.Printf("Loaded %d variables for template processing", len(variables))
 
-	// Process the template
-	return renderTemplate(specContent, variables)
+	rendered, err := renderTemplate(specContent, variables)
+	if err != nil {
+		return nil, "", err
+	}
+	return variables, rendered, nil
 }
 
 // loadEnvironmentVariables loads variables from environment's variables.yml
