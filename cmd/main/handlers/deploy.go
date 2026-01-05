@@ -628,6 +628,26 @@ func buildFlySecrets(aiConfig *DeploymentAIConfig, envConfig *EnvironmentConfig)
 		secrets["STN_AI_OAUTH_EXPIRES_AT"] = fmt.Sprintf("%d", aiConfig.OAuthExpiresAt)
 	} else {
 		secrets["STN_AI_API_KEY"] = aiConfig.APIKey
+		// Also set provider-specific env var for backwards compatibility with released images
+		// Released image (v0.23.x) only checks provider-specific env vars for auto-init
+		switch strings.ToLower(aiConfig.Provider) {
+		case "openai":
+			secrets["OPENAI_API_KEY"] = aiConfig.APIKey
+		case "anthropic":
+			secrets["ANTHROPIC_API_KEY"] = aiConfig.APIKey
+		case "google", "gemini":
+			secrets["GOOGLE_API_KEY"] = aiConfig.APIKey
+		case "groq":
+			secrets["GROQ_API_KEY"] = aiConfig.APIKey
+		case "openrouter":
+			secrets["OPENROUTER_API_KEY"] = aiConfig.APIKey
+		case "together":
+			secrets["TOGETHER_API_KEY"] = aiConfig.APIKey
+		case "fireworks":
+			secrets["FIREWORKS_API_KEY"] = aiConfig.APIKey
+		case "ollama":
+			secrets["OLLAMA_BASE_URL"] = "http://localhost:11434"
+		}
 	}
 
 	for k, v := range envConfig.Variables {
