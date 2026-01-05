@@ -72,6 +72,7 @@ type AgentExecutionEngine struct {
 	sessionManager           *SessionManager              // For managing persistent code mode sandbox sessions
 	codingToolFactory        *CodingToolFactory           // For creating AI coding backend tools (OpenCode)
 	notifyToolFactory        *NotifyToolFactory           // For creating notify tool (webhook notifications)
+	workToolFactory          *WorkToolFactory             // For lattice work tools (assign_work, await_work, etc.)
 }
 
 // NewAgentExecutionEngine creates a new agent execution engine
@@ -177,6 +178,13 @@ func (aee *AgentExecutionEngine) SetFileStore(store storage.FileStore) {
 	if aee.unifiedSandboxFactory != nil {
 		aee.unifiedSandboxFactory.SetFileStore(store)
 		logging.Info("File store configured for sandbox file staging")
+	}
+}
+
+func (aee *AgentExecutionEngine) SetWorkToolFactory(factory *WorkToolFactory) {
+	aee.workToolFactory = factory
+	if factory != nil && factory.IsEnabled() {
+		logging.Info("Work tool factory configured for lattice orchestration")
 	}
 }
 
@@ -527,6 +535,15 @@ func (aee *AgentExecutionEngine) ExecuteWithOptions(ctx context.Context, agent *
 			mcpTools = append(mcpTools, tool)
 		}
 		logging.Info("Notify tool enabled for agent %s", agent.Name)
+	}
+
+	latticeEnabled := aee.parseLatticeEnabledFromAgent(agent)
+	if aee.workToolFactory != nil && aee.workToolFactory.ShouldAddTools(latticeEnabled) {
+		workTools := aee.workToolFactory.GetWorkTools()
+		for _, tool := range workTools {
+			mcpTools = append(mcpTools, tool)
+		}
+		logging.Info("Lattice work tools enabled for agent %s (%d tools)", agent.Name, len(workTools))
 	}
 
 	ctx = WithParentRunID(ctx, runID)
@@ -1104,6 +1121,45 @@ type codingFrontmatter struct {
 
 type notifyFrontmatter struct {
 	Notify bool `yaml:"notify"`
+}
+
+type latticeFrontmatter struct {
+	Lattice bool `yaml:"lattice"`
+}
+
+func (aee *AgentExecutionEngine) parseLatticeEnabledFromAgent(agent *models.Agent) bool {
+	if agent == nil {
+		return false
+	}
+
+	env, err := aee.repos.Environments.GetByID(agent.EnvironmentID)
+	if err != nil {
+		return true
+	}
+
+	promptPath := config.GetAgentPromptPath(env.Name, agent.Name)
+
+	content, err := os.ReadFile(promptPath)
+	if err != nil {
+		return true
+	}
+
+	parts := strings.Split(string(content), "---")
+	if len(parts) < 3 {
+		return true
+	}
+
+	yamlContent := strings.TrimSpace(parts[1])
+	if yamlContent == "" {
+		return true
+	}
+
+	var fm latticeFrontmatter
+	if err := yaml.Unmarshal([]byte(yamlContent), &fm); err != nil {
+		return true
+	}
+
+	return fm.Lattice
 }
 
 func (aee *AgentExecutionEngine) parseNotifyEnabledFromAgent(agent *models.Agent) bool {

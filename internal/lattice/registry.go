@@ -15,6 +15,25 @@ const (
 	AgentsBucket   = "lattice-agents"
 )
 
+type AgentNameConflictError struct {
+	AgentName        string
+	ExistingStation  string
+	AttemptedStation string
+}
+
+func (e *AgentNameConflictError) Error() string {
+	return fmt.Sprintf(
+		"agent name '%s' already registered by station '%s', cannot register from '%s'",
+		e.AgentName, e.ExistingStation, e.AttemptedStation,
+	)
+}
+
+type RegistrationResult struct {
+	RegisteredAgents  []string
+	ConflictingAgents []AgentNameConflictError
+	Success           bool
+}
+
 type StationManifest struct {
 	StationID   string         `json:"station_id"`
 	StationName string         `json:"station_name"`
@@ -29,6 +48,9 @@ type AgentInfo struct {
 	Name         string   `json:"name"`
 	Description  string   `json:"description"`
 	Capabilities []string `json:"capabilities"`
+	InputSchema  string   `json:"input_schema,omitempty"`
+	OutputSchema string   `json:"output_schema,omitempty"`
+	Examples     []string `json:"examples,omitempty"`
 }
 
 type WorkflowInfo struct {
@@ -168,6 +190,141 @@ func (r *Registry) RegisterStation(ctx context.Context, manifest StationManifest
 	}
 
 	return nil
+}
+
+func (r *Registry) RegisterStationWithConflictCheck(ctx context.Context, manifest StationManifest) (*RegistrationResult, error) {
+	_, span := r.telemetry.StartRegistrySpan(ctx, "register_with_check", manifest.StationID)
+	var resultErr error
+	defer func() { r.telemetry.EndSpan(span, resultErr) }()
+
+	r.mu.RLock()
+	if !r.initialized {
+		r.mu.RUnlock()
+		resultErr = fmt.Errorf("registry not initialized")
+		return nil, resultErr
+	}
+	stationsKV := r.stationsKV
+	agentsKV := r.agentsKV
+	r.mu.RUnlock()
+
+	conflicts, err := r.findAgentNameConflicts(ctx, manifest)
+	if err != nil {
+		resultErr = err
+		return nil, err
+	}
+
+	result := &RegistrationResult{
+		RegisteredAgents:  []string{},
+		ConflictingAgents: conflicts,
+		Success:           true,
+	}
+
+	conflictNames := make(map[string]bool)
+	for _, c := range conflicts {
+		conflictNames[c.AgentName] = true
+	}
+
+	var agentsToRegister []AgentInfo
+	for _, agent := range manifest.Agents {
+		if conflictNames[agent.Name] {
+			continue
+		}
+		agentsToRegister = append(agentsToRegister, agent)
+		result.RegisteredAgents = append(result.RegisteredAgents, agent.Name)
+	}
+
+	manifestToStore := manifest
+	manifestToStore.Agents = agentsToRegister
+	manifestToStore.LastSeen = time.Now()
+	manifestToStore.Status = StatusOnline
+
+	data, err := json.Marshal(manifestToStore)
+	if err != nil {
+		resultErr = fmt.Errorf("failed to marshal station manifest: %w", err)
+		return nil, resultErr
+	}
+
+	_, err = stationsKV.Put(manifest.StationID, data)
+	if err != nil {
+		resultErr = fmt.Errorf("failed to store station manifest: %w", err)
+		return nil, resultErr
+	}
+
+	for _, agent := range agentsToRegister {
+		agentKey := fmt.Sprintf("%s.%s", manifest.StationID, agent.ID)
+		agentEntry := struct {
+			AgentInfo
+			StationID   string `json:"station_id"`
+			StationName string `json:"station_name"`
+		}{
+			AgentInfo:   agent,
+			StationID:   manifest.StationID,
+			StationName: manifest.StationName,
+		}
+
+		agentData, err := json.Marshal(agentEntry)
+		if err != nil {
+			continue
+		}
+
+		_, err = agentsKV.Put(agentKey, agentData)
+		if err != nil {
+			fmt.Printf("[registry] Warning: failed to index agent %s: %v\n", agent.Name, err)
+		}
+	}
+
+	return result, nil
+}
+
+func (r *Registry) findAgentNameConflicts(ctx context.Context, manifest StationManifest) ([]AgentNameConflictError, error) {
+	stations, err := r.ListStations(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var conflicts []AgentNameConflictError
+
+	for _, agent := range manifest.Agents {
+		for _, existingStation := range stations {
+			if existingStation.StationID == manifest.StationID {
+				continue
+			}
+
+			for _, existingAgent := range existingStation.Agents {
+				if existingAgent.Name == agent.Name {
+					conflicts = append(conflicts, AgentNameConflictError{
+						AgentName:        agent.Name,
+						ExistingStation:  existingStation.StationName,
+						AttemptedStation: manifest.StationName,
+					})
+					break
+				}
+			}
+		}
+	}
+
+	return conflicts, nil
+}
+
+func (r *Registry) CheckAgentNameAvailable(ctx context.Context, agentName, excludeStationID string) (bool, *StationManifest) {
+	stations, err := r.ListStations(ctx)
+	if err != nil {
+		return true, nil
+	}
+
+	for _, station := range stations {
+		if station.StationID == excludeStationID {
+			continue
+		}
+
+		for _, agent := range station.Agents {
+			if agent.Name == agentName {
+				return false, &station
+			}
+		}
+	}
+
+	return true, nil
 }
 
 func (r *Registry) UnregisterStation(ctx context.Context, stationID string) error {

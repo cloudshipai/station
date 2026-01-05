@@ -15,6 +15,12 @@ type AgentExecutor interface {
 	ExecuteAgentByName(ctx context.Context, agentName string, task string) (string, int, error)
 }
 
+type AgentExecutorWithContext interface {
+	AgentExecutor
+	ExecuteAgentByIDWithContext(ctx context.Context, agentID string, task string, orchCtx *OrchestratorContext) (string, int64, int, error)
+	ExecuteAgentByNameWithContext(ctx context.Context, agentName string, task string, orchCtx *OrchestratorContext) (string, int64, int, error)
+}
+
 type Hook struct {
 	client    NATSClient
 	executor  AgentExecutor
@@ -86,22 +92,49 @@ func (h *Hook) executeWork(assignment *WorkAssignment, replySubject string) {
 	startTime := time.Now()
 	var result string
 	var toolCalls int
+	var localRunID int64
 	var execErr error
 
-	if assignment.AgentID != "" {
-		result, toolCalls, execErr = h.executor.ExecuteAgentByID(h.ctx, assignment.AgentID, assignment.Task)
-	} else if assignment.AgentName != "" {
-		result, toolCalls, execErr = h.executor.ExecuteAgentByName(h.ctx, assignment.AgentName, assignment.Task)
+	orchCtx := &OrchestratorContext{
+		RunID:              assignment.OrchestratorRunID,
+		ParentRunID:        assignment.ParentWorkID,
+		OriginatingStation: h.stationID,
+		TraceID:            assignment.TraceID,
+		WorkID:             assignment.WorkID,
+	}
+
+	if executorWithCtx, ok := h.executor.(AgentExecutorWithContext); ok {
+		if assignment.AgentID != "" {
+			result, localRunID, toolCalls, execErr = executorWithCtx.ExecuteAgentByIDWithContext(h.ctx, assignment.AgentID, assignment.Task, orchCtx)
+		} else if assignment.AgentName != "" {
+			result, localRunID, toolCalls, execErr = executorWithCtx.ExecuteAgentByNameWithContext(h.ctx, assignment.AgentName, assignment.Task, orchCtx)
+		} else {
+			h.sendResponse(replySubject, &WorkResponse{
+				WorkID:            assignment.WorkID,
+				OrchestratorRunID: assignment.OrchestratorRunID,
+				Type:              MsgWorkFailed,
+				Error:             "no agent_id or agent_name specified",
+				StationID:         h.stationID,
+				Timestamp:         time.Now(),
+			})
+			return
+		}
 	} else {
-		h.sendResponse(replySubject, &WorkResponse{
-			WorkID:            assignment.WorkID,
-			OrchestratorRunID: assignment.OrchestratorRunID,
-			Type:              MsgWorkFailed,
-			Error:             "no agent_id or agent_name specified",
-			StationID:         h.stationID,
-			Timestamp:         time.Now(),
-		})
-		return
+		if assignment.AgentID != "" {
+			result, toolCalls, execErr = h.executor.ExecuteAgentByID(h.ctx, assignment.AgentID, assignment.Task)
+		} else if assignment.AgentName != "" {
+			result, toolCalls, execErr = h.executor.ExecuteAgentByName(h.ctx, assignment.AgentName, assignment.Task)
+		} else {
+			h.sendResponse(replySubject, &WorkResponse{
+				WorkID:            assignment.WorkID,
+				OrchestratorRunID: assignment.OrchestratorRunID,
+				Type:              MsgWorkFailed,
+				Error:             "no agent_id or agent_name specified",
+				StationID:         h.stationID,
+				Timestamp:         time.Now(),
+			})
+			return
+		}
 	}
 
 	duration := time.Since(startTime)
@@ -110,6 +143,7 @@ func (h *Hook) executeWork(assignment *WorkAssignment, replySubject string) {
 		WorkID:            assignment.WorkID,
 		OrchestratorRunID: assignment.OrchestratorRunID,
 		StationID:         h.stationID,
+		LocalRunID:        localRunID,
 		DurationMs:        float64(duration.Milliseconds()),
 		ToolCalls:         toolCalls,
 		Timestamp:         time.Now(),
@@ -167,12 +201,12 @@ func (h *Hook) SendProgress(workID string, progressPct int, progressMsg string) 
 	return h.client.Publish(SubjectWorkResponse(workID), data)
 }
 
-func (h *Hook) Escalate(workID, reason string, context map[string]string) error {
+func (h *Hook) Escalate(workID, reason string, ctx map[string]string) error {
 	response := &WorkResponse{
 		WorkID:            workID,
 		Type:              MsgWorkEscalate,
 		EscalationReason:  reason,
-		EscalationContext: context,
+		EscalationContext: ctx,
 		StationID:         h.stationID,
 		Timestamp:         time.Now(),
 	}

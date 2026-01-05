@@ -46,11 +46,68 @@ Orchestrator: # Receives results asynchronously, continues coordination
   - `internal/lattice/work/integration_test.go` - E2E tests (single/multi-station, parallel, timeout, progress)
   - Hook wired into `stn serve` via `cmd/main/server.go`
 
+### Completed (Phase 5C)
+- [x] **Phase 5C**: Distributed Work State via JetStream KV
+  - `internal/lattice/work/store.go` - WorkStore with JetStream KV backend
+  - `internal/lattice/work/store_test.go` - 11 unit tests (all passing)
+  - Key schema: `work.{id}`, `station.{id}.active`, `run.{id}`
+  - Operations: Assign, UpdateStatus, Get, GetHistory, Watch, WatchAll
+  - Indexes for active work per station and work per orchestrator run
+  - Integrated with Dispatcher via `WithWorkStore()` option
+
+### Completed (Phase 5D)
+- [x] **Phase 5D**: Lattice Dashboard
+  - `internal/lattice/work/dashboard.go` - Bubbletea TUI dashboard
+  - `internal/lattice/work/dashboard_test.go` - 10 tests including E2E (all passing)
+  - `cmd/main/lattice_commands.go` - `stn lattice dashboard` command
+  - Real-time work tracking via JetStream KV WatchAll
+  - Active work display with elapsed time
+  - Recent completions with duration and status
+
+### Completed (Phase 5A.1)
+- [x] **Phase 5A.1**: Agent Discovery & Schema Awareness
+  - `internal/lattice/agent_discovery.go` - AgentDiscovery service
+  - `internal/lattice/agent_discovery_test.go` - 13 tests (all passing)
+  - Extended `AgentInfo` with `InputSchema`, `OutputSchema`, `Examples` fields
+  - CLI: `stn lattice agents --discover`, `--capability`, `--schema <name>`
+  - Discovery methods: `ListAvailableAgents()`, `GetAgentSchema()`, `BuildAssignWorkDescription()`
+
+### Completed (Phase 5A.2)
+- [x] **Phase 5A.2**: Unique Agent Names in Lattice
+  - `internal/lattice/registry.go` - `AgentNameConflictError`, `RegistrationResult`, `RegisterStationWithConflictCheck()`, `findAgentNameConflicts()`, `CheckAgentNameAvailable()`
+  - `internal/lattice/registry_conflict_test.go` - 11 tests (all passing)
+  - `internal/lattice/presence.go` - Updated `subscribeToPresence()` and `UpdateManifest()` with conflict warnings
+  - CLI feedback: Warns on agent name conflicts with existing lattice agents
+  - Graceful degradation: Conflicting agents excluded from lattice, non-conflicting agents registered
+
+### Completed (Phase 5B)
+- [x] **Phase 5B**: Distributed Run Tracking with UUID
+  - `internal/lattice/work/context.go` - OrchestratorContext with UUID generation
+  - `internal/lattice/work/hook.go` - AgentExecutorWithContext interface, context passing
+  - `internal/lattice/executor_adapter.go` - ExecuteAgentByIDWithContext/ExecuteAgentByNameWithContext
+  - `internal/db/migrations/048_add_orchestrator_run_tracking.sql` - DB schema for tracking
+  - `internal/db/queries/agent_runs.sql` - CreateAgentRunWithOrchestratorContext query
+  - `internal/lattice/work/orchestrator_context_test.go` - 9 tests (6 unit + 3 E2E integration)
+  - Context propagation: Root UUID → Child UUIDs (UUID-N format)
+  - OTEL trace correlation via TraceID field
+  - Work ID linking for distributed run chains
+
+### Completed (Phase 5E.1)
+- [x] **Phase 5E.1**: User-Facing Task Submission (`stn lattice run`)
+  - `cmd/main/lattice_commands.go` - `latticeRunCmd`, `runLatticeRun()`, `findOrchestratorAgent()`
+  - Natural language task submission to the lattice
+  - Auto-detection of orchestrator agents (by name/description keywords)
+  - Progress streaming during execution
+  - Full OrchestratorContext propagation for distributed run tracking
+  - See [CLI Reference: stn lattice run](#cli-reference-stn-lattice-run) below
+
 ### Pending (Phases 5-6)
-- [ ] **Phase 5A.1**: Agent Discovery & Schema Awareness
-- [ ] **Phase 5A.2**: Unique Agent Names in Lattice
-- [ ] **Phase 5B**: Distributed Run Tracking with UUID
-- [ ] **Phase 5C**: Integration & CLI Commands (partially done - Hook wired, needs CLI)
+- [ ] **Phase 5E.2**: Query CLI (work list, work history, runs query)
+- [ ] **Phase 5F**: Workspace Coordination (see `PRD_LATTICE_WORKSPACE_COORDINATION.md`)
+  - Git-based coordination for multi-agent coding workflows
+  - Write locks per branch in JetStream KV
+  - Handoff workflow between agents
+  - Tools: `workspace_status`, `workspace_handoff`, `workspace_await_handoff`
 - [ ] Phase 6: Production hardening and multi-region support
 
 ---
@@ -1467,12 +1524,571 @@ func (e *ExecutorAdapter) ExecuteAgentByID(ctx context.Context, ...) {
 6. Add OTEL trace ID correlation
 7. E2E test: Verify UUID-based run IDs flow through distributed async execution
 
-### Phase 5C: Integration & CLI
+### Phase 5C: Distributed Work State via JetStream KV
+
+Currently, work assignments use core NATS pub/sub (fire-and-forget). This means:
+- Messages lost if no listener
+- No persistence across restarts
+- No audit trail or history
+- State only exists in-memory (`pendingWork` map)
+
+**Solution**: Use JetStream KV as our "distributed beads" - persistent, replicated state that lives with the lattice.
+
+#### Why KV Over SQLite?
+
+| Feature | SQLite (Gastown beads) | JetStream KV (Lattice) |
+|---------|------------------------|------------------------|
+| Distributed | ❌ Local only | ✅ Replicated across cluster |
+| Real-time watch | ❌ Poll | ✅ `kv.Watch()` |
+| Survives node failure | ❌ No | ✅ Yes (replicas) |
+| Cross-station queries | ❌ Need routing | ✅ Single namespace |
+| Lives with mesh | ❌ Separate | ✅ Same NATS cluster |
+| History/versioning | ❌ Manual | ✅ Built-in |
+
+#### Implementation
+
+1. **Create KV Bucket for Work State**
+
+```go
+// internal/lattice/work/store.go
+
+type WorkStore struct {
+    kv nats.KeyValue
+}
+
+func NewWorkStore(js nats.JetStreamContext) (*WorkStore, error) {
+    kv, err := js.CreateKeyValue(&nats.KeyValueConfig{
+        Bucket:   "lattice-work",
+        Replicas: 3,              // Distributed across nodes
+        History:  10,             // Keep last 10 versions
+        TTL:      7 * 24 * time.Hour,
+    })
+    if err != nil {
+        return nil, err
+    }
+    return &WorkStore{kv: kv}, nil
+}
+```
+
+2. **Work Record Schema**
+
+```go
+type WorkRecord struct {
+    // Assignment
+    WorkID            string            `json:"work_id"`
+    OrchestratorRunID string            `json:"orchestrator_run_id"`
+    ParentWorkID      string            `json:"parent_work_id,omitempty"`
+    SourceStation     string            `json:"source_station"`
+    TargetStation     string            `json:"target_station"`
+    AgentName         string            `json:"agent_name"`
+    Task              string            `json:"task"`
+    Context           map[string]string `json:"context,omitempty"`
+    
+    // State
+    Status      string    `json:"status"` // ASSIGNED, ACCEPTED, COMPLETE, FAILED, ESCALATED
+    AssignedAt  time.Time `json:"assigned_at"`
+    AcceptedAt  time.Time `json:"accepted_at,omitempty"`
+    CompletedAt time.Time `json:"completed_at,omitempty"`
+    
+    // Result
+    Result     string  `json:"result,omitempty"`
+    Error      string  `json:"error,omitempty"`
+    DurationMs float64 `json:"duration_ms,omitempty"`
+    ToolCalls  int     `json:"tool_calls,omitempty"`
+    
+    // Trace
+    TraceID string `json:"trace_id,omitempty"`
+    SpanID  string `json:"span_id,omitempty"`
+}
+```
+
+3. **KV Key Schema**
+
+| Key Pattern | Value | Purpose |
+|-------------|-------|---------|
+| `work:{work_id}` | Full WorkRecord JSON | Single source of truth |
+| `station:{id}:active` | `[]string` of work_ids | What's running on this station |
+| `run:{orchestrator_run_id}` | `[]string` of work_ids | All work spawned by orchestrator |
+
+4. **Store Operations**
+
+```go
+func (s *WorkStore) Assign(record *WorkRecord) error {
+    record.Status = "ASSIGNED"
+    record.AssignedAt = time.Now()
+    data, _ := json.Marshal(record)
+    _, err := s.kv.Put("work:"+record.WorkID, data)
+    return err
+}
+
+func (s *WorkStore) UpdateStatus(workID, status string, result *WorkResult) error {
+    entry, _ := s.kv.Get("work:" + workID)
+    var record WorkRecord
+    json.Unmarshal(entry.Value(), &record)
+    
+    record.Status = status
+    if result != nil {
+        record.Result = result.Result
+        record.Error = result.Error
+        record.DurationMs = result.DurationMs
+        record.CompletedAt = time.Now()
+    }
+    
+    data, _ := json.Marshal(record)
+    _, err := s.kv.Update("work:"+workID, data, entry.Revision())
+    return err
+}
+
+func (s *WorkStore) Watch(workID string) (nats.KeyWatcher, error) {
+    return s.kv.Watch("work:" + workID)
+}
+
+func (s *WorkStore) GetHistory(workID string) ([]WorkRecord, error) {
+    history, err := s.kv.History("work:" + workID)
+    if err != nil {
+        return nil, err
+    }
+    
+    var records []WorkRecord
+    for _, entry := range history {
+        var record WorkRecord
+        json.Unmarshal(entry.Value(), &record)
+        records = append(records, record)
+    }
+    return records, nil
+}
+```
+
+5. **Integration with Dispatcher**
+
+```go
+// Updated dispatcher with persistence
+func (d *Dispatcher) AssignWork(ctx context.Context, assignment *WorkAssignment) (string, error) {
+    // ... existing code ...
+    
+    // Persist to KV (distributed state)
+    record := &WorkRecord{
+        WorkID:            assignment.WorkID,
+        OrchestratorRunID: assignment.OrchestratorRunID,
+        SourceStation:     d.stationID,
+        TargetStation:     assignment.TargetStation,
+        AgentName:         assignment.AgentName,
+        Task:              assignment.Task,
+        Status:            "ASSIGNED",
+        AssignedAt:        time.Now(),
+    }
+    if err := d.store.Assign(record); err != nil {
+        return "", fmt.Errorf("failed to persist work assignment: %w", err)
+    }
+    
+    // Publish to NATS (real-time dispatch)
+    if err := d.client.Publish(subject, data); err != nil {
+        return "", err
+    }
+    
+    return assignment.WorkID, nil
+}
+```
+
+6. **Real-time Dashboard via Watch**
+
+```go
+// Watch for all work updates (dashboard backend)
+func (s *WorkStore) WatchAll(ctx context.Context, callback func(WorkRecord)) error {
+    watcher, err := s.kv.Watch("work:*")
+    if err != nil {
+        return err
+    }
+    
+    go func() {
+        for {
+            select {
+            case entry := <-watcher.Updates():
+                if entry == nil {
+                    continue
+                }
+                var record WorkRecord
+                json.Unmarshal(entry.Value(), &record)
+                callback(record)
+            case <-ctx.Done():
+                watcher.Stop()
+                return
+            }
+        }
+    }()
+    
+    return nil
+}
+```
+
+#### Configuration
+
+```yaml
+# config.yaml
+lattice:
+  work:
+    persistence:
+      enabled: true
+      replicas: 3           # KV replication factor
+      history: 10           # Versions to keep per key
+      ttl: 168h             # 7 days retention
+```
+
+#### Benefits
+
+1. **Persistence**: Work state survives station restarts
+2. **Distribution**: Replicated across NATS cluster nodes
+3. **Audit Trail**: Full history via `kv.History()`
+4. **Real-time Updates**: `kv.Watch()` for dashboards
+5. **Single Source of Truth**: All stations see same state
+6. **No Additional Infrastructure**: Uses existing NATS cluster
+
+This is essentially "distributed beads" that lives with the lattice mesh, providing the same durability as Gastown's SQLite-backed beads but with native distribution.
+
+### Phase 5D: Lattice Dashboard
+
+A real-time terminal dashboard showing work across the entire lattice mesh, powered by JetStream KV watches.
+
+#### `stn lattice dashboard`
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  STATION LATTICE DASHBOARD                              ◉ 3 stations online │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  STATIONS                          ACTIVE WORK                              │
+│  ┌─────────────────────────────┐   ┌─────────────────────────────────────┐  │
+│  │ ● orchestrator (local)      │   │ ▶ work-a1b2  VulnScanner      2.3s  │  │
+│  │   agents: 3  work: 1        │   │   └─ "scan production servers"      │  │
+│  │                             │   │                                     │  │
+│  │ ● security-station          │   │ ▶ work-c3d4  NetworkAudit     0.8s  │  │
+│  │   agents: 5  work: 2        │   │   └─ "audit firewall rules"         │  │
+│  │                             │   │                                     │  │
+│  │ ● sre-station               │   │ ▶ work-e5f6  K8sHealthCheck   1.1s  │  │
+│  │   agents: 4  work: 1        │   │   └─ "check pod status"             │  │
+│  └─────────────────────────────┘   └─────────────────────────────────────┘  │
+│                                                                             │
+│  RECENT COMPLETIONS                                                         │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │ ✓ work-x7y8  LogAnalyzer@sre-station         12.4s   2 min ago     │    │
+│  │ ✓ work-z9a0  CVELookup@security-station       3.2s   5 min ago     │    │
+│  │ ✗ work-b1c2  DeployAgent@orchestrator         8.1s   7 min ago     │    │
+│  │   └─ Error: deployment target not reachable                        │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+│                                                                             │
+│  ORCHESTRATOR RUNS                                                          │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │ 550e8400-e29b-41d4-a716-446655440000                    ● active    │    │
+│  │ └─ "Analyze security of infrastructure"                             │    │
+│  │    ├─ work-a1b2 (VulnScanner)      ▶ running                       │    │
+│  │    ├─ work-c3d4 (NetworkAudit)     ▶ running                       │    │
+│  │    └─ work-e5f6 (K8sHealthCheck)   ▶ running                       │    │
+│  │                                                                     │    │
+│  │ 660f9511-f3ac-52e5-b827-557766551111           ✓ completed 3m ago  │    │
+│  │ └─ "Deploy new version to staging"                                  │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+│                                                                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  [q] quit  [r] refresh  [w] work details  [s] station details  [?] help    │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### Implementation
+
+```go
+// internal/lattice/dashboard/dashboard.go
+
+type Dashboard struct {
+    store     *work.WorkStore
+    registry  *Registry
+    presence  *Presence
+    
+    // Real-time state from KV watches
+    stations  map[string]*StationState
+    activeWork map[string]*WorkRecord
+    recentWork []WorkRecord
+    
+    mu sync.RWMutex
+}
+
+func (d *Dashboard) Start(ctx context.Context) error {
+    // Watch all work state changes
+    go d.watchWorkUpdates(ctx)
+    
+    // Watch station presence
+    go d.watchStationPresence(ctx)
+    
+    // Render loop
+    return d.renderLoop(ctx)
+}
+
+func (d *Dashboard) watchWorkUpdates(ctx context.Context) {
+    d.store.WatchAll(ctx, func(record WorkRecord) {
+        d.mu.Lock()
+        defer d.mu.Unlock()
+        
+        switch record.Status {
+        case "ASSIGNED", "ACCEPTED":
+            d.activeWork[record.WorkID] = &record
+        case "COMPLETE", "FAILED", "ESCALATED":
+            delete(d.activeWork, record.WorkID)
+            d.recentWork = prepend(d.recentWork, record)
+            if len(d.recentWork) > 20 {
+                d.recentWork = d.recentWork[:20]
+            }
+        }
+    })
+}
+```
+
+#### Dashboard Features
+
+| Feature | Description |
+|---------|-------------|
+| **Station Overview** | All connected stations with agent count and active work |
+| **Active Work** | Real-time view of currently executing work with elapsed time |
+| **Recent Completions** | Last N completed/failed work items |
+| **Orchestrator Runs** | Hierarchical view of distributed executions |
+| **Work Details** | Drill into specific work item (press `w`) |
+| **Station Details** | See all agents on a station (press `s`) |
+| **Auto-refresh** | Updates in real-time via KV watch |
+
+#### CLI Commands
+
+```bash
+# Launch interactive dashboard
+stn lattice dashboard
+
+# Dashboard with specific refresh rate
+stn lattice dashboard --refresh 1s
+
+# Filter to specific orchestrator run
+stn lattice dashboard --run 550e8400-e29b-41d4-a716-446655440000
+
+# JSON output for external dashboards (non-interactive)
+stn lattice dashboard --json --watch
+```
+
+#### Web Dashboard (Future)
+
+For teams wanting a web UI, the same KV watch can power a WebSocket-based dashboard:
+
+```go
+// internal/api/handlers/lattice_dashboard.go
+
+func (h *LatticeHandler) HandleDashboardWebSocket(w http.ResponseWriter, r *http.Request) {
+    conn, _ := upgrader.Upgrade(w, r, nil)
+    defer conn.Close()
+    
+    ctx := r.Context()
+    h.store.WatchAll(ctx, func(record WorkRecord) {
+        data, _ := json.Marshal(record)
+        conn.WriteMessage(websocket.TextMessage, data)
+    })
+}
+```
+
+This enables:
+- CloudShip web dashboard integration
+- Custom monitoring dashboards
+- Slack/Discord bot updates
+- Grafana live panels
+
+### Phase 5E: Integration & CLI
 1. Combine all features end-to-end
 2. Add CLI command: `stn lattice runs --uuid <id>` to query distributed runs
 3. Add CLI command: `stn lattice agents` to list all agents with schemas
-4. Add observability dashboard recommendations
-5. Performance testing with deep call chains (5+ levels)
+4. Add CLI command: `stn lattice work list` to query work from KV
+5. Add CLI command: `stn lattice work history <work_id>` to see state transitions
+6. Add CLI command: `stn lattice dashboard` for real-time terminal dashboard
+7. Add observability dashboard recommendations
+8. Performance testing with deep call chains (5+ levels)
+
+---
+
+## CLI Reference
+
+### Complete Command Tree
+
+```
+stn lattice
+├── status                    # Show lattice connection status
+├── agents                    # List all agents across the lattice
+│   ├── --discover            # Show detailed agent info with schema
+│   ├── --capability <cap>    # Filter agents by capability
+│   └── --schema <name>       # Show full schema for specific agent
+├── agent
+│   └── exec <name> <task>    # Execute agent (sync RPC style)
+│       └── --station <id>    # Execute on specific station
+├── workflows                 # List all workflows
+├── workflow
+│   └── run <id>              # Run a workflow
+│       └── --station <id>    # Run on specific station
+├── work                      # Async work operations
+│   ├── assign <agent> <task> # Assign work (returns work_id)
+│   │   ├── --station <id>    # Assign to specific station
+│   │   └── --timeout <dur>   # Work timeout (default: 5m)
+│   ├── await <work_id>       # Wait for work completion
+│   └── check <work_id>       # Check status (non-blocking)
+├── run <task>                # Submit task to lattice (NEW)
+│   ├── --orchestrator <name> # Specify orchestrator agent
+│   ├── --timeout <dur>       # Overall timeout (default: 10m)
+│   └── --stream              # Stream progress (default: true)
+└── dashboard                 # Real-time TUI dashboard
+```
+
+### CLI Reference: stn lattice run
+
+The `stn lattice run` command is the primary user-facing way to submit tasks to the lattice. Unlike `stn lattice work assign` (which requires specifying an agent), `stn lattice run` automatically selects an orchestrator agent to coordinate the task.
+
+#### Usage
+
+```bash
+stn lattice run [flags] <task>
+```
+
+#### Flags
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--orchestrator` | string | auto-detect | Name of the orchestrator agent to use |
+| `--timeout` | duration | 10m | Overall task timeout |
+| `--stream` | bool | true | Stream progress updates to terminal |
+
+#### Orchestrator Auto-Detection
+
+When `--orchestrator` is not specified, the command searches for an appropriate orchestrator agent using these criteria (in order):
+
+1. **Agent name contains**: `orchestrator`, `coordinator`, `manager`, `conductor`, `dispatcher`
+2. **Agent description contains**: same keywords
+3. **Fallback**: First available agent in the lattice
+
+#### Examples
+
+```bash
+# Submit a task (auto-detect orchestrator)
+stn lattice run "Analyze security of my infrastructure"
+
+# Specify an orchestrator
+stn lattice run --orchestrator SRECoordinator "Why is my pod crashing?"
+
+# Set custom timeout
+stn lattice run --timeout 30m "Run full security audit"
+
+# Disable progress streaming
+stn lattice run --stream=false "Quick health check"
+```
+
+#### Output
+
+```
+🚀 Submitting task to lattice
+   Orchestrator: SRECoordinator (on sre-station)
+   Task: Analyze security of my infrastructure
+   Timeout: 10m0s
+
+📋 Work ID: 550e8400-e29b-41d4-a716-446655440000
+⏳ Waiting for orchestrator to complete...
+
+   [accepted] Work picked up by sre-station
+   [progress] Discovering available agents...
+   [progress] Assigning work to VulnScanner
+   [progress] Assigning work to NetworkAudit
+   [progress] Collecting results...
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ Task completed successfully
+
+Based on the security analysis:
+1. VulnScanner found 3 medium-severity vulnerabilities
+2. NetworkAudit identified 2 open ports that should be restricted
+...
+
+Duration: 45.23s
+Tool calls: 12
+```
+
+#### Architecture Flow
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│  User: stn lattice run "Analyze security"                        │
+└──────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌──────────────────────────────────────────────────────────────────┐
+│  1. Connect to lattice (NATS)                                    │
+│  2. Initialize registry                                          │
+│  3. Find orchestrator agent (auto-detect or --orchestrator)      │
+│  4. Create OrchestratorContext with root UUID                    │
+│  5. Create WorkAssignment with full context                      │
+│  6. Dispatch via WorkDispatcher                                  │
+└──────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌──────────────────────────────────────────────────────────────────┐
+│  Orchestrator Agent (has list_agents, assign_work, await_work)   │
+│                                                                  │
+│  System Prompt:                                                  │
+│  "You are an orchestrator. Use list_agents to discover agents,   │
+│   assign_work to delegate in parallel, await_work to collect."   │
+│                                                                  │
+│  1. list_agents() → [VulnScanner, NetworkAudit, ...]            │
+│  2. assign_work(agent="VulnScanner", task="scan") → work_id_1   │
+│  3. assign_work(agent="NetworkAudit", task="audit") → work_id_2 │
+│  4. await_work(work_id_1) → vuln_results                        │
+│  5. await_work(work_id_2) → audit_results                       │
+│  6. Synthesize and return response                               │
+└──────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌──────────────────────────────────────────────────────────────────┐
+│  Results stream back via NATS → WorkDispatcher → CLI output      │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+#### Distributed Run Tracking
+
+Every `stn lattice run` creates a distributed execution tree tracked by UUIDs:
+
+```
+Root (user request):
+  orchestrator_run_id: 550e8400-e29b-41d4-a716-446655440000
+  parent: null
+  
+Child 1 (VulnScanner):
+  orchestrator_run_id: 550e8400-e29b-41d4-a716-446655440000-1
+  parent: 550e8400-e29b-41d4-a716-446655440000
+  
+Child 2 (NetworkAudit):
+  orchestrator_run_id: 550e8400-e29b-41d4-a716-446655440000-2
+  parent: 550e8400-e29b-41d4-a716-446655440000
+```
+
+Query the full tree:
+```bash
+stn lattice runs --uuid 550e8400-e29b-41d4-a716-446655440000
+```
+
+### Comparison: Direct Execution vs Lattice Run
+
+| Aspect | `stn lattice agent exec` | `stn lattice run` |
+|--------|--------------------------|-------------------|
+| Pattern | Synchronous RPC | Async orchestration |
+| Agent selection | User specifies | Auto-detected orchestrator |
+| Multi-agent | No | Yes (orchestrator coordinates) |
+| Parallelism | None | Orchestrator can parallelize |
+| Progress | None until complete | Streaming updates |
+| Use case | Single known agent | Complex multi-step tasks |
+
+### Comparison: Work Assign vs Lattice Run
+
+| Aspect | `stn lattice work assign` | `stn lattice run` |
+|--------|---------------------------|-------------------|
+| Agent selection | User specifies | Auto-detected orchestrator |
+| Coordination | Manual (assign → await) | Automatic via orchestrator |
+| Multi-agent | User manages multiple work_ids | Orchestrator handles internally |
+| Typical use | Programmatic/scripted | Interactive/ad-hoc |
 
 ---
 

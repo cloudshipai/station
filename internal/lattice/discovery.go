@@ -36,12 +36,21 @@ func (c *AgentCollector) CollectAgents(ctx context.Context) ([]AgentInfo, error)
 
 	var infos []AgentInfo
 	for _, agent := range agents {
-		infos = append(infos, AgentInfo{
+		info := AgentInfo{
 			ID:           strconv.FormatInt(agent.ID, 10),
 			Name:         agent.Name,
 			Description:  agent.Description,
 			Capabilities: extractCapabilities(agent),
-		})
+		}
+
+		if agent.InputSchema.Valid {
+			info.InputSchema = agent.InputSchema.String
+		}
+		if agent.OutputSchema.Valid {
+			info.OutputSchema = agent.OutputSchema.String
+		}
+
+		infos = append(infos, info)
 	}
 
 	return infos, nil

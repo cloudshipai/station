@@ -1,4 +1,6 @@
-package work
+//go:build integration
+
+package work_test
 
 import (
 	"context"
@@ -11,6 +13,7 @@ import (
 
 	"station/internal/config"
 	"station/internal/lattice"
+	"station/internal/lattice/work"
 )
 
 func getFreePort(t *testing.T) int {
@@ -136,14 +139,14 @@ func TestIntegration_SingleStationAsyncWork(t *testing.T) {
 
 	executor := NewMockExecutor("Hello from agent!", 3)
 
-	hook := NewHook(client, executor, "test-station")
+	hook := work.NewHook(client, executor, "test-station")
 	ctx := context.Background()
 	if err := hook.Start(ctx); err != nil {
 		t.Fatalf("Failed to start hook: %v", err)
 	}
 	defer hook.Stop()
 
-	dispatcher := NewDispatcher(client, "test-station")
+	dispatcher := work.NewDispatcher(client, "test-station")
 	if err := dispatcher.Start(ctx); err != nil {
 		t.Fatalf("Failed to start dispatcher: %v", err)
 	}
@@ -152,7 +155,7 @@ func TestIntegration_SingleStationAsyncWork(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	t.Run("AssignAndAwait", func(t *testing.T) {
-		assignment := &WorkAssignment{
+		assignment := &work.WorkAssignment{
 			AgentName: "test-agent",
 			Task:      "Do something useful",
 			Timeout:   10 * time.Second,
@@ -172,7 +175,7 @@ func TestIntegration_SingleStationAsyncWork(t *testing.T) {
 			t.Fatalf("AwaitWork failed: %v", err)
 		}
 
-		if result.Type != MsgWorkComplete {
+		if result.Type != work.MsgWorkComplete {
 			t.Errorf("Expected WORK_COMPLETE, got %s", result.Type)
 		}
 
@@ -194,7 +197,7 @@ func TestIntegration_SingleStationAsyncWork(t *testing.T) {
 	})
 
 	t.Run("AssignWithAgentID", func(t *testing.T) {
-		assignment := &WorkAssignment{
+		assignment := &work.WorkAssignment{
 			AgentID: "42",
 			Task:    "Another task",
 			Timeout: 10 * time.Second,
@@ -210,7 +213,7 @@ func TestIntegration_SingleStationAsyncWork(t *testing.T) {
 			t.Fatalf("AwaitWork failed: %v", err)
 		}
 
-		if result.Type != MsgWorkComplete {
+		if result.Type != work.MsgWorkComplete {
 			t.Errorf("Expected WORK_COMPLETE, got %s", result.Type)
 		}
 
@@ -225,7 +228,7 @@ func TestIntegration_SingleStationAsyncWork(t *testing.T) {
 		executor.SetDelay(500 * time.Millisecond)
 		defer executor.SetDelay(0)
 
-		assignment := &WorkAssignment{
+		assignment := &work.WorkAssignment{
 			AgentName: "slow-agent",
 			Task:      "Take your time",
 			Timeout:   10 * time.Second,
@@ -243,7 +246,7 @@ func TestIntegration_SingleStationAsyncWork(t *testing.T) {
 			t.Fatalf("CheckWork failed: %v", err)
 		}
 
-		if status.Status != "PENDING" && status.Status != MsgWorkAccepted {
+		if status.Status != "PENDING" && status.Status != work.MsgWorkAccepted {
 			t.Logf("Status was: %s (expected PENDING or WORK_ACCEPTED)", status.Status)
 		}
 
@@ -252,7 +255,7 @@ func TestIntegration_SingleStationAsyncWork(t *testing.T) {
 			t.Fatalf("AwaitWork failed: %v", err)
 		}
 
-		if result.Type != MsgWorkComplete {
+		if result.Type != work.MsgWorkComplete {
 			t.Errorf("Expected WORK_COMPLETE, got %s", result.Type)
 		}
 	})
@@ -261,7 +264,7 @@ func TestIntegration_SingleStationAsyncWork(t *testing.T) {
 		executor.SetError(fmt.Errorf("agent crashed"))
 		defer executor.SetError(nil)
 
-		assignment := &WorkAssignment{
+		assignment := &work.WorkAssignment{
 			AgentName: "failing-agent",
 			Task:      "This will fail",
 			Timeout:   10 * time.Second,
@@ -277,7 +280,7 @@ func TestIntegration_SingleStationAsyncWork(t *testing.T) {
 			t.Fatalf("AwaitWork failed: %v", err)
 		}
 
-		if result.Type != MsgWorkFailed {
+		if result.Type != work.MsgWorkFailed {
 			t.Errorf("Expected WORK_FAILED, got %s", result.Type)
 		}
 
@@ -333,14 +336,14 @@ func TestIntegration_MultiStationAsyncWork(t *testing.T) {
 
 	leafExecutor := NewMockExecutor("Result from leaf station", 5)
 
-	leafHook := NewHook(leafClient, leafExecutor, "leaf-station")
+	leafHook := work.NewHook(leafClient, leafExecutor, "leaf-station")
 	ctx := context.Background()
 	if err := leafHook.Start(ctx); err != nil {
 		t.Fatalf("Failed to start leaf hook: %v", err)
 	}
 	defer leafHook.Stop()
 
-	dispatcher := NewDispatcher(orchestratorClient, "orchestrator")
+	dispatcher := work.NewDispatcher(orchestratorClient, "orchestrator")
 	if err := dispatcher.Start(ctx); err != nil {
 		t.Fatalf("Failed to start dispatcher: %v", err)
 	}
@@ -349,7 +352,7 @@ func TestIntegration_MultiStationAsyncWork(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	t.Run("RemoteWorkAssignment", func(t *testing.T) {
-		assignment := &WorkAssignment{
+		assignment := &work.WorkAssignment{
 			TargetStation: "leaf-station",
 			AgentName:     "remote-agent",
 			Task:          "Execute on remote station",
@@ -366,7 +369,7 @@ func TestIntegration_MultiStationAsyncWork(t *testing.T) {
 			t.Fatalf("AwaitWork failed: %v", err)
 		}
 
-		if result.Type != MsgWorkComplete {
+		if result.Type != work.MsgWorkComplete {
 			t.Errorf("Expected WORK_COMPLETE, got %s (error: %s)", result.Type, result.Error)
 		}
 
@@ -419,14 +422,14 @@ func TestIntegration_ParallelWorkAssignment(t *testing.T) {
 	executor := NewMockExecutor("parallel result", 1)
 	executor.SetDelay(100 * time.Millisecond)
 
-	hook := NewHook(client, executor, "parallel-station")
+	hook := work.NewHook(client, executor, "parallel-station")
 	ctx := context.Background()
 	if err := hook.Start(ctx); err != nil {
 		t.Fatalf("Failed to start hook: %v", err)
 	}
 	defer hook.Stop()
 
-	dispatcher := NewDispatcher(client, "parallel-station")
+	dispatcher := work.NewDispatcher(client, "parallel-station")
 	if err := dispatcher.Start(ctx); err != nil {
 		t.Fatalf("Failed to start dispatcher: %v", err)
 	}
@@ -440,7 +443,7 @@ func TestIntegration_ParallelWorkAssignment(t *testing.T) {
 	startTime := time.Now()
 
 	for i := 0; i < numTasks; i++ {
-		assignment := &WorkAssignment{
+		assignment := &work.WorkAssignment{
 			AgentName: fmt.Sprintf("agent-%d", i),
 			Task:      fmt.Sprintf("Task %d", i),
 			Timeout:   30 * time.Second,
@@ -467,7 +470,7 @@ func TestIntegration_ParallelWorkAssignment(t *testing.T) {
 				errorCount.Add(1)
 				return
 			}
-			if result.Type == MsgWorkComplete {
+			if result.Type == work.MsgWorkComplete {
 				successCount.Add(1)
 			} else {
 				t.Logf("Work %d got unexpected type: %s", idx, result.Type)
@@ -528,14 +531,14 @@ func TestIntegration_WorkTimeout(t *testing.T) {
 	executor := NewMockExecutor("slow result", 1)
 	executor.SetDelay(5 * time.Second)
 
-	hook := NewHook(client, executor, "timeout-station")
+	hook := work.NewHook(client, executor, "timeout-station")
 	ctx := context.Background()
 	if err := hook.Start(ctx); err != nil {
 		t.Fatalf("Failed to start hook: %v", err)
 	}
 	defer hook.Stop()
 
-	dispatcher := NewDispatcher(client, "timeout-station")
+	dispatcher := work.NewDispatcher(client, "timeout-station")
 	if err := dispatcher.Start(ctx); err != nil {
 		t.Fatalf("Failed to start dispatcher: %v", err)
 	}
@@ -543,7 +546,7 @@ func TestIntegration_WorkTimeout(t *testing.T) {
 
 	time.Sleep(100 * time.Millisecond)
 
-	assignment := &WorkAssignment{
+	assignment := &work.WorkAssignment{
 		AgentName: "slow-agent",
 		Task:      "This will timeout",
 		Timeout:   500 * time.Millisecond,
@@ -597,14 +600,14 @@ func TestIntegration_ProgressStreaming(t *testing.T) {
 
 	executor := NewMockExecutor("done", 1)
 
-	hook := NewHook(client, executor, "progress-station")
+	hook := work.NewHook(client, executor, "progress-station")
 	ctx := context.Background()
 	if err := hook.Start(ctx); err != nil {
 		t.Fatalf("Failed to start hook: %v", err)
 	}
 	defer hook.Stop()
 
-	dispatcher := NewDispatcher(client, "progress-station")
+	dispatcher := work.NewDispatcher(client, "progress-station")
 	if err := dispatcher.Start(ctx); err != nil {
 		t.Fatalf("Failed to start dispatcher: %v", err)
 	}
@@ -612,7 +615,7 @@ func TestIntegration_ProgressStreaming(t *testing.T) {
 
 	time.Sleep(100 * time.Millisecond)
 
-	assignment := &WorkAssignment{
+	assignment := &work.WorkAssignment{
 		AgentName: "progress-agent",
 		Task:      "Task with progress",
 		Timeout:   10 * time.Second,
@@ -628,7 +631,7 @@ func TestIntegration_ProgressStreaming(t *testing.T) {
 		t.Fatalf("StreamProgress failed: %v", err)
 	}
 
-	var progressUpdates []*WorkResponse
+	var progressUpdates []*work.WorkResponse
 	done := make(chan struct{})
 
 	go func() {
@@ -645,13 +648,13 @@ func TestIntegration_ProgressStreaming(t *testing.T) {
 
 	<-done
 
-	if result.Type != MsgWorkComplete {
+	if result.Type != work.MsgWorkComplete {
 		t.Errorf("Expected WORK_COMPLETE, got %s", result.Type)
 	}
 
 	hasAccepted := false
 	for _, update := range progressUpdates {
-		if update.Type == MsgWorkAccepted {
+		if update.Type == work.MsgWorkAccepted {
 			hasAccepted = true
 			break
 		}

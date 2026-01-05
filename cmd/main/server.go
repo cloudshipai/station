@@ -315,6 +315,7 @@ func runMainServer() error {
 	var latticePresence *lattice.Presence
 	var latticeInvoker *lattice.Invoker
 	var latticeWorkHook *work.Hook
+	var latticeWorkDispatcher *work.Dispatcher
 
 	latticeOrchestration := viper.GetBool("lattice_orchestration")
 	latticeURL := viper.GetString("lattice_url")
@@ -414,6 +415,34 @@ func runMainServer() error {
 									latticeWorkHook = nil
 								} else {
 									log.Printf("✅ Lattice work hook listening for async work assignments")
+								}
+
+								var workStoreOpt work.DispatcherOption
+								if js := latticeClient.JetStream(); js != nil {
+									workStore, err := work.NewWorkStore(js, work.DefaultWorkStoreConfig())
+									if err != nil {
+										log.Printf("⚠️  Failed to create work store (work state will be in-memory only): %v", err)
+									} else {
+										workStoreOpt = work.WithWorkStore(workStore)
+										log.Printf("✅ Lattice work store initialized (JetStream KV persistence)")
+									}
+								}
+
+								if workStoreOpt != nil {
+									latticeWorkDispatcher = work.NewDispatcher(latticeClient, latticeClient.StationID(), workStoreOpt)
+								} else {
+									latticeWorkDispatcher = work.NewDispatcher(latticeClient, latticeClient.StationID())
+								}
+								if err := latticeWorkDispatcher.Start(ctx); err != nil {
+									log.Printf("⚠️  Failed to start lattice work dispatcher: %v", err)
+									latticeWorkDispatcher = nil
+								} else {
+									log.Printf("✅ Lattice work dispatcher ready for agent orchestration")
+
+									registryAdapter := newLatticeRegistryAdapter(latticeRegistry)
+									workToolFactory := services.NewWorkToolFactory(latticeWorkDispatcher, registryAdapter, latticeClient.StationID())
+									agentSvc.SetWorkToolFactory(workToolFactory)
+									log.Printf("✅ Lattice work tools wired to agent service")
 								}
 							}
 						}
@@ -542,6 +571,11 @@ func runMainServer() error {
 	if latticeWorkHook != nil {
 		latticeWorkHook.Stop()
 		log.Printf("🔗 Lattice work hook stopped")
+	}
+
+	if latticeWorkDispatcher != nil {
+		latticeWorkDispatcher.Stop()
+		log.Printf("🔗 Lattice work dispatcher stopped")
 	}
 
 	if latticeInvoker != nil {

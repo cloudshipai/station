@@ -4,9 +4,12 @@ Station Lattice is a NATS-based mesh network that enables multiple Station insta
 
 ## Table of Contents
 
+- [Why Station Lattice?](#why-station-lattice)
 - [Quick Start](#quick-start)
+- [Demo Lab](#demo-lab)
 - [Operating Modes](#operating-modes)
 - [Architecture](#architecture)
+- [Monitoring & Dashboards](#monitoring--dashboards)
 - [Components](#components)
 - [API Reference](#api-reference)
 - [NATS Subjects](#nats-subjects)
@@ -18,6 +21,50 @@ Station Lattice is a NATS-based mesh network that enables multiple Station insta
 - [Implementation Status](#implementation-status)
 - [Next Steps (Phase 4)](#next-steps-phase-4)
 
+## Why Station Lattice?
+
+### The Problem
+
+In traditional setups, AI agents run in isolation. A security team has their vulnerability scanners, SRE has their Kubernetes monitors, and DevOps has their deployment tools - all separate, unable to collaborate.
+
+When you need a comprehensive infrastructure review, you manually:
+1. Run the security scanner
+2. Copy results somewhere
+3. Run the K8s health check
+4. Copy those results
+5. Run the network audit
+6. Manually synthesize everything
+
+This is slow, error-prone, and doesn't scale.
+
+### The Solution: Distributed Agent Orchestration
+
+Station Lattice creates a **mesh network of AI agents** that can:
+
+| Capability | Benefit |
+|------------|---------|
+| **Automatic Discovery** | Agents across stations find each other automatically |
+| **Parallel Execution** | Orchestrator delegates to multiple agents simultaneously |
+| **Cross-Team Collaboration** | Security, SRE, and DevOps agents work together on complex tasks |
+| **Unified Interface** | Single command triggers work across your entire infrastructure |
+| **Distributed Run Tracking** | Full observability of parent-child task relationships |
+
+### Real-World Example
+
+Instead of manually coordinating tools, you run:
+
+```bash
+stn lattice run "Perform a comprehensive security and health assessment"
+```
+
+The Coordinator agent automatically:
+1. Discovers all available agents (K8sHealthChecker, VulnScanner, NetworkAudit, etc.)
+2. Decomposes the task into subtasks
+3. Assigns work to specialized agents **in parallel**
+4. Collects and synthesizes results into a coherent report
+
+**Result**: What took 30+ minutes of manual work now takes seconds.
+
 ## Quick Start
 
 ```bash
@@ -27,13 +74,105 @@ stn serve --orchestration
 # Terminal 2: Start member station
 stn serve --lattice nats://localhost:4222
 
-# Terminal 3: Query the lattice
-stn lattice status
-stn lattice agents
-stn lattice workflows
-stn lattice agent exec k8s-admin "List pods"
-stn lattice workflow run deploy-app
+# Terminal 3: Query the lattice (use --nats for CLI-only access)
+stn lattice --nats nats://localhost:4222 status
+stn lattice --nats nats://localhost:4222 agents
+stn lattice --nats nats://localhost:4222 agent exec k8s-admin "List pods"
+stn lattice --nats nats://localhost:4222 run "Analyze my infrastructure"
 ```
+
+## Demo Lab
+
+We provide ready-to-run demo scripts that set up a 3-station lattice with specialized agents.
+
+### Demo Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    EMBEDDED NATS (port 4222)                     │
+│                    JetStream KV: lattice-work                    │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+        ┌─────────────────────┼─────────────────────┐
+        │                     │                     │
+        ▼                     ▼                     ▼
+┌───────────────┐     ┌───────────────┐     ┌───────────────┐
+│  Orchestrator │     │  SRE Station  │     │   Security    │
+│   Station     │     │               │     │   Station     │
+│               │     │               │     │               │
+│ Agents:       │     │ Agents:       │     │ Agents:       │
+│ - Coordinator │     │ - K8sHealth   │     │ - VulnScanner │
+│               │     │ - LogAnalyzer │     │ - CVELookup   │
+│               │     │ - Deployer    │     │ - NetworkAudit│
+│ Port: 8585    │     │ Port: 8586    │     │ Port: 8587    │
+└───────────────┘     └───────────────┘     └───────────────┘
+```
+
+### Option 1: Automated Demo (Single Terminal)
+
+```bash
+cd docs/demos
+./demo-auto.sh
+```
+
+This starts all 3 stations, runs demo commands, and shows results.
+
+### Option 2: Multi-Terminal Demo (Recommended)
+
+For the full interactive experience:
+
+```
+┌─────────────────────────────┬─────────────────────────────┐
+│  Terminal 1: Orchestrator   │  Terminal 2: SRE Station    │
+│  ./01-start-orchestrator.sh │  ./02-start-sre-station.sh  │
+├─────────────────────────────┼─────────────────────────────┤
+│  Terminal 3: Security       │  Terminal 4: User CLI       │
+│  ./03-start-security.sh     │  ./04-run-commands.sh       │
+└─────────────────────────────┴─────────────────────────────┘
+```
+
+### Demo Commands
+
+Once stations are running, try these commands:
+
+```bash
+# Check lattice connectivity
+stn lattice --nats nats://localhost:4222 status
+
+# Discover all agents across the mesh
+stn lattice --nats nats://localhost:4222 agents --discover
+
+# Execute a specific agent directly
+stn lattice --nats nats://localhost:4222 agent exec K8sHealthChecker "Check pod health"
+
+# Assign async work
+stn lattice --nats nats://localhost:4222 work assign VulnScanner "Scan /app"
+stn lattice --nats nats://localhost:4222 work await <work_id>
+
+# THE MAIN EVENT: Distributed orchestration
+stn lattice --nats nats://localhost:4222 run "Analyze security and health of the infrastructure"
+
+# Watch real-time work in TUI dashboard
+stn lattice --nats nats://localhost:4222 dashboard
+```
+
+### Cleanup
+
+```bash
+./docs/demos/cleanup.sh
+```
+
+### Demo Scripts Reference
+
+| Script | Purpose |
+|--------|---------|
+| `01-start-orchestrator.sh` | Starts orchestrator with embedded NATS on port 4222 |
+| `02-start-sre-station.sh` | Starts SRE station with K8s/Log/Deploy agents |
+| `03-start-security-station.sh` | Starts Security station with Vuln/CVE/Network agents |
+| `04-run-commands.sh` | Interactive walkthrough of all lattice commands |
+| `05-dashboard.sh` | Quick launcher for the TUI dashboard |
+| `demo-auto.sh` | Automated demo (starts everything, runs commands) |
+| `cleanup.sh` | Stops all stations and removes temp files |
 
 ## Operating Modes
 
@@ -42,6 +181,82 @@ stn lattice workflow run deploy-app
 | Standalone | `stn serve` | Default. No lattice. Current behavior unchanged. |
 | Orchestrator | `stn serve --orchestration` | Runs embedded NATS hub on port 4222. |
 | Member | `stn serve --lattice <url>` | Connects to an orchestrator. |
+
+## Monitoring & Dashboards
+
+Station Lattice provides multiple ways to observe what's happening across your agent mesh.
+
+### 1. TUI Dashboard (Real-Time Work Monitoring)
+
+The built-in terminal dashboard shows live work status across all stations:
+
+```bash
+stn lattice --nats nats://localhost:4222 dashboard
+```
+
+Features:
+- Active work items with status
+- Recently completed work
+- Station health indicators
+- Press `q` to exit
+
+### 2. NATS HTTP Monitoring
+
+The embedded NATS server exposes monitoring endpoints on port 8222:
+
+| Endpoint | Description |
+|----------|-------------|
+| `http://localhost:8222/varz` | Server stats (connections, memory, messages) |
+| `http://localhost:8222/connz` | Active connections |
+| `http://localhost:8222/jsz` | JetStream statistics |
+| `http://localhost:8222/subsz` | Subscription details |
+
+Example:
+```bash
+# Server overview
+curl http://localhost:8222/varz | jq .
+
+# Active connections
+curl http://localhost:8222/connz | jq '.connections[] | {name, ip, subscriptions}'
+
+# JetStream streams (includes lattice-work KV)
+curl http://localhost:8222/jsz?streams=true | jq .
+```
+
+### 3. OpenTelemetry Tracing (Jaeger)
+
+For distributed tracing across stations:
+
+```bash
+# Start with telemetry enabled
+stn serve --orchestration --enable-telemetry --otel-endpoint http://localhost:4318
+
+# View traces in Jaeger UI
+open http://localhost:16686
+```
+
+Traces include:
+- Agent invocations with parent-child relationships
+- Work assignment and completion spans
+- Cross-station request flows
+
+### 4. Station Logs
+
+Each station logs lattice activity:
+
+```bash
+# Watch all station logs
+tail -f /tmp/orchestrator.log /tmp/sre.log /tmp/security.log
+
+# Filter for lattice events
+grep -E "(lattice|agent|work)" /tmp/sre.log
+```
+
+Key log patterns:
+- `✅ Connected to lattice NATS` - Station joined mesh
+- `Station registered with N agents` - Agents published
+- `[invoker] Listening for agent invocations` - Ready for work
+- `[presence] Station joined:` - New station discovered
 
 ## Architecture
 

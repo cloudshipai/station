@@ -32,16 +32,29 @@ type Dispatcher struct {
 	stationID   string
 	pendingWork sync.Map
 	childIndex  atomic.Int64
+	store       *WorkStore
 
 	mu           sync.RWMutex
 	subscription *nats.Subscription
 }
 
-func NewDispatcher(client NATSClient, stationID string) *Dispatcher {
-	return &Dispatcher{
+type DispatcherOption func(*Dispatcher)
+
+func WithWorkStore(store *WorkStore) DispatcherOption {
+	return func(d *Dispatcher) {
+		d.store = store
+	}
+}
+
+func NewDispatcher(client NATSClient, stationID string, opts ...DispatcherOption) *Dispatcher {
+	d := &Dispatcher{
 		client:    client,
 		stationID: stationID,
 	}
+	for _, opt := range opts {
+		opt(d)
+	}
+	return d
 }
 
 func (d *Dispatcher) Start(ctx context.Context) error {
@@ -84,6 +97,33 @@ func (d *Dispatcher) AssignWork(ctx context.Context, assignment *WorkAssignment)
 	assignment.AssignedAt = time.Now()
 	assignment.ReplySubject = SubjectWorkResponse(assignment.WorkID)
 
+	targetStation := assignment.TargetStation
+	if targetStation == "" {
+		targetStation = assignment.TargetStation
+		if targetStation == "" {
+			targetStation = d.stationID
+		}
+	}
+
+	if d.store != nil {
+		record := &WorkRecord{
+			WorkID:            assignment.WorkID,
+			OrchestratorRunID: assignment.OrchestratorRunID,
+			ParentWorkID:      assignment.ParentWorkID,
+			SourceStation:     d.stationID,
+			TargetStation:     targetStation,
+			AgentID:           assignment.AgentID,
+			AgentName:         assignment.AgentName,
+			Task:              assignment.Task,
+			Context:           assignment.Context,
+			TraceID:           assignment.TraceID,
+			SpanID:            assignment.SpanID,
+		}
+		if err := d.store.Assign(ctx, record); err != nil {
+			return "", fmt.Errorf("failed to persist work assignment: %w", err)
+		}
+	}
+
 	pending := &PendingWork{
 		Assignment:   assignment,
 		ResultChan:   make(chan *WorkResponse, 1),
@@ -91,11 +131,6 @@ func (d *Dispatcher) AssignWork(ctx context.Context, assignment *WorkAssignment)
 		Done:         make(chan struct{}),
 	}
 	d.pendingWork.Store(assignment.WorkID, pending)
-
-	targetStation := assignment.TargetStation
-	if targetStation == "" {
-		targetStation = d.stationID
-	}
 
 	subject := SubjectWorkAssign(targetStation)
 	data, err := json.Marshal(assignment)
@@ -189,6 +224,10 @@ func (d *Dispatcher) handleResponse(msg *nats.Msg) {
 		return
 	}
 
+	if d.store != nil {
+		d.updateStoreFromResponse(&response)
+	}
+
 	val, ok := d.pendingWork.Load(response.WorkID)
 	if !ok {
 		return
@@ -217,6 +256,43 @@ func (d *Dispatcher) handleResponse(msg *nats.Msg) {
 			close(pending.ProgressChan)
 		}
 	}
+}
+
+func (d *Dispatcher) updateStoreFromResponse(response *WorkResponse) {
+	ctx := context.Background()
+
+	var status string
+	var result *WorkResult
+
+	switch response.Type {
+	case MsgWorkAccepted:
+		status = StatusAccepted
+	case MsgWorkComplete:
+		status = StatusComplete
+		result = &WorkResult{
+			Result:     response.Result,
+			DurationMs: response.DurationMs,
+			ToolCalls:  response.ToolCalls,
+		}
+	case MsgWorkFailed:
+		status = StatusFailed
+		result = &WorkResult{
+			Error:      response.Error,
+			DurationMs: response.DurationMs,
+			ToolCalls:  response.ToolCalls,
+		}
+	case MsgWorkEscalate:
+		status = StatusEscalated
+		result = &WorkResult{
+			Error:      response.EscalationReason,
+			DurationMs: response.DurationMs,
+			ToolCalls:  response.ToolCalls,
+		}
+	default:
+		return
+	}
+
+	_ = d.store.UpdateStatus(ctx, response.WorkID, status, result)
 }
 
 func (d *Dispatcher) GenerateChildWorkID(parentWorkID string) string {

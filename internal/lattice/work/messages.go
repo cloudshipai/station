@@ -14,6 +14,14 @@ const (
 	MsgWorkEscalate  = "WORK_ESCALATE"
 )
 
+const (
+	StatusAssigned  = "ASSIGNED"
+	StatusAccepted  = "ACCEPTED"
+	StatusComplete  = "COMPLETE"
+	StatusFailed    = "FAILED"
+	StatusEscalated = "ESCALATED"
+)
+
 type WorkAssignment struct {
 	WorkID            string `json:"work_id"`
 	OrchestratorRunID string `json:"orchestrator_run_id"`
@@ -61,6 +69,39 @@ type WorkStatus struct {
 	WorkID   string        `json:"work_id"`
 	Status   string        `json:"status"`
 	Response *WorkResponse `json:"response,omitempty"`
+}
+
+type WorkRecord struct {
+	WorkID            string            `json:"work_id"`
+	OrchestratorRunID string            `json:"orchestrator_run_id"`
+	ParentWorkID      string            `json:"parent_work_id,omitempty"`
+	SourceStation     string            `json:"source_station"`
+	TargetStation     string            `json:"target_station"`
+	AgentID           string            `json:"agent_id,omitempty"`
+	AgentName         string            `json:"agent_name"`
+	Task              string            `json:"task"`
+	Context           map[string]string `json:"context,omitempty"`
+
+	Status      string    `json:"status"`
+	AssignedAt  time.Time `json:"assigned_at"`
+	AcceptedAt  time.Time `json:"accepted_at,omitempty"`
+	CompletedAt time.Time `json:"completed_at,omitempty"`
+	UpdatedAt   time.Time `json:"updated_at,omitempty"`
+
+	Result     string  `json:"result,omitempty"`
+	Error      string  `json:"error,omitempty"`
+	DurationMs float64 `json:"duration_ms,omitempty"`
+	ToolCalls  int     `json:"tool_calls,omitempty"`
+
+	TraceID string `json:"trace_id,omitempty"`
+	SpanID  string `json:"span_id,omitempty"`
+}
+
+type WorkResult struct {
+	Result     string
+	Error      string
+	DurationMs float64
+	ToolCalls  int
 }
 
 func SubjectWorkAssign(stationID string) string {

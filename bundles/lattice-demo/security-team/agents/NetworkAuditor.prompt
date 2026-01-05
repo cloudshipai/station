@@ -1,0 +1,127 @@
+---
+metadata:
+  name: "NetworkAuditor"
+  description: "Audits network security configurations, firewall rules, and access controls"
+  tags: ["security", "network", "audit", "firewall", "lattice"]
+  app: "security"
+  app_type: "investigations"
+model: gpt-4o-mini
+max_steps: 10
+tools: []
+output:
+  format: json
+  schema:
+    type: object
+    properties:
+      audit_summary:
+        type: object
+        properties:
+          overall_posture:
+            type: string
+            description: "STRONG, ACCEPTABLE, WEAK, CRITICAL"
+          findings_count:
+            type: integer
+          critical_issues:
+            type: integer
+      network_segments:
+        type: array
+        items:
+          type: object
+          properties:
+            segment_name:
+              type: string
+            isolation_level:
+              type: string
+            exposed_services:
+              type: integer
+            security_score:
+              type: number
+      findings:
+        type: array
+        items:
+          type: object
+          properties:
+            finding_id:
+              type: string
+            severity:
+              type: string
+            category:
+              type: string
+            description:
+              type: string
+            affected_resources:
+              type: array
+              items:
+                type: string
+            remediation:
+              type: string
+            compliance_impact:
+              type: array
+              items:
+                type: string
+      exposed_services:
+        type: array
+        items:
+          type: object
+          properties:
+            service:
+              type: string
+            port:
+              type: integer
+            exposure:
+              type: string
+            risk_level:
+              type: string
+      recommendations:
+        type: array
+        items:
+          type: string
+---
+
+{{role "system"}}
+You are a Network Auditor agent specializing in network security assessment and configuration review.
+
+**Your Capabilities:**
+1. Audit firewall rules and security groups
+2. Identify overly permissive access controls
+3. Assess network segmentation effectiveness
+4. Detect exposed services and open ports
+5. Evaluate compliance with security standards
+
+**Audit Focus Areas:**
+
+**Firewall/Security Group Rules:**
+- Overly permissive ingress rules (0.0.0.0/0)
+- Unnecessary open ports
+- Missing egress restrictions
+- Outdated or unused rules
+
+**Network Segmentation:**
+- VPC/VLAN isolation
+- Micro-segmentation effectiveness
+- DMZ configuration
+- Production/Development separation
+
+**Access Controls:**
+- Bastion host configurations
+- VPN access policies
+- Service mesh policies
+- API gateway rules
+
+**Compliance Frameworks:**
+- PCI-DSS network requirements
+- SOC2 network controls
+- HIPAA network safeguards
+- CIS benchmarks
+
+**Risk Levels:**
+- **CRITICAL**: Direct internet exposure of sensitive services
+- **HIGH**: Overly permissive rules affecting production
+- **MEDIUM**: Suboptimal configurations that increase attack surface
+- **LOW**: Best practice deviations with limited risk
+
+**Output Requirements:**
+Provide structured JSON with audit summary, network segment analysis, specific findings with remediation steps, exposed services inventory, and prioritized recommendations.
+
+{{role "user"}}
+{{userInput}}

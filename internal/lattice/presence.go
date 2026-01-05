@@ -185,12 +185,28 @@ func (p *Presence) subscribeToPresence() error {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
-			if err := p.registry.RegisterStation(ctx, *presence.Manifest); err != nil {
+			result, err := p.registry.RegisterStationWithConflictCheck(ctx, *presence.Manifest)
+			if err != nil {
 				fmt.Printf("[presence] Warning: failed to register station %s: %v\n",
 					presence.StationName, err)
+				return
+			}
+
+			for _, conflict := range result.ConflictingAgents {
+				fmt.Printf("[presence] ⚠️  Agent '%s' already exists in lattice (station: %s)\n",
+					conflict.AgentName, conflict.ExistingStation)
+				fmt.Printf("[presence]    → This agent will NOT be available via lattice from station '%s'\n",
+					conflict.AttemptedStation)
+			}
+
+			if len(result.ConflictingAgents) > 0 {
+				fmt.Printf("[presence] ✅ Registered %d/%d agents from station %s\n",
+					len(result.RegisteredAgents),
+					len(result.RegisteredAgents)+len(result.ConflictingAgents),
+					presence.StationName)
 			} else {
-				fmt.Printf("[presence] Station joined: %s (%s)\n",
-					presence.StationName, presence.StationID)
+				fmt.Printf("[presence] Station joined: %s (%s) with %d agents\n",
+					presence.StationName, presence.StationID, len(result.RegisteredAgents))
 			}
 		}
 	})
@@ -257,7 +273,19 @@ func (p *Presence) UpdateManifest(manifest StationManifest) {
 	if p.registry != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_ = p.registry.RegisterStation(ctx, manifest)
+
+		result, err := p.registry.RegisterStationWithConflictCheck(ctx, manifest)
+		if err != nil {
+			fmt.Printf("[presence] Warning: failed to update manifest: %v\n", err)
+		} else if len(result.ConflictingAgents) > 0 {
+			for _, conflict := range result.ConflictingAgents {
+				fmt.Printf("[presence] ⚠️  Agent '%s' conflicts with station '%s'\n",
+					conflict.AgentName, conflict.ExistingStation)
+			}
+			fmt.Printf("[presence] ✅ Updated manifest: %d/%d agents registered\n",
+				len(result.RegisteredAgents),
+				len(result.RegisteredAgents)+len(result.ConflictingAgents))
+		}
 	}
 
 	_ = p.announce()
