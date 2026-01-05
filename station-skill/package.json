@@ -1,0 +1,56 @@
+{
+  "name": "@cloudshipai/station-skill",
+  "version": "0.1.0",
+  "description": "OpenCode plugin with Station CLI skills for AI agent orchestration",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "bin": {
+    "station-skill": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "bun build src/index.ts --outdir dist --target bun && bun build src/cli.ts --outdir dist --target bun",
+    "dev": "bun --watch src/index.ts",
+    "prepublishOnly": "bun run build"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/bun": "^1.1.14",
+    "typescript": "^5.7.2"
+  },
+  "peerDependencies": {
+    "bun": ">=1.1.0"
+  },
+  "files": [
+    "dist",
+    "skills",
+    "README.md"
+  ],
+  "keywords": [
+    "opencode",
+    "plugin",
+    "station",
+    "cloudship",
+    "ai-agents",
+    "orchestration",
+    "skill"
+  ],
+  "license": "MIT",
+  "author": "CloudShip AI <hello@cloudship.ai>",
+  "homepage": "https://github.com/cloudshipai/station/tree/main/station-skill#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cloudshipai/station.git",
+    "directory": "station-skill"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  }
+}

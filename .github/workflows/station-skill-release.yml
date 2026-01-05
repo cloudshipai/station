@@ -1,0 +1,136 @@
+name: Station Skill Release
+
+on:
+  push:
+    tags:
+      - 'station-skill-v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 0.1.0)'
+        required: true
+        type: string
+      dry_run:
+        description: 'Dry run (skip npm publish)'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  PLUGIN_DIR: station-skill
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: Build & Publish to npm
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/station-skill-v}"
+          fi
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Releasing version: ${VERSION}"
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Setup Node.js for npm publish
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        working-directory: ${{ env.PLUGIN_DIR }}
+        run: bun install
+
+      - name: Build plugin
+        working-directory: ${{ env.PLUGIN_DIR }}
+        run: bun run build
+
+      - name: Verify build output
+        working-directory: ${{ env.PLUGIN_DIR }}
+        run: |
+          if [ ! -f dist/index.js ]; then
+            echo "Build failed: dist/index.js not found"
+            exit 1
+          fi
+          echo "Build output size: $(wc -c < dist/index.js) bytes"
+          ls -la dist/
+          ls -la skills/
+
+      - name: Verify version in package.json
+        working-directory: ${{ env.PLUGIN_DIR }}
+        run: |
+          PACKAGE_VERSION=$(jq -r .version package.json)
+          EXPECTED_VERSION="${{ steps.version.outputs.version }}"
+          if [ "$PACKAGE_VERSION" != "$EXPECTED_VERSION" ]; then
+            echo "Version mismatch: package.json has $PACKAGE_VERSION, expected $EXPECTED_VERSION"
+            echo "Update package.json version before tagging"
+            exit 1
+          fi
+
+      - name: Publish to npm
+        if: ${{ !inputs.dry_run }}
+        working-directory: ${{ env.PLUGIN_DIR }}
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Output publish info
+        run: |
+          echo "## Station Skill Published" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Package:** \`@cloudshipai/station-skill@${{ steps.version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Install command" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "bunx @cloudshipai/station-skill install" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+  create-release:
+    name: Create GitHub Release
+    needs: publish
+    runs-on: ubuntu-latest
+    if: ${{ !inputs.dry_run && github.event_name == 'push' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract version
+        id: version
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/station-skill-v}"
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: Station Skill v${{ steps.version.outputs.version }}
+          body: |
+            ## Installation
+            
+            ```bash
+            bunx @cloudshipai/station-skill install
+            ```
+            
+            Then restart OpenCode to load the skills.
+            
+            ## Skills Included
+            
+            - `station` - Core CLI commands for agents, workflows, MCP, deployment
+            - `station-config` - Configuration management
+          draft: false
+          prerelease: ${{ contains(steps.version.outputs.version, '-') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

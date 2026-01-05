@@ -33,6 +33,7 @@ stn-*
 station-*
 !docs/station/
 !**/station-logo.png
+!station-skill/
 prds/
 # All binaries and archives
 *.tar.gz
