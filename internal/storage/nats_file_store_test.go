@@ -18,6 +18,7 @@ func setupTestServer(t *testing.T) (*nats.Conn, nats.JetStreamContext, func()) {
 	opts := natstest.DefaultTestOptions
 	opts.Port = -1
 	opts.JetStream = true
+	opts.StoreDir = t.TempDir()
 	srv := natstest.RunServer(&opts)
 
 	nc, err := nats.Connect(srv.ClientURL())
