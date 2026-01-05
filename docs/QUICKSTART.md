@@ -53,7 +53,23 @@ Add to your MCP config file:
 
 See [MCP Integration Guide](./agents/MCP_INTEGRATION.md) for config file locations.
 
-## 4. Verify Installation
+## 4. Install Editor Plugins (Optional)
+
+Get enhanced skills, slash commands, and documentation:
+
+**Claude Code:**
+```bash
+/plugin marketplace add cloudshipai/station
+/plugin install station@cloudshipai-station
+```
+
+**OpenCode:**
+```bash
+# Copy skill to your project
+cp -r station/opencode-plugin/.opencode .
+```
+
+## 5. Verify Installation
 
 ```bash
 # Check Station status
@@ -66,14 +82,14 @@ stn agent list
 stn env list
 ```
 
-## 5. Run Your First Agent
+## 6. Run Your First Agent
 
 ```bash
 # Test the Hello World agent
 stn agent run "Hello World Agent" "Introduce yourself and tell me what you can do"
 ```
 
-## 6. Create Your First Custom Agent
+## 7. Create Your First Custom Agent
 
 ```bash
 # Create a new agent interactively
@@ -82,7 +98,7 @@ stn agent create
 
 Follow the prompts to create a file analysis agent with filesystem tools.
 
-## 7. Monitor Execution
+## 8. Monitor Execution
 
 ```bash
 # List recent runs

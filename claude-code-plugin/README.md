@@ -4,18 +4,31 @@ This plugin integrates [Station](https://github.com/cloudshipai/station) with Cl
 
 ## Installation
 
-### From GitHub (Recommended)
+### Option 1: From GitHub (Recommended)
 
 ```bash
-# In Claude Code
-/plugin install cloudshipai/station
+# Add the Station marketplace
+/plugin marketplace add cloudshipai/station
+
+# Install the plugin
+/plugin install station@cloudshipai-station
 ```
 
-### Local Installation
+### Option 2: Local Installation
+
+If you have Station cloned locally:
 
 ```bash
-# If you have Station cloned locally
+# Install directly from path
 /plugin install ./station/claude-code-plugin
+```
+
+### Option 3: Manual MCP Only
+
+If you just want the MCP tools without skills/commands:
+
+```bash
+claude mcp add station -- stn stdio
 ```
 
 ## Prerequisites

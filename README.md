@@ -197,7 +197,46 @@ Add to `.cursor/mcp.json` in your project (or `~/.cursor/mcp.json` for global):
 "command": ["stn", "--config", "/path/to/my-agents/config.yaml", "stdio"]
 ```
 
-### 5. Start Building
+### 5. Install Editor Plugins (Optional)
+
+Get skills, slash commands, and enhanced documentation for your AI editor:
+
+<details>
+<summary><b>Claude Code Plugin</b></summary>
+
+Adds `/station` commands, skills for agent creation, and MCP server config.
+
+```bash
+# Add Station marketplace and install plugin
+/plugin marketplace add cloudshipai/station
+/plugin install station@cloudshipai-station
+```
+
+Or install from local clone:
+```bash
+/plugin install ./station/claude-code-plugin
+```
+
+</details>
+
+<details>
+<summary><b>OpenCode Skill</b></summary>
+
+Adds Station CLI reference skill with agent, workflow, and deployment docs.
+
+```bash
+# Copy skill to your project
+cp -r station/opencode-plugin/.opencode .
+
+# Or install globally
+cp -r station/opencode-plugin/.opencode ~/.config/opencode/
+```
+
+Restart OpenCode - skill auto-loads.
+
+</details>
+
+### 6. Start Building
 
 Restart your editor. Station provides:
 - ✅ **Web UI** at `http://localhost:8585` for configuration
@@ -440,97 +479,31 @@ OAuth tokens are designed for local/interactive use. For production deployments,
 
 ## How You Interface: MCP-Driven Platform
 
-**Station is driven entirely through MCP tools in your AI assistant.** No complex CLI commands or web forms - just natural language requests that use the 41 available MCP tools.
+**Station is driven entirely through MCP tools in your AI assistant.** Natural language requests use 41+ available MCP tools.
 
-### Available MCP Tools
+### MCP Tool Categories
 
-**Agent Management (11 tools):**
-- `create_agent` - Create new agents with prompts and tools
-- `update_agent` - Modify agent configuration
-- `update_agent_prompt` - Update agent system prompt
-- `delete_agent` - Remove an agent
-- `list_agents` - List all agents (with filters)
-- `get_agent_details` - Get full agent configuration
-- `get_agent_schema` - Get agent's input schema
-- `add_tool` - Add MCP tool to agent
-- `remove_tool` - Remove tool from agent
-- `add_agent_as_tool` - Create multi-agent hierarchies
-- `remove_agent_as_tool` - Break agent hierarchy links
+| Category | Tools | Key Functions |
+|----------|-------|---------------|
+| **Agent Management** | 11 | `create_agent`, `update_agent`, `add_agent_as_tool` |
+| **Execution** | 4 | `call_agent`, `inspect_run`, `list_runs` |
+| **Evaluation** | 7 | `evaluate_benchmark`, `batch_execute_agents` |
+| **Reports** | 4 | `create_report`, `generate_report` |
+| **Environments** | 3 | `create_environment`, `list_environments` |
+| **MCP Servers** | 5 | `add_mcp_server_to_environment` |
+| **Scheduling** | 3 | `set_schedule`, `remove_schedule` |
+| **Faker/Bundles** | 2 | `faker_create_standalone`, `create_bundle` |
 
-**Agent Execution (4 tools):**
-- `call_agent` - Execute an agent with task
-- `list_runs` - List agent execution history
-- `inspect_run` - Get detailed run information
-- `list_runs_by_model` - Filter runs by AI model
-
-**Evaluation & Testing (6 tools):**
-- `generate_and_test_agent` - Generate test scenarios and run agent
-- `batch_execute_agents` - Run multiple agents in parallel
-- `evaluate_benchmark` - Run LLM-as-judge evaluation
-- `evaluate_dataset` - Evaluate entire dataset
-- `export_dataset` - Export runs for analysis
-- `list_benchmark_results` - List evaluation results
-- `get_benchmark_status` - Check evaluation status
-
-**Reports & Analytics (3 tools):**
-- `create_report` - Create team performance report
-- `generate_report` - Run benchmarks and generate report
-- `list_reports` - List all reports
-- `get_report` - Get report details
-
-**Environment Management (2 tools):**
-- `create_environment` - Create new environment
-- `delete_environment` - Delete environment
-- `list_environments` - List all environments
-
-**MCP Server Management (5 tools):**
-- `add_mcp_server_to_environment` - Add MCP server config
-- `update_mcp_server_in_environment` - Update MCP server
-- `delete_mcp_server_from_environment` - Remove MCP server
-- `list_mcp_servers_for_environment` - List configured servers
-- `list_mcp_configs` - List all MCP configurations
-
-**Tool Discovery (2 tools):**
-- `discover_tools` - Discover tools from MCP servers
-- `list_tools` - List available tools
-
-**Scheduling (3 tools):**
-- `set_schedule` - Schedule agent with cron expression
-- `remove_schedule` - Remove agent schedule
-- `get_schedule` - Get agent schedule details
-
-**Bundles (1 tool):**
-- `create_bundle_from_environment` - Package environment as bundle
-
-**Faker System (1 tool):**
-- `faker_create_standalone` - Create AI-powered mock data server
-
-**Examples of MCP-driven interaction:**
+**Example interaction:**
 ```
 You: "Create a logs analysis agent that uses Datadog and Elasticsearch"
+Claude: [Using create_agent tool...] ✅ Created logs_investigator
 
-Claude: [Using create_agent tool...]
-✅ Created logs_investigator agent with tools: __logs_query, __search_query
+You: "Run the incident coordinator on the API timeout issue"  
+Claude: [Using call_agent...] [Full investigation with multi-agent delegation]
 ```
 
-```
-You: "Run the incident coordinator on the API timeout issue"
-
-Claude: [Using call_agent tool with agent_id=21...]
-[Shows full incident investigation with multi-agent delegation]
-```
-
-```
-You: "Generate a performance report for my SRE team"
-
-Claude: [Using generate_report tool...]
-✅ Report completed: Team Score 7.5/10
-```
-
-**View all tools in your AI assistant:**
-- Type "Show me all Station MCP tools" to see complete list with descriptions
-- Tools appear with prefix `opencode-station_` in OpenCode
-- Full documentation available via `get_agent_schema` and tool descriptions
+**Discover all tools:** Ask your AI assistant "Show me all Station MCP tools" or see [MCP Tools Reference →](https://docs.cloudshipai.com/station/mcp-tools)
 
 ---
 

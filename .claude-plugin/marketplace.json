@@ -1,0 +1,26 @@
+{
+  "name": "cloudshipai-station",
+  "owner": {
+    "name": "CloudShip AI",
+    "email": "hello@cloudshipai.com"
+  },
+  "metadata": {
+    "description": "Station AI agent orchestration platform plugins",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "station",
+      "source": "./claude-code-plugin",
+      "description": "Station MCP tools, skills, and slash commands for AI agent orchestration",
+      "version": "1.0.0",
+      "author": {
+        "name": "CloudShip AI"
+      },
+      "homepage": "https://docs.cloudshipai.com/station/overview",
+      "repository": "https://github.com/cloudshipai/station",
+      "license": "Apache-2.0",
+      "keywords": ["station", "agents", "mcp", "orchestration", "ai", "cloudship", "sre", "devops"]
+    }
+  ]
+}
