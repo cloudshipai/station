@@ -20,9 +20,13 @@ import (
 
 // DeploymentAIConfig holds AI configuration for deployment
 type DeploymentAIConfig struct {
-	Provider string
-	Model    string
-	APIKey   string
+	Provider          string
+	Model             string
+	APIKey            string
+	AuthType          string
+	OAuthToken        string
+	OAuthRefreshToken string
+	OAuthExpiresAt    int64
 }
 
 // EnvironmentConfig holds the loaded environment configuration
@@ -133,25 +137,26 @@ func handleDeployDestroy(ctx context.Context, envName, target string) error {
 
 // detectAIConfigForDeployment uses Station's existing config.Load() to detect AI settings
 func detectAIConfigForDeployment() (*DeploymentAIConfig, error) {
-	// Load Station's config (already handles all provider/key resolution)
 	cfg, err := config.Load()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load Station config: %w", err)
 	}
 
-	// Station's config.Load() already:
-	// - Reads config.yaml for ai_provider, ai_model
-	// - Calls getAIAPIKey() which respects provider and finds correct key
-	// - Handles all environment variable fallbacks
-
 	aiConfig := &DeploymentAIConfig{
-		Provider: cfg.AIProvider, // Already set (default: "openai")
-		Model:    cfg.AIModel,    // Already set with provider defaults
-		APIKey:   cfg.AIAPIKey,   // Already resolved via getAIAPIKey()
+		Provider:          cfg.AIProvider,
+		Model:             cfg.AIModel,
+		APIKey:            cfg.AIAPIKey,
+		AuthType:          cfg.AIAuthType,
+		OAuthToken:        cfg.AIOAuthToken,
+		OAuthRefreshToken: cfg.AIOAuthRefreshToken,
+		OAuthExpiresAt:    cfg.AIOAuthExpiresAt,
 	}
 
-	// Validate we have an API key
-	if aiConfig.APIKey == "" {
+	if aiConfig.AuthType == "oauth" {
+		if aiConfig.OAuthToken == "" {
+			return nil, fmt.Errorf("OAuth auth type but no OAuth token found in config")
+		}
+	} else if aiConfig.APIKey == "" {
 		return nil, fmt.Errorf(
 			"no API key found for provider '%s'\nSet %s environment variable",
 			aiConfig.Provider,
@@ -355,9 +360,10 @@ func deployToFly(ctx context.Context, envName string, aiConfig *DeploymentAIConf
 	fmt.Printf("🚀 Deploying to Fly.io (this may take a few minutes)...\n\n")
 	deployCmd := exec.CommandContext(ctx, "fly", "deploy",
 		"--config", flyConfigPath,
-		"--local-only", // Use local Docker image
+		"--local-only",
 		"--image", imageName,
 		"--app", appName,
+		"--ha=false",
 	)
 	deployCmd.Stdout = os.Stdout
 	deployCmd.Stderr = os.Stderr
@@ -606,28 +612,28 @@ func deployToCloudflare(ctx context.Context, envName string, aiConfig *Deploymen
 func buildFlySecrets(aiConfig *DeploymentAIConfig, envConfig *EnvironmentConfig) (map[string]string, error) {
 	secrets := make(map[string]string)
 
-	// Generate encryption key for Station
 	encryptionKey, err := generateEncryptionKey()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate encryption key: %w", err)
 	}
 	secrets["STATION_ENCRYPTION_KEY"] = encryptionKey
 
-	// AI configuration (use STATION_ prefix for viper compatibility)
-	secrets["STATION_AI_PROVIDER"] = aiConfig.Provider
-	secrets["STATION_AI_MODEL"] = aiConfig.Model
-	secrets["STATION_AI_API_KEY"] = aiConfig.APIKey
+	secrets["STN_AI_PROVIDER"] = aiConfig.Provider
+	secrets["STN_AI_MODEL"] = aiConfig.Model
 
-	// Environment variables from variables.yml
+	if aiConfig.AuthType == "oauth" {
+		secrets["STN_AI_AUTH_TYPE"] = "oauth"
+		secrets["STN_AI_OAUTH_TOKEN"] = aiConfig.OAuthToken
+		secrets["STN_AI_OAUTH_REFRESH_TOKEN"] = aiConfig.OAuthRefreshToken
+		secrets["STN_AI_OAUTH_EXPIRES_AT"] = fmt.Sprintf("%d", aiConfig.OAuthExpiresAt)
+	} else {
+		secrets["STN_AI_API_KEY"] = aiConfig.APIKey
+	}
+
 	for k, v := range envConfig.Variables {
 		secrets[k] = v
 	}
 
-	// Production deployment settings
-	// STN_DEV_MODE is NOT set (defaults to false, disables port 8585)
-	// Sync always runs on startup to populate database with agents from .prompt files
-
-	// Enable MCP connection pooling for production (keeps connections alive)
 	secrets["STATION_MCP_POOLING"] = "true"
 
 	return secrets, nil
