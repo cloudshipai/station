@@ -12,15 +12,21 @@ import (
 
 	buildpkg "station/cmd/main/handlers/build"
 	"station/internal/auth"
+	"station/internal/cloudship"
 	"station/internal/config"
 	"station/internal/deployment"
+	"station/internal/services"
 )
 
 // DeploymentAIConfig holds AI configuration for deployment
 type DeploymentAIConfig struct {
-	Provider string
-	Model    string
-	APIKey   string
+	Provider          string
+	Model             string
+	APIKey            string
+	AuthType          string
+	OAuthToken        string
+	OAuthRefreshToken string
+	OAuthExpiresAt    int64
 }
 
 // EnvironmentConfig holds the loaded environment configuration
@@ -32,17 +38,25 @@ type EnvironmentConfig struct {
 	Agents    []string
 }
 
-// HandleDeploy implements the deploy command
-func HandleDeploy(ctx context.Context, envName, target, region string) error {
-	// Validate inputs
+func HandleDeploy(ctx context.Context, envName, target, region, sleepAfter, instanceType string, destroy, alwaysOn bool) error {
 	if envName == "" {
 		return fmt.Errorf("environment name is required")
 	}
 	if target == "" {
-		target = "fly" // Default to Fly.io
+		target = "fly"
 	}
 	if region == "" {
-		region = "ord" // Default to Chicago
+		region = "ord"
+	}
+	if sleepAfter == "" {
+		sleepAfter = "10m"
+	}
+	if instanceType == "" {
+		instanceType = "basic"
+	}
+
+	if destroy {
+		return handleDeployDestroy(ctx, envName, target)
 	}
 
 	fmt.Printf("🚀 Deploying environment '%s' to %s (region: %s)\n\n", envName, target, region)
@@ -69,42 +83,80 @@ func HandleDeploy(ctx context.Context, envName, target, region string) error {
 	fmt.Printf("   ✓ Variables: %d entries\n", len(envConfig.Variables))
 	fmt.Printf("   ✓ Agents: %d agents\n\n", len(envConfig.Agents))
 
-	// Step 3: Build Docker image with environment embedded
-	imageName, err := buildDeploymentImage(ctx, envName, envConfig, aiConfig)
-	if err != nil {
-		return err
-	}
-
-	// Step 4: Deploy to target
+	// Step 3: Deploy to target
 	switch strings.ToLower(target) {
 	case "fly", "flyio", "fly.io":
-		return deployToFly(ctx, envName, aiConfig, envConfig, imageName, region)
+		imageName, err := buildDeploymentImage(ctx, envName, envConfig, aiConfig)
+		if err != nil {
+			return err
+		}
+		return deployToFly(ctx, envName, aiConfig, envConfig, imageName, region, alwaysOn)
+	case "cloudflare", "cf", "cloudflare-containers":
+		return deployToCloudflare(ctx, envName, aiConfig, envConfig, sleepAfter, instanceType)
 	default:
-		return fmt.Errorf("unsupported deployment target: %s (supported: fly)", target)
+		return fmt.Errorf("unsupported deployment target: %s (supported: fly, cloudflare)", target)
 	}
+}
+
+func handleDeployDestroy(ctx context.Context, envName, target string) error {
+	appName := fmt.Sprintf("station-%s", envName)
+
+	switch strings.ToLower(target) {
+	case "fly", "flyio", "fly.io":
+		if _, err := exec.LookPath("fly"); err != nil {
+			return fmt.Errorf("fly CLI not found")
+		}
+		fmt.Printf("🗑️  Destroying Fly.io app '%s'...\n", appName)
+		cmd := exec.CommandContext(ctx, "fly", "apps", "destroy", appName, "--yes")
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("failed to destroy app: %w", err)
+		}
+		fmt.Printf("✅ App '%s' destroyed\n", appName)
+
+	case "cloudflare", "cf", "cloudflare-containers":
+		if _, err := exec.LookPath("wrangler"); err != nil {
+			return fmt.Errorf("wrangler CLI not found")
+		}
+		fmt.Printf("🗑️  Destroying Cloudflare worker '%s'...\n", appName)
+		cmd := exec.CommandContext(ctx, "wrangler", "delete", "--name", appName, "--force")
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("failed to destroy worker: %w", err)
+		}
+		fmt.Printf("✅ Worker '%s' destroyed\n", appName)
+
+	default:
+		return fmt.Errorf("unsupported target for destroy: %s", target)
+	}
+
+	return nil
 }
 
 // detectAIConfigForDeployment uses Station's existing config.Load() to detect AI settings
 func detectAIConfigForDeployment() (*DeploymentAIConfig, error) {
-	// Load Station's config (already handles all provider/key resolution)
 	cfg, err := config.Load()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load Station config: %w", err)
 	}
 
-	// Station's config.Load() already:
-	// - Reads config.yaml for ai_provider, ai_model
-	// - Calls getAIAPIKey() which respects provider and finds correct key
-	// - Handles all environment variable fallbacks
-
 	aiConfig := &DeploymentAIConfig{
-		Provider: cfg.AIProvider, // Already set (default: "openai")
-		Model:    cfg.AIModel,    // Already set with provider defaults
-		APIKey:   cfg.AIAPIKey,   // Already resolved via getAIAPIKey()
+		Provider:          cfg.AIProvider,
+		Model:             cfg.AIModel,
+		APIKey:            cfg.AIAPIKey,
+		AuthType:          cfg.AIAuthType,
+		OAuthToken:        cfg.AIOAuthToken,
+		OAuthRefreshToken: cfg.AIOAuthRefreshToken,
+		OAuthExpiresAt:    cfg.AIOAuthExpiresAt,
 	}
 
-	// Validate we have an API key
-	if aiConfig.APIKey == "" {
+	if aiConfig.AuthType == "oauth" {
+		if aiConfig.OAuthToken == "" {
+			return nil, fmt.Errorf("OAuth auth type but no OAuth token found in config")
+		}
+	} else if aiConfig.APIKey == "" {
 		return nil, fmt.Errorf(
 			"no API key found for provider '%s'\nSet %s environment variable",
 			aiConfig.Provider,
@@ -203,8 +255,12 @@ func buildDeploymentImage(ctx context.Context, envName string, envConfig *Enviro
 }
 
 // deployToFly deploys the image to Fly.io
-func deployToFly(ctx context.Context, envName string, aiConfig *DeploymentAIConfig, envConfig *EnvironmentConfig, imageName, region string) error {
-	fmt.Printf("🚢 Deploying to Fly.io...\n\n")
+func deployToFly(ctx context.Context, envName string, aiConfig *DeploymentAIConfig, envConfig *EnvironmentConfig, imageName, region string, alwaysOn bool) error {
+	if alwaysOn {
+		fmt.Printf("🚢 Deploying to Fly.io (always-on mode)...\n\n")
+	} else {
+		fmt.Printf("🚢 Deploying to Fly.io (auto-stop enabled)...\n\n")
+	}
 
 	// Check if fly CLI is installed
 	if _, err := exec.LookPath("fly"); err != nil {
@@ -221,6 +277,7 @@ func deployToFly(ctx context.Context, envName string, aiConfig *DeploymentAIConf
 		AIProvider:           aiConfig.Provider,
 		AIModel:              aiConfig.Model,
 		FlyRegion:            region,
+		FlyAlwaysOn:          alwaysOn,
 		EnvironmentVariables: envConfig.Variables,
 	}
 
@@ -303,9 +360,10 @@ func deployToFly(ctx context.Context, envName string, aiConfig *DeploymentAIConf
 	fmt.Printf("🚀 Deploying to Fly.io (this may take a few minutes)...\n\n")
 	deployCmd := exec.CommandContext(ctx, "fly", "deploy",
 		"--config", flyConfigPath,
-		"--local-only", // Use local Docker image
+		"--local-only",
 		"--image", imageName,
 		"--app", appName,
+		"--ha=false",
 	)
 	deployCmd.Stdout = os.Stdout
 	deployCmd.Stderr = os.Stderr
@@ -343,32 +401,259 @@ func deployToFly(ctx context.Context, envName string, aiConfig *DeploymentAIConf
 	return nil
 }
 
+func deployToCloudflare(ctx context.Context, envName string, aiConfig *DeploymentAIConfig, envConfig *EnvironmentConfig, sleepAfter, instanceType string) error {
+	fmt.Printf("⚠️  [EXPERIMENTAL] Cloudflare Containers support is experimental.\n")
+	fmt.Printf("   Known issue: Image disk size limits may cause deployment failures.\n\n")
+	fmt.Printf("☁️  Deploying to Cloudflare Containers...\n\n")
+
+	if _, err := exec.LookPath("wrangler"); err != nil {
+		return fmt.Errorf("wrangler CLI not found. Install with: npm install -g wrangler")
+	}
+
+	appName := fmt.Sprintf("station-%s", envName)
+	outputDir := fmt.Sprintf("cloudflare-%s", envName)
+	srcDir := filepath.Join(outputDir, "src")
+	bundlePath := filepath.Join(outputDir, fmt.Sprintf("%s.tar.gz", envName))
+
+	if err := os.MkdirAll(srcDir, 0755); err != nil {
+		return fmt.Errorf("failed to create output directory: %w", err)
+	}
+
+	fmt.Printf("📦 Creating bundle from environment '%s'...\n", envName)
+	bundleService := services.NewBundleService()
+	bundleData, err := bundleService.CreateBundle(envConfig.Path)
+	if err != nil {
+		return fmt.Errorf("failed to create bundle: %w", err)
+	}
+
+	if err := os.WriteFile(bundlePath, bundleData, 0644); err != nil {
+		return fmt.Errorf("failed to write bundle: %w", err)
+	}
+	fmt.Printf("   ✓ Bundle created: %s (%d bytes)\n\n", bundlePath, len(bundleData))
+
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	var bundleID string
+	if cfg.CloudShip.Enabled && (cfg.CloudShip.RegistrationKey != "" || cfg.CloudShip.APIKey != "") {
+		fmt.Printf("☁️  Uploading bundle to CloudShip...\n")
+		client := cloudship.NewClient(cfg)
+		uploadResp, err := client.UploadBundle(bundlePath)
+		if err != nil {
+			fmt.Printf("   ⚠ Upload failed: %v\n", err)
+			fmt.Printf("   You can manually upload later: stn bundle share %s\n\n", bundlePath)
+		} else {
+			bundleID = uploadResp.BundleID
+			fmt.Printf("   ✓ Uploaded! Bundle ID: %s\n\n", bundleID)
+		}
+	} else {
+		fmt.Printf("⚠️  CloudShip not configured. Manual upload required:\n")
+		fmt.Printf("   stn bundle share %s\n", bundlePath)
+		fmt.Printf("   Then: wrangler secret put STN_BUNDLE_ID --name %s\n\n", appName)
+	}
+
+	deployConfig := deployment.DeploymentConfig{
+		EnvironmentName:        envName,
+		DockerImage:            "ghcr.io/cloudshipai/station:latest",
+		AIProvider:             aiConfig.Provider,
+		AIModel:                aiConfig.Model,
+		EnvironmentVariables:   envConfig.Variables,
+		CloudflareInstanceType: instanceType,
+		CloudflareSleepAfter:   sleepAfter,
+		CloudflareMaxInstances: 1,
+	}
+
+	wranglerConfig, err := deployment.GenerateDeploymentTemplate("cloudflare", deployConfig)
+	if err != nil {
+		return fmt.Errorf("failed to generate wrangler.toml: %w", err)
+	}
+
+	workerConfig, err := deployment.GenerateDeploymentTemplate("cloudflare-worker", deployConfig)
+	if err != nil {
+		return fmt.Errorf("failed to generate worker.js: %w", err)
+	}
+
+	wranglerPath := filepath.Join(outputDir, "wrangler.toml")
+	if err := os.WriteFile(wranglerPath, []byte(wranglerConfig), 0644); err != nil {
+		return fmt.Errorf("failed to write wrangler.toml: %w", err)
+	}
+	fmt.Printf("   ✓ Generated %s\n", wranglerPath)
+
+	workerPath := filepath.Join(srcDir, "worker.js")
+	if err := os.WriteFile(workerPath, []byte(workerConfig), 0644); err != nil {
+		return fmt.Errorf("failed to write worker.js: %w", err)
+	}
+	fmt.Printf("   ✓ Generated %s\n", workerPath)
+
+	// Generate Dockerfile (wrangler builds and pushes to Cloudflare's registry)
+	dockerfileContent := fmt.Sprintf("FROM %s\n", deployConfig.DockerImage)
+	dockerfilePath := filepath.Join(outputDir, "Dockerfile")
+	if err := os.WriteFile(dockerfilePath, []byte(dockerfileContent), 0644); err != nil {
+		return fmt.Errorf("failed to write Dockerfile: %w", err)
+	}
+	fmt.Printf("   ✓ Generated %s\n", dockerfilePath)
+
+	packageJSON := fmt.Sprintf(`{
+  "name": "station-%s",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "src/worker.js",
+  "dependencies": {
+    "@cloudflare/containers": "^0.0.31"
+  }
+}
+`, envName)
+	packagePath := filepath.Join(outputDir, "package.json")
+	if err := os.WriteFile(packagePath, []byte(packageJSON), 0644); err != nil {
+		return fmt.Errorf("failed to write package.json: %w", err)
+	}
+	fmt.Printf("   ✓ Generated %s\n\n", packagePath)
+
+	secrets := map[string]string{
+		"STATION_AI_API_KEY": aiConfig.APIKey,
+	}
+	encryptionKey, err := generateEncryptionKey()
+	if err != nil {
+		return fmt.Errorf("failed to generate encryption key: %w", err)
+	}
+	secrets["STATION_ENCRYPTION_KEY"] = encryptionKey
+
+	if bundleID != "" {
+		secrets["STN_BUNDLE_ID"] = bundleID
+	}
+
+	for k, v := range envConfig.Variables {
+		secrets[k] = v
+	}
+
+	fmt.Printf("🔐 Setting Cloudflare secrets...\n")
+	for k, v := range secrets {
+		displayValue := v
+		if strings.Contains(strings.ToLower(k), "key") || strings.Contains(strings.ToLower(k), "token") || strings.Contains(strings.ToLower(k), "secret") {
+			displayValue = maskAPIKey(v)
+		}
+		fmt.Printf("   ✓ %s=%s\n", k, displayValue)
+
+		secretCmd := exec.CommandContext(ctx, "wrangler", "secret", "put", k, "--name", appName)
+		secretCmd.Dir = outputDir
+		secretCmd.Stdin = strings.NewReader(v)
+		secretCmd.Stdout = os.Stdout
+		secretCmd.Stderr = os.Stderr
+		if err := secretCmd.Run(); err != nil {
+			fmt.Printf("   ⚠ Warning: failed to set secret %s (app may not exist yet): %v\n", k, err)
+		}
+	}
+	fmt.Println()
+
+	fmt.Printf("📦 Installing dependencies...\n")
+	npmCmd := exec.CommandContext(ctx, "npm", "install")
+	npmCmd.Dir = outputDir
+	npmCmd.Stdout = os.Stdout
+	npmCmd.Stderr = os.Stderr
+	if err := npmCmd.Run(); err != nil {
+		return fmt.Errorf("npm install failed: %w", err)
+	}
+	fmt.Printf("   ✓ Dependencies installed\n\n")
+
+	fmt.Printf("🚀 Deploying to Cloudflare (this may take a few minutes)...\n\n")
+	deployCmd := exec.CommandContext(ctx, "wrangler", "deploy")
+	deployCmd.Dir = outputDir
+	deployCmd.Stdout = os.Stdout
+	deployCmd.Stderr = os.Stderr
+
+	if err := deployCmd.Run(); err != nil {
+		return fmt.Errorf("wrangler deploy failed: %w", err)
+	}
+
+	fmt.Printf("\n✅ Deployment Complete!\n\n")
+	fmt.Printf("🤖 Agent MCP Endpoint:\n")
+	fmt.Printf("   https://%s.<your-subdomain>.workers.dev/mcp\n\n", appName)
+
+	fmt.Printf("📋 Available Agents (%d):\n", len(envConfig.Agents))
+	for _, agent := range envConfig.Agents {
+		agentName := strings.TrimSuffix(agent, ".prompt")
+		fmt.Printf("   - agent_%s\n", agentName)
+	}
+
+	fmt.Printf("\n💡 Add to Claude Desktop:\n")
+	fmt.Printf("{\n")
+	fmt.Printf("  \"mcpServers\": {\n")
+	fmt.Printf("    \"station-%s\": {\n", envName)
+	fmt.Printf("      \"url\": \"https://%s.<your-subdomain>.workers.dev/mcp\"\n", appName)
+	fmt.Printf("    }\n")
+	fmt.Printf("  }\n")
+	fmt.Printf("}\n\n")
+
+	fmt.Printf("📁 Configuration files saved to: %s/\n", outputDir)
+	fmt.Printf("   Bundle: %s\n", bundlePath)
+	fmt.Printf("   To redeploy: cd %s && wrangler deploy\n\n", outputDir)
+
+	if bundleID == "" {
+		fmt.Printf("⚠️  IMPORTANT: Set STN_BUNDLE_ID secret before the container can start!\n")
+		fmt.Printf("   1. Upload bundle: stn bundle share %s\n", bundlePath)
+		fmt.Printf("   2. Set secret: wrangler secret put STN_BUNDLE_ID --name %s\n\n", appName)
+	}
+
+	fmt.Printf("⚠️  Cloudflare Containers Info:\n")
+	fmt.Printf("   - Base image: ghcr.io/cloudshipai/station:latest\n")
+	fmt.Printf("   - Bundle downloaded on container wake (cached after first)\n")
+	fmt.Printf("   - Container sleeps after %s of inactivity\n", sleepAfter)
+	if sleepAfter == "168h" {
+		fmt.Printf("   - Always-on mode enabled (--always-on)\n")
+	}
+	fmt.Printf("   - To change: wrangler deploy with updated wrangler.toml\n\n")
+
+	return nil
+}
+
 // buildFlySecrets creates the secrets map for Fly.io
 func buildFlySecrets(aiConfig *DeploymentAIConfig, envConfig *EnvironmentConfig) (map[string]string, error) {
 	secrets := make(map[string]string)
 
-	// Generate encryption key for Station
 	encryptionKey, err := generateEncryptionKey()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate encryption key: %w", err)
 	}
 	secrets["STATION_ENCRYPTION_KEY"] = encryptionKey
 
-	// AI configuration (use STATION_ prefix for viper compatibility)
-	secrets["STATION_AI_PROVIDER"] = aiConfig.Provider
-	secrets["STATION_AI_MODEL"] = aiConfig.Model
-	secrets["STATION_AI_API_KEY"] = aiConfig.APIKey
+	secrets["STN_AI_PROVIDER"] = aiConfig.Provider
+	secrets["STN_AI_MODEL"] = aiConfig.Model
 
-	// Environment variables from variables.yml
+	if aiConfig.AuthType == "oauth" {
+		secrets["STN_AI_AUTH_TYPE"] = "oauth"
+		secrets["STN_AI_OAUTH_TOKEN"] = aiConfig.OAuthToken
+		secrets["STN_AI_OAUTH_REFRESH_TOKEN"] = aiConfig.OAuthRefreshToken
+		secrets["STN_AI_OAUTH_EXPIRES_AT"] = fmt.Sprintf("%d", aiConfig.OAuthExpiresAt)
+	} else {
+		secrets["STN_AI_API_KEY"] = aiConfig.APIKey
+		// Also set provider-specific env var for backwards compatibility with released images
+		// Released image (v0.23.x) only checks provider-specific env vars for auto-init
+		switch strings.ToLower(aiConfig.Provider) {
+		case "openai":
+			secrets["OPENAI_API_KEY"] = aiConfig.APIKey
+		case "anthropic":
+			secrets["ANTHROPIC_API_KEY"] = aiConfig.APIKey
+		case "google", "gemini":
+			secrets["GOOGLE_API_KEY"] = aiConfig.APIKey
+		case "groq":
+			secrets["GROQ_API_KEY"] = aiConfig.APIKey
+		case "openrouter":
+			secrets["OPENROUTER_API_KEY"] = aiConfig.APIKey
+		case "together":
+			secrets["TOGETHER_API_KEY"] = aiConfig.APIKey
+		case "fireworks":
+			secrets["FIREWORKS_API_KEY"] = aiConfig.APIKey
+		case "ollama":
+			secrets["OLLAMA_BASE_URL"] = "http://localhost:11434"
+		}
+	}
+
 	for k, v := range envConfig.Variables {
 		secrets[k] = v
 	}
 
-	// Production deployment settings
-	// STN_DEV_MODE is NOT set (defaults to false, disables port 8585)
-	// Sync always runs on startup to populate database with agents from .prompt files
-
-	// Enable MCP connection pooling for production (keeps connections alive)
 	secrets["STATION_MCP_POOLING"] = "true"
 
 	return secrets, nil

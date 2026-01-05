@@ -411,24 +411,24 @@ and makes them available in the Genkit developer UI for interactive testing.`,
 		RunE: runDevelop,
 	}
 
-	// Deploy command
 	deployCmd = &cobra.Command{
 		Use:   "deploy <environment-name>",
 		Short: "Deploy Station environment to cloud platform",
 		Long: `Deploy a Station environment to a cloud platform with agents and MCP tools.
 
-This command builds a Docker image with the specified environment embedded and deploys
-it to the target platform (currently supports Fly.io). The deployment includes:
-• All agents from the environment
-• All MCP server configurations
-• Template variables as environment secrets
-• Auto-configured AI provider settings
+Supported targets:
+  fly        - Fly.io (builds Docker image, persistent storage)
+  cloudflare - [EXPERIMENTAL] Cloudflare Containers (uses base image + CloudShip bundle)
 
-The deployed instance exposes agents via MCP on port 3030 for public access.
-The management UI (port 8585) is disabled by default for security.`,
+The deployed instance exposes agents via MCP for public access.
+The management UI is disabled by default for security.`,
 		Example: `  stn deploy my-env --target fly                    # Deploy to Fly.io
-  stn deploy security-bundle --region ord           # Deploy to specific region
-  stn deploy production --target fly --region syd   # Full deployment example`,
+  stn deploy my-env --target cloudflare             # Deploy to Cloudflare
+  stn deploy my-env --target cf --always-on         # Cloudflare, no sleep
+  stn deploy my-env --target cf --sleep-after 1h    # Sleep after 1 hour
+  stn deploy my-env --target cf --instance-type standard-1  # Bigger container
+  stn deploy my-env --target fly --destroy          # Tear down Fly deployment
+  stn deploy my-env --target cf --destroy           # Tear down Cloudflare`,
 		Args: cobra.ExactArgs(1),
 		RunE: runDeploy,
 	}
@@ -462,7 +462,8 @@ func runServe(cmd *cobra.Command, args []string) error {
 			os.Getenv("GOOGLE_API_KEY") != "" ||
 			os.Getenv("AI_API_KEY") != "" ||
 			os.Getenv("STN_API_KEY") != "" ||
-			os.Getenv("STATION_AI_API_KEY") != ""
+			os.Getenv("STN_AI_API_KEY") != "" ||
+			os.Getenv("STN_AI_OAUTH_TOKEN") != ""
 
 		hasBundleID := os.Getenv("STN_BUNDLE_ID") != ""
 
@@ -1629,9 +1630,17 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	envName := args[0]
 	target, _ := cmd.Flags().GetString("target")
 	region, _ := cmd.Flags().GetString("region")
+	sleepAfter, _ := cmd.Flags().GetString("sleep-after")
+	alwaysOn, _ := cmd.Flags().GetBool("always-on")
+	instanceType, _ := cmd.Flags().GetString("instance-type")
+	destroy, _ := cmd.Flags().GetBool("destroy")
+
+	if alwaysOn {
+		sleepAfter = "168h"
+	}
 
 	ctx := context.Background()
-	return handlers.HandleDeploy(ctx, envName, target, region)
+	return handlers.HandleDeploy(ctx, envName, target, region, sleepAfter, instanceType, destroy, alwaysOn)
 }
 
 // bootstrapGitHubWorkflows creates GitHub Actions workflow files in .github/workflows/

@@ -1,0 +1,24 @@
+name = "station-{{.EnvironmentName}}"
+main = "src/worker.js"
+compatibility_date = "2025-01-01"
+
+[[containers]]
+class_name = "StationContainer"
+image = "./Dockerfile"
+max_instances = {{.CloudflareMaxInstances}}
+instance_type = "{{.CloudflareInstanceType}}"
+
+[[durable_objects.bindings]]
+class_name = "StationContainer"
+name = "STATION"
+
+[[migrations]]
+new_sqlite_classes = ["StationContainer"]
+tag = "v1"
+
+[vars]
+STATION_AI_PROVIDER = "{{.AIProvider}}"
+STATION_AI_MODEL = "{{.AIModel}}"
+STN_DEV_MODE = "false"
+STATION_MCP_POOLING = "true"
+STATION_MCP_PORT = "8587"

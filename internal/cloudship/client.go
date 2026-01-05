@@ -1,11 +1,14 @@
-// Package cloudship provides a client for interacting with the CloudShip API.
 package cloudship
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -122,4 +125,72 @@ func (c *Client) DownloadBundle(bundleID string) (string, error) {
 
 	tmpFile.Close()
 	return tmpFile.Name(), nil
+}
+
+type UploadResponse struct {
+	BundleID     string `json:"bundle_id"`
+	Filename     string `json:"filename"`
+	Size         int64  `json:"size"`
+	Organization string `json:"organization"`
+	UploadedAt   string `json:"uploaded_at"`
+	DownloadURL  string `json:"download_url"`
+}
+
+func (c *Client) UploadBundle(bundlePath string) (*UploadResponse, error) {
+	headerName, headerValue, err := c.GetAuthHeader()
+	if err != nil {
+		return nil, err
+	}
+
+	file, err := os.Open(bundlePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open bundle: %w", err)
+	}
+	defer file.Close()
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+
+	part, err := writer.CreateFormFile("bundle", filepath.Base(bundlePath))
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err := io.Copy(part, file); err != nil {
+		return nil, err
+	}
+	writer.Close()
+
+	apiURL := c.GetAPIURL()
+	uploadURL := fmt.Sprintf("%s/api/public/bundles/upload/", apiURL)
+
+	req, err := http.NewRequest("POST", uploadURL, body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set(headerName, headerValue)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusCreated {
+		return nil, fmt.Errorf("upload failed (HTTP %d): %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var uploadResp UploadResponse
+	if err := json.Unmarshal(bodyBytes, &uploadResp); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	return &uploadResp, nil
 }

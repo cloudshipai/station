@@ -40,16 +40,16 @@ primary_region = "{{.FlyRegion}}"
 [http_service]
   internal_port = 8587
   force_https = true
-  auto_stop_machines = true
+  auto_stop_machines = {{if .FlyAlwaysOn}}false{{else}}true{{end}}
   auto_start_machines = true
-  min_machines_running = 0
+  min_machines_running = {{if .FlyAlwaysOn}}1{{else}}0{{end}}
   processes = ["app"]
 
 # Management MCP TCP service (admin tools like add_agent, call_agent)  
 [[services]]
   protocol = "tcp"
   internal_port = {{.MCPPort}}
-  auto_stop_machines = true
+  auto_stop_machines = {{if .FlyAlwaysOn}}false{{else}}true{{end}}
   auto_start_machines = true
 
   [[services.ports]]
@@ -59,6 +59,11 @@ primary_region = "{{.FlyRegion}}"
   cpu_kind = "shared"
   cpus = 1
   memory_mb = 1024
+
+# SQLite limitation: Only 1 machine allowed (each machine has its own DB)
+# This prevents Fly from creating multiple machines for HA
+[deploy]
+  strategy = "immediate"
 
 # Stateless deployment - database rebuilt from environment files on each deploy
 # For persistence, configure Litestream replication via environment variables

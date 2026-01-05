@@ -27,7 +27,12 @@ var flyTemplate string
 //go:embed templates/docker-compose.yml
 var dockerComposeTemplate string
 
-// DeploymentConfig holds the configuration for generating deployment templates
+//go:embed templates/wrangler.toml
+var wranglerTemplate string
+
+//go:embed templates/cloudflare-worker.js
+var cloudflareWorkerTemplate string
+
 type DeploymentConfig struct {
 	EnvironmentName      string
 	DockerImage          string
@@ -39,8 +44,13 @@ type DeploymentConfig struct {
 	Debug                string
 	TelemetryEnabled     string
 	OpenAIAPIKey         string
-	FlyRegion            string // For Fly.io deployments
+	FlyRegion            string
+	FlyAlwaysOn          bool
 	EnvironmentVariables map[string]string
+
+	CloudflareInstanceType string
+	CloudflareSleepAfter   string
+	CloudflareMaxInstances int
 }
 
 // GenerateDeploymentTemplate generates a deployment template for the specified provider
@@ -59,6 +69,10 @@ func GenerateDeploymentTemplate(provider string, config DeploymentConfig) (strin
 		tmplStr = flyTemplate
 	case "docker-compose":
 		tmplStr = dockerComposeTemplate
+	case "cloudflare", "wrangler":
+		tmplStr = wranglerTemplate
+	case "cloudflare-worker":
+		tmplStr = cloudflareWorkerTemplate
 	default:
 		return "", fmt.Errorf("unsupported deployment provider: %s", provider)
 	}
@@ -107,9 +121,13 @@ func LoadConfigFromYAML(configContent string, envVarsContent string, environment
 		AIModel:              fmt.Sprintf("%v", getConfigValue(config, "ai_model", "gpt-5-mini")),
 		Debug:                fmt.Sprintf("%v", getConfigValue(config, "debug", false)),
 		TelemetryEnabled:     fmt.Sprintf("%v", getConfigValue(config, "telemetry_enabled", true)),
-		OpenAIAPIKey:         "<your-openai-api-key>", // Placeholder - user must replace
-		FlyRegion:            "ord",                   // Default to Chicago, user can change
+		OpenAIAPIKey:         "<your-openai-api-key>",
+		FlyRegion:            "ord",
 		EnvironmentVariables: envVars,
+
+		CloudflareInstanceType: "basic",
+		CloudflareSleepAfter:   "10m",
+		CloudflareMaxInstances: 1,
 	}
 
 	return deployConfig, nil
