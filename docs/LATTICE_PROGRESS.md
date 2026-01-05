@@ -12,7 +12,9 @@ This document tracks the implementation progress of the Station Lattice feature.
 
 | Commit | Description | Date |
 |--------|-------------|------|
-| `6945994e` | feat(lattice): implement Phase 3 workflow discovery and documentation | Latest |
+| `pending` | feat(lattice): implement Phase 4 server integration and executor adapter | Latest |
+| `92874538` | docs(lattice): add comprehensive API reference and progress tracking | |
+| `6945994e` | feat(lattice): implement Phase 3 workflow discovery and documentation | |
 | `3a0d1ffe` | feat(lattice): implement Phase 2 agent discovery and remote invocation | |
 | `8184d458` | feat(lattice): implement Phase 1 infrastructure for Station mesh network | |
 
@@ -104,59 +106,49 @@ This document tracks the implementation progress of the Station Lattice feature.
 - [x] Integration tests for full flow
 - [x] Comprehensive API documentation
 
-## Phase 4: Integration & Task Groups (Planned)
+## Phase 4: Integration ✅
+
+**Status**: Complete
+
+### 4.1 Executor Adapter ✅
+
+Created `internal/lattice/executor_adapter.go` with:
+- `ExecutorAdapter` - wraps `AgentServiceInterface` for agent execution
+- `WorkflowExecutorAdapter` - wraps `WorkflowService` for workflow execution
+
+### 4.2 Workflow Request Handler ✅
+
+Added to `internal/lattice/invoker.go`:
+- `WorkflowExecutor` interface
+- `SetWorkflowExecutor()` method
+- `handleWorkflowRequest()` handler for incoming workflow invocations
+- `respondWorkflowError()` helper
+- Dual subscriptions: agent.invoke and workflow.run subjects
+
+### 4.3 Server Integration ✅
+
+Modified `cmd/main/server.go` to:
+- Check `--orchestration` and `--lattice` flags
+- Start embedded NATS server in orchestration mode
+- Connect NATS client to orchestrator or specified URL
+- Initialize registry and register station manifest
+- Start presence heartbeat for discovery
+- Create ExecutorAdapter wrapping AgentService
+- Create WorkflowExecutorAdapter wrapping WorkflowService
+- Start Invoker to handle remote agent/workflow requests
+- Graceful shutdown of all lattice components
+
+### Files Created/Modified
+
+| File | Changes |
+|------|---------|
+| `internal/lattice/executor_adapter.go` | NEW: ExecutorAdapter and WorkflowExecutorAdapter (132 lines) |
+| `internal/lattice/invoker.go` | Added workflow handler methods, WorkflowExecutor interface |
+| `cmd/main/server.go` | Full lattice integration in runMainServer() |
+
+## Phase 5: Task Groups (Planned)
 
 **Status**: Not Started
-
-### 4.1 Wire Agent Execution (Priority: High)
-
-Currently the `Invoker` receives a `nil` executor. Need to create an adapter that wraps `AgentExecutionEngine`.
-
-**Files to Create**:
-- `internal/lattice/executor_adapter.go`
-
-**Implementation**:
-```go
-type ExecutorAdapter struct {
-    engine *services.AgentExecutionEngine
-    db     *sql.DB
-}
-
-func (e *ExecutorAdapter) ExecuteAgentByID(ctx context.Context, agentID, task string) (string, int, error) {
-    id, _ := strconv.ParseInt(agentID, 10, 64)
-    params := services.RunCreateParams{
-        AgentID: id,
-        Task:    task,
-    }
-    result, _ := e.engine.ExecuteAgent(ctx, params)
-    return result.Response, result.ToolCalls, nil
-}
-
-func (e *ExecutorAdapter) ExecuteAgentByName(ctx context.Context, agentName, task string) (string, int, error) {
-    q := queries.New(e.db)
-    agent, _ := q.GetAgentByNameGlobal(ctx, agentName)
-    return e.ExecuteAgentByID(ctx, strconv.FormatInt(agent.ID, 10), task)
-}
-```
-
-### 4.2 Integrate into `stn serve` (Priority: High)
-
-Modify the serve command to automatically start lattice components.
-
-**Files to Modify**:
-- `cmd/main/main.go`
-
-**Implementation**:
-1. After server starts, check `--orchestration` or `--lattice` flag
-2. If orchestration: start embedded NATS, then connect client
-3. If lattice URL: connect client to that URL
-4. Create manifest collector with db handle
-5. Collect and register manifest
-6. Create presence and start heartbeat
-7. Create invoker with executor adapter and start listener
-8. On shutdown: stop invoker, stop presence, close client, shutdown embedded server
-
-### 4.3 Task Groups (Priority: Medium)
 
 From PRD: "Coordinated multi-task execution across stations"
 
@@ -173,31 +165,13 @@ From PRD: "Coordinated multi-task execution across stations"
 - Parallel execution of independent tasks
 - Dependency graph for sequential tasks
 
-### 4.4 Workflow Invocation Handler (Priority: Medium)
-
-Add workflow handling to `Invoker.Start()`.
-
-**Implementation**:
-```go
-func (i *Invoker) Start(ctx context.Context) error {
-    // Existing agent handler...
-    
-    // Add workflow handler
-    wfSubject := fmt.Sprintf("lattice.station.%s.workflow.run", i.stationID)
-    _, err := i.client.conn.Subscribe(wfSubject, i.handleWorkflowRequest)
-    // ...
-}
-```
-
 ## Known Gaps
 
-### Critical (Blocking Production Use)
+### Critical - RESOLVED ✅
 
-1. **Executor is nil**: CLI commands create `Invoker` with `nil` executor, so remote execution will fail at the target station.
-
-2. **No auto-registration**: Stations don't automatically publish their manifest when `stn serve` starts. Must be done manually or via CLI.
-
-3. **No workflow execution handler**: `Invoker` can send workflow requests but can't handle incoming ones.
+1. ~~**Executor is nil**~~ - Resolved: ExecutorAdapter wraps AgentService
+2. ~~**No auto-registration**~~ - Resolved: `stn serve` now auto-registers on startup
+3. ~~**No workflow execution handler**~~ - Resolved: handleWorkflowRequest() added
 
 ### Non-Critical (Polish)
 
@@ -209,6 +183,8 @@ func (i *Invoker) Start(ctx context.Context) error {
 
 4. **No mTLS enforcement**: TLS is optional, not enforced between stations.
 
+5. **Task Groups not implemented**: PRD mentions coordinated multi-task execution.
+
 ## Testing
 
 ### Unit Tests
@@ -218,10 +194,35 @@ cd /home/epuerta/sandbox/cloudship-sandbox/station-lattice-experimental
 go test ./internal/lattice/... -v
 ```
 
+### Integration Tests (invoker_test.go)
+
+Tests with mock executors covering:
+- Remote agent execution by ID and name
+- Remote workflow execution
+- Concurrent request handling (10 parallel requests)
+- Error handling (missing agent ID, malformed JSON, no executor)
+
+```bash
+go test ./internal/lattice/... -run "TestInvoker" -v
+```
+
 ### Build Verification
 
 ```bash
 go build ./...
+```
+
+### E2E Bash Script
+
+Automated test that:
+1. Builds the station binary
+2. Starts an orchestrator station with embedded NATS
+3. Starts a member station connecting to the orchestrator
+4. Verifies both stations register in the lattice
+5. Tests CLI commands (status, agents, workflows)
+
+```bash
+./scripts/test_lattice_e2e.sh
 ```
 
 ### Manual E2E Test
@@ -244,7 +245,7 @@ stn lattice workflows
 Copy this to continue development:
 
 ```
-Continue implementing Station Lattice Architecture in the experimental worktree.
+Continue Station Lattice Architecture development in the experimental worktree.
 
 CONTEXT:
 - Worktree: /home/epuerta/sandbox/cloudship-sandbox/station-lattice-experimental/
@@ -257,39 +258,46 @@ COMPLETED:
 ✅ Phase 1: Core infrastructure (client, embedded, registry, presence)
 ✅ Phase 2: Agent discovery and remote invocation (discovery, router, invoker, CLI)
 ✅ Phase 3: Workflow discovery, invocation, documentation, integration tests
+✅ Phase 4: Server integration (executor_adapter, invoker workflow handler, server.go integration)
 
 CURRENT STATE:
-- All lattice components exist and tests pass
+- All lattice components exist and compile
 - CLI commands work: stn lattice status/agents/workflows/agent exec/workflow run
-- BUT: stn serve doesn't actually start lattice components yet
-- BUT: Invoker receives nil executor (can't actually run agents)
-- BUT: Stations don't auto-register manifests on connect
+- stn serve --orchestration starts embedded NATS and auto-registers
+- stn serve --lattice <url> connects to orchestrator and auto-registers
+- ExecutorAdapter wraps AgentService for remote agent execution
+- WorkflowExecutorAdapter wraps WorkflowService for remote workflow execution
+- Invoker handles both agent.invoke and workflow.run subjects
 
-PHASE 4 TODO (Integration):
-1. Create AgentExecutor adapter that wraps AgentExecutionEngine
-   - File: internal/lattice/executor_adapter.go
-   - Implement: ExecuteAgentByID, ExecuteAgentByName
+PHASE 5 TODO (Task Groups - from PRD):
+1. Create TaskGroup data structure in NATS KV
+2. Add CLI commands: stn lattice taskgroup create/add-task/run/status
+3. Implement parallel execution with dependency graph
+4. Progress tracking via NATS KV
 
-2. Modify stn serve to start lattice components
-   - File: cmd/main/main.go (around serve command setup)
-   - When --orchestration: start embedded NATS, then connect as client
-   - When --lattice: connect as client
-   - After connect: collect manifest, register, start presence, start invoker
+TESTING:
+# Terminal 1: Orchestrator
+stn serve --orchestration
 
-3. Test end-to-end:
-   - Terminal 1: stn serve --orchestration
-   - Terminal 2: stn serve --lattice nats://localhost:4222
-   - Terminal 3: stn lattice agent exec <agent-name> "task"
+# Terminal 2: Member station
+stn serve --lattice nats://localhost:4222
+
+# Terminal 3: Query and execute
+stn lattice status
+stn lattice agents
+stn lattice agent exec <agent-name> "task"
+stn lattice workflows
+stn lattice workflow run <workflow-id>
 
 KEY FILES:
 - internal/lattice/*.go - All lattice components
-- cmd/main/main.go - Serve command and flags
+- cmd/main/server.go - Server integration (line ~310-410)
 - cmd/main/lattice_commands.go - CLI commands
-- internal/services/agent_execution_engine.go - Existing agent execution
+- internal/lattice/executor_adapter.go - ExecutorAdapter and WorkflowExecutorAdapter
 
 ARCHITECTURE:
 - stn serve = standalone (no lattice)
-- stn serve --orchestration = orchestrator with embedded NATS
+- stn serve --orchestration = orchestrator with embedded NATS on port 4222
 - stn serve --lattice nats://host:port = member connecting to orchestrator
 - NATS subjects: lattice.station.{id}.agent.invoke, lattice.station.{id}.workflow.run
 ```
