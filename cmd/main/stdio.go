@@ -18,7 +18,7 @@ import (
 	"station/internal/lighthouse"
 	lighthouseServices "station/internal/lighthouse/services"
 	"station/internal/logging"
-	"station/internal/mcp"
+	stationmcp "station/internal/mcp"
 	"station/internal/services"
 	"station/internal/workflows"
 	"station/internal/workflows/runtime"
@@ -42,6 +42,7 @@ including agent management, file operations, and system resources.`,
 func init() {
 	stdioCmd.Flags().Bool("dev", false, "Enable development mode with GenKit reflection server (default: disabled)")
 	stdioCmd.Flags().Bool("core", false, "Run in core mode - MCP server only, no API server or ports (ideal for containers)")
+	stdioCmd.Flags().Bool("code-mode", false, "Lightweight mode for AI coding assistants - exposes single tool directing to use CLI")
 	// Jaeger removed - run separately if needed. Tracing configured via config.yaml otel_endpoint
 	rootCmd.AddCommand(stdioCmd)
 }
@@ -50,8 +51,14 @@ func runStdioServer(cmd *cobra.Command, args []string) error {
 	// Set GenKit environment based on --dev flag
 	devMode, _ := cmd.Flags().GetBool("dev")
 	coreMode, _ := cmd.Flags().GetBool("core")
+	codeMode, _ := cmd.Flags().GetBool("code-mode")
 	if !devMode && os.Getenv("GENKIT_ENV") == "" {
 		os.Setenv("GENKIT_ENV", "prod") // Disable reflection server by default
+	}
+
+	// Code mode: lightweight MCP server with single tool
+	if codeMode {
+		return runCodeModeServer()
 	}
 
 	// Load configuration
@@ -184,7 +191,7 @@ func runStdioServer(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	mcpServer := mcp.NewServer(database, agentSvc, repos, cfg, localMode)
+	mcpServer := stationmcp.NewServer(database, agentSvc, repos, cfg, localMode)
 	mcpServer.SetWorkflowService(workflowService)
 
 	// Set lighthouse client for surgical telemetry integration
@@ -529,4 +536,12 @@ func (a *stdioRegistryStepExecutorAdapter) ExecuteStep(ctx context.Context, step
 		}, err
 	}
 	return executor.Execute(ctx, step, runContext)
+}
+
+func runCodeModeServer() error {
+	_, _ = fmt.Fprintf(os.Stderr, "🚀 Station MCP Server starting in code-mode (lightweight)\n")
+	_, _ = fmt.Fprintf(os.Stderr, "📝 Single tool available: station_cli\n")
+	_, _ = fmt.Fprintf(os.Stderr, "Ready for MCP communication via stdin/stdout\n")
+
+	return stationmcp.ServeCodeMode()
 }
