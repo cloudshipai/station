@@ -6,6 +6,7 @@ package anthropic_oauth
 import (
 	"context"
 	"log"
+	"time"
 
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/option"
@@ -146,6 +147,9 @@ func (a *AnthropicOAuth) Init(ctx context.Context) []api.Action {
 		baseURL = DefaultBaseURL
 	}
 	opts = append(opts, option.WithBaseURL(baseURL))
+
+	log.Printf("[AnthropicOAuth] Setting 10-minute request timeout for API calls")
+	opts = append(opts, option.WithRequestTimeout(10*time.Minute))
 
 	if a.OAuthToken != "" {
 		log.Printf("[AnthropicOAuth] Using OAuth token authentication")

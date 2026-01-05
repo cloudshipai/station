@@ -3,6 +3,7 @@ package coding
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -49,10 +50,12 @@ func (b *OpenCodeBackend) Ping(ctx context.Context) error {
 
 func (b *OpenCodeBackend) CreateSession(ctx context.Context, opts SessionOptions) (*Session, error) {
 	runID := fmt.Sprintf("run-%d", time.Now().UnixNano())
-	workspacePath := runID
+	workspacePath := opts.WorkspacePath
 
-	if opts.WorkspacePath != "" {
-		workspacePath = opts.WorkspacePath
+	if workspacePath == "" {
+		workspacePath = "/workspaces/station-coding/" + runID
+	} else {
+		workspacePath = toOpenCodeWorkspacePath(workspacePath)
 	}
 
 	var backendID string
@@ -415,4 +418,12 @@ func (b *OpenCodeBackend) buildPrompt(task Task, workspacePath string) string {
 	}
 
 	return sb.String()
+}
+
+func toOpenCodeWorkspacePath(localPath string) string {
+	if strings.HasPrefix(localPath, "/workspaces/") {
+		return localPath
+	}
+	baseName := filepath.Base(localPath)
+	return "/workspaces/station-coding/" + baseName
 }

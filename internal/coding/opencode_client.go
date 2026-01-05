@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os/exec"
 	"time"
 )
 
@@ -39,8 +40,10 @@ func WithHTTPClient(client *http.Client) OpenCodeClientOption {
 
 func NewOpenCodeClient(baseURL string, opts ...OpenCodeClientOption) *OpenCodeClient {
 	c := &OpenCodeClient{
-		baseURL:     baseURL,
-		httpClient:  &http.Client{Timeout: 10 * time.Minute},
+		baseURL: baseURL,
+		httpClient: &http.Client{
+			Timeout: 10 * time.Minute,
+		},
 		maxAttempts: 3,
 		retryDelay:  time.Second,
 		maxDelay:    30 * time.Second,
@@ -174,34 +177,45 @@ func (c *OpenCodeClient) SendMessage(ctx context.Context, sessionID, directory, 
 		url += "?directory=" + directory
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
+	respBody, err := c.sendMessageViaCurl(ctx, url, body)
 	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := c.doWithRetry(ctx, req)
-	if err != nil {
-		return nil, fmt.Errorf("send message: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("send message failed: status %d, body: %s", resp.StatusCode, respBody)
-	}
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read response: %w", err)
-	}
-
-	if len(respBody) == 0 {
-		return nil, fmt.Errorf("empty response body (status: %d, content-length: %s)",
-			resp.StatusCode, resp.Header.Get("Content-Length"))
+		return nil, fmt.Errorf("send message via curl: %w", err)
 	}
 
 	return c.parseMessageResponse(respBody)
+}
+
+func (c *OpenCodeClient) sendMessageViaCurl(ctx context.Context, url string, body []byte) ([]byte, error) {
+	timeout := "300"
+	if deadline, ok := ctx.Deadline(); ok {
+		remaining := time.Until(deadline)
+		if remaining > 0 {
+			timeout = fmt.Sprintf("%d", int(remaining.Seconds()))
+		}
+	}
+
+	cmd := exec.CommandContext(ctx, "curl", "-s", "--max-time", timeout,
+		"-X", "POST", url,
+		"-H", "Content-Type: application/json",
+		"-d", string(body))
+
+	output, err := cmd.Output()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return nil, fmt.Errorf("curl failed: %s, stderr: %s", err, string(exitErr.Stderr))
+		}
+		return nil, err
+	}
+
+	if len(output) == 0 {
+		return nil, fmt.Errorf("curl returned empty response")
+	}
+
+	return output, nil
 }
 
 func (c *OpenCodeClient) parseMessageResponse(body []byte) (*MessageResponse, error) {

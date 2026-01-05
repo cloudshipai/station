@@ -82,8 +82,7 @@ func init() {
 
 	// Legacy file-config handlers removed - use 'stn sync' instead
 
-	configCmd.AddCommand(configShowCmd)
-	configCmd.AddCommand(configEditCmd)
+	initConfigCmd()
 
 	mcpCmd.AddCommand(mcpListCmd)
 	mcpCmd.AddCommand(mcpToolsCmd)
@@ -208,6 +207,8 @@ func init() {
 	deployCmd.Flags().Bool("always-on", false, "Cloudflare: keep container always running (sets sleep-after to 168h)")
 	deployCmd.Flags().String("instance-type", "basic", "Cloudflare: container size (lite, basic, standard-1 to standard-4)")
 	deployCmd.Flags().Bool("destroy", false, "Tear down the deployment instead of deploying")
+	deployCmd.Flags().Bool("with-opencode", false, "Deploy OpenCode coding backend alongside Station (Fly.io only)")
+	deployCmd.Flags().Bool("with-sandbox", false, "Enable Fly Machines sandbox backend for code execution (Fly.io only)")
 
 	mcpStatusCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
 	mcpStatusCmd.Flags().String("environment", "default", "Environment to check status for (default shows all)")

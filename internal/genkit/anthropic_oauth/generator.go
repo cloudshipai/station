@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
+	"time"
 
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/firebase/genkit/go/ai"
@@ -36,6 +38,12 @@ func (g *Generator) WithClaudeCodeSystemPrompt() *Generator {
 
 // Generate performs the API call to Anthropic with support for streaming and tools
 func (g *Generator) Generate(ctx context.Context, req *ai.ModelRequest, cb func(context.Context, *ai.ModelResponseChunk) error) (*ai.ModelResponse, error) {
+	if deadline, ok := ctx.Deadline(); ok {
+		log.Printf("[Generator] Context deadline: %v (in %v)", deadline, time.Until(deadline))
+	} else {
+		log.Printf("[Generator] No context deadline set")
+	}
+
 	// Build the request parameters
 	params, customSystemPrompt, err := g.buildParams(req)
 	if err != nil {
@@ -253,15 +261,27 @@ func (g *Generator) applyConfig(params *anthropic.MessageNewParams, config inter
 
 // generateComplete performs a non-streaming API call
 func (g *Generator) generateComplete(ctx context.Context, params anthropic.MessageNewParams, originalReq *ai.ModelRequest) (*ai.ModelResponse, error) {
+	log.Printf("[Generator] generateComplete: calling Anthropic API for model %s with %d messages, %d tools", params.Model, len(params.Messages), len(params.Tools))
 	message, err := g.client.Messages.New(ctx, params)
 	if err != nil {
+		log.Printf("[Generator] generateComplete: Anthropic API error: %v", err)
 		return nil, fmt.Errorf("anthropic API error: %w", err)
+	}
+	log.Printf("[Generator] generateComplete: Anthropic API returned - stop_reason=%s, content_blocks=%d", message.StopReason, len(message.Content))
+	for i, block := range message.Content {
+		switch b := block.AsAny().(type) {
+		case anthropic.TextBlock:
+			log.Printf("[Generator]   content[%d]: TEXT (%d chars)", i, len(b.Text))
+		case anthropic.ToolUseBlock:
+			log.Printf("[Generator]   content[%d]: TOOL_USE name=%s id=%s", i, b.Name, b.ID)
+		}
 	}
 	return g.buildResponse(message, originalReq), nil
 }
 
 // generateStream performs a streaming API call
 func (g *Generator) generateStream(ctx context.Context, params anthropic.MessageNewParams, cb func(context.Context, *ai.ModelResponseChunk) error, originalReq *ai.ModelRequest) (*ai.ModelResponse, error) {
+	log.Printf("[Generator] generateStream: calling Anthropic streaming API for model %s with %d messages, %d tools", params.Model, len(params.Messages), len(params.Tools))
 	stream := g.client.Messages.NewStreaming(ctx, params)
 
 	// Accumulate the full message

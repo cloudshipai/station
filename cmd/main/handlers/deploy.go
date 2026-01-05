@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 
@@ -38,7 +39,7 @@ type EnvironmentConfig struct {
 	Agents    []string
 }
 
-func HandleDeploy(ctx context.Context, envName, target, region, sleepAfter, instanceType string, destroy, alwaysOn bool) error {
+func HandleDeploy(ctx context.Context, envName, target, region, sleepAfter, instanceType string, destroy, alwaysOn, withOpenCode, withSandbox bool) error {
 	if envName == "" {
 		return fmt.Errorf("environment name is required")
 	}
@@ -90,8 +91,11 @@ func HandleDeploy(ctx context.Context, envName, target, region, sleepAfter, inst
 		if err != nil {
 			return err
 		}
-		return deployToFly(ctx, envName, aiConfig, envConfig, imageName, region, alwaysOn)
+		return deployToFly(ctx, envName, aiConfig, envConfig, imageName, region, alwaysOn, withOpenCode, withSandbox)
 	case "cloudflare", "cf", "cloudflare-containers":
+		if withOpenCode || withSandbox {
+			return fmt.Errorf("--with-opencode and --with-sandbox are only supported for Fly.io deployments")
+		}
 		return deployToCloudflare(ctx, envName, aiConfig, envConfig, sleepAfter, instanceType)
 	default:
 		return fmt.Errorf("unsupported deployment target: %s (supported: fly, cloudflare)", target)
@@ -135,7 +139,8 @@ func handleDeployDestroy(ctx context.Context, envName, target string) error {
 	return nil
 }
 
-// detectAIConfigForDeployment uses Station's existing config.Load() to detect AI settings
+// detectAIConfigForDeployment uses Station's existing config.Load() to detect AI settings.
+// For OAuth, it refreshes the token if expired before deploying.
 func detectAIConfigForDeployment() (*DeploymentAIConfig, error) {
 	cfg, err := config.Load()
 	if err != nil {
@@ -153,10 +158,28 @@ func detectAIConfigForDeployment() (*DeploymentAIConfig, error) {
 	}
 
 	if aiConfig.AuthType == "oauth" {
-		if aiConfig.OAuthToken == "" {
-			return nil, fmt.Errorf("OAuth auth type but no OAuth token found in config")
+		if aiConfig.OAuthRefreshToken == "" {
+			return nil, fmt.Errorf("OAuth auth type but no refresh token found in config")
 		}
-	} else if aiConfig.APIKey == "" {
+
+		// Refresh the OAuth token before deploying to ensure it's valid
+		fmt.Printf("🔄 Refreshing OAuth token for deployment...\n")
+		newToken, newRefresh, newExpires, err := config.RefreshOAuthToken(aiConfig.OAuthRefreshToken)
+		if err != nil {
+			return nil, fmt.Errorf("failed to refresh OAuth token: %w", err)
+		}
+
+		aiConfig.OAuthToken = newToken
+		if newRefresh != "" {
+			aiConfig.OAuthRefreshToken = newRefresh
+		}
+		aiConfig.OAuthExpiresAt = newExpires
+		fmt.Printf("   ✓ OAuth token refreshed (expires in %d hours)\n", (newExpires-currentTimeMs())/1000/3600)
+
+		return aiConfig, nil
+	}
+
+	if aiConfig.APIKey == "" {
 		return nil, fmt.Errorf(
 			"no API key found for provider '%s'\nSet %s environment variable",
 			aiConfig.Provider,
@@ -165,6 +188,10 @@ func detectAIConfigForDeployment() (*DeploymentAIConfig, error) {
 	}
 
 	return aiConfig, nil
+}
+
+func currentTimeMs() int64 {
+	return time.Now().UnixMilli()
 }
 
 // loadEnvironmentConfig loads the environment directory and parses its contents
@@ -255,7 +282,7 @@ func buildDeploymentImage(ctx context.Context, envName string, envConfig *Enviro
 }
 
 // deployToFly deploys the image to Fly.io
-func deployToFly(ctx context.Context, envName string, aiConfig *DeploymentAIConfig, envConfig *EnvironmentConfig, imageName, region string, alwaysOn bool) error {
+func deployToFly(ctx context.Context, envName string, aiConfig *DeploymentAIConfig, envConfig *EnvironmentConfig, imageName, region string, alwaysOn, withOpenCode, withSandbox bool) error {
 	if alwaysOn {
 		fmt.Printf("🚢 Deploying to Fly.io (always-on mode)...\n\n")
 	} else {
@@ -372,7 +399,33 @@ func deployToFly(ctx context.Context, envName string, aiConfig *DeploymentAIConf
 		return fmt.Errorf("fly deploy failed: %w", err)
 	}
 
-	// Get app info
+	var openCodeURL string
+	if withOpenCode {
+		openCodeAppName := fmt.Sprintf("%s-opencode", appName)
+		openCodeURL = fmt.Sprintf("http://%s.internal:4096", openCodeAppName)
+		if err := deployOpenCode(ctx, openCodeAppName, aiConfig, region); err != nil {
+			return fmt.Errorf("failed to deploy OpenCode: %w", err)
+		}
+		if err := setFlySecrets(ctx, appName, map[string]string{
+			"STN_CODING_OPENCODE_URL": openCodeURL,
+			"STN_CODING_BACKEND":      "opencode",
+		}); err != nil {
+			return fmt.Errorf("failed to set OpenCode URL secret: %w", err)
+		}
+		fmt.Printf("   ✓ OpenCode configured via private network: %s\n\n", openCodeURL)
+	}
+
+	if withSandbox {
+		sandboxSecrets := map[string]string{
+			"STATION_SANDBOX_ENABLED":           "true",
+			"STATION_SANDBOX_CODE_MODE_ENABLED": "true",
+			"STN_SANDBOX_BACKEND":               "fly_machines",
+		}
+		if err := setFlySecrets(ctx, appName, sandboxSecrets); err != nil {
+			return fmt.Errorf("failed to set sandbox secrets: %w", err)
+		}
+		fmt.Printf("   ✓ Fly Machines sandbox backend enabled\n\n")
+	}
 	fmt.Printf("\n✅ Deployment Complete!\n\n")
 	fmt.Printf("🤖 Agent MCP Endpoint:\n")
 	fmt.Printf("   https://%s.fly.dev/mcp\n\n", appName)
@@ -719,4 +772,124 @@ func generateEncryptionKey() (string, error) {
 	}
 	// Remove the "sk-" prefix as this is an encryption key, not an API key
 	return key[3:], nil
+}
+
+func deployOpenCode(ctx context.Context, appName string, aiConfig *DeploymentAIConfig, region string) error {
+	fmt.Printf("\n🔧 Deploying OpenCode backend '%s' (internal-only)...\n\n", appName)
+
+	checkCmd := exec.CommandContext(ctx, "fly", "status", "--app", appName)
+	if err := checkCmd.Run(); err != nil {
+		fmt.Printf("📦 Creating Fly.io app '%s'...\n", appName)
+		createCmd := exec.CommandContext(ctx, "fly", "apps", "create", appName, "--org", "personal")
+		createCmd.Stdout = os.Stdout
+		createCmd.Stderr = os.Stderr
+		if err := createCmd.Run(); err != nil {
+			return fmt.Errorf("failed to create OpenCode app: %w", err)
+		}
+		fmt.Printf("   ✓ App created\n\n")
+	}
+
+	secrets := buildOpenCodeSecrets(aiConfig)
+	if err := setFlySecrets(ctx, appName, secrets); err != nil {
+		return fmt.Errorf("failed to set OpenCode secrets: %w", err)
+	}
+
+	volumeName := "opencode_data"
+	volumeCheckCmd := exec.CommandContext(ctx, "fly", "volumes", "list", "--app", appName)
+	volumeOutput, _ := volumeCheckCmd.Output()
+
+	if !strings.Contains(string(volumeOutput), volumeName) {
+		fmt.Printf("💾 Creating persistent volume for OpenCode...\n")
+		volumeCmd := exec.CommandContext(ctx, "fly", "volumes", "create", volumeName,
+			"--region", region, "--size", "3", "--app", appName, "-y")
+		volumeCmd.Stdout = os.Stdout
+		volumeCmd.Stderr = os.Stderr
+		if err := volumeCmd.Run(); err != nil {
+			return fmt.Errorf("failed to create OpenCode volume: %w", err)
+		}
+		fmt.Printf("   ✓ Volume created\n\n")
+	}
+
+	flyToml := generateOpenCodeFlyToml(appName, region)
+	flyConfigPath := fmt.Sprintf("fly-opencode-%s.toml", appName)
+	if err := os.WriteFile(flyConfigPath, []byte(flyToml), 0644); err != nil {
+		return fmt.Errorf("failed to write OpenCode fly.toml: %w", err)
+	}
+	defer os.Remove(flyConfigPath)
+
+	fmt.Printf("   ✓ Generated fly.toml for OpenCode\n")
+
+	fmt.Printf("🚀 Deploying OpenCode (this may take a few minutes)...\n\n")
+	deployCmd := exec.CommandContext(ctx, "fly", "deploy",
+		"--config", flyConfigPath,
+		"--image", "ghcr.io/cloudshipai/opencode-station:latest",
+		"--app", appName,
+		"--ha=false",
+	)
+	deployCmd.Stdout = os.Stdout
+	deployCmd.Stderr = os.Stderr
+
+	if err := deployCmd.Run(); err != nil {
+		return fmt.Errorf("OpenCode deploy failed: %w", err)
+	}
+
+	fmt.Printf("\n✅ OpenCode deployed (internal-only)!\n")
+	fmt.Printf("   Private URL: http://%s.internal:4096\n\n", appName)
+
+	return nil
+}
+
+func buildOpenCodeSecrets(aiConfig *DeploymentAIConfig) map[string]string {
+	secrets := make(map[string]string)
+
+	secrets["STN_AI_PROVIDER"] = aiConfig.Provider
+	secrets["STN_AI_MODEL"] = aiConfig.Model
+	secrets["OPENCODE_AUTO_APPROVE"] = "true"
+
+	if aiConfig.AuthType == "oauth" {
+		secrets["STN_AI_AUTH_TYPE"] = "oauth"
+		secrets["STN_AI_OAUTH_TOKEN"] = aiConfig.OAuthToken
+		secrets["STN_AI_OAUTH_REFRESH_TOKEN"] = aiConfig.OAuthRefreshToken
+		secrets["STN_AI_OAUTH_EXPIRES_AT"] = fmt.Sprintf("%d", aiConfig.OAuthExpiresAt)
+	} else {
+		secrets["STN_AI_API_KEY"] = aiConfig.APIKey
+		switch strings.ToLower(aiConfig.Provider) {
+		case "openai":
+			secrets["OPENAI_API_KEY"] = aiConfig.APIKey
+		case "anthropic":
+			secrets["ANTHROPIC_API_KEY"] = aiConfig.APIKey
+		case "google", "gemini":
+			secrets["GOOGLE_API_KEY"] = aiConfig.APIKey
+		}
+	}
+
+	return secrets
+}
+
+func generateOpenCodeFlyToml(appName, region string) string {
+	return fmt.Sprintf(`app = "%s"
+primary_region = "%s"
+
+[build]
+  image = "ghcr.io/cloudshipai/opencode-station:latest"
+
+[env]
+  PORT = "4096"
+  OPENCODE_AUTO_APPROVE = "true"
+
+[http_service]
+  internal_port = 4096
+  force_https = false
+  auto_stop_machines = "off"
+  auto_start_machines = false
+  min_machines_running = 1
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
+
+[mounts]
+  source = "opencode_data"
+  destination = "/workspaces"
+`, appName, region)
 }

@@ -44,7 +44,13 @@ func NewCodingToolFactory(cfg config.CodingConfig) *CodingToolFactory {
 
 	basePath := cfg.WorkspaceBasePath
 	if basePath == "" {
-		basePath = filepath.Join(os.TempDir(), "station-coding")
+		if cfg.Backend == "opencode" || cfg.Backend == "opencode-nats" {
+			basePath = "/workspaces/station-coding"
+		} else if _, err := os.Stat("/workspaces"); err == nil {
+			basePath = "/workspaces/station-coding"
+		} else {
+			basePath = filepath.Join(os.TempDir(), "station-coding")
+		}
 	}
 
 	cleanupPolicy := coding.CleanupOnSessionEnd

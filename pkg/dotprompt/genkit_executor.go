@@ -262,8 +262,15 @@ func (e *GenKitExecutor) ExecuteAgent(ctx context.Context, agent models.Agent, a
 	// Get model configuration
 	modelName := e.getModelName()
 
-	// Execute with dotprompt.Execute() - use 5-minute timeout for tool execution
-	execCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	// Respect parent context's deadline (set by agent_execution_engine); fallback to 15min
+	var execCtx context.Context
+	var cancel context.CancelFunc
+	if _, hasDeadline := ctx.Deadline(); hasDeadline {
+		execCtx = ctx
+		cancel = func() {}
+	} else {
+		execCtx, cancel = context.WithTimeout(ctx, 15*time.Minute)
+	}
 	defer cancel()
 
 	maxTurns := int(agent.MaxSteps)

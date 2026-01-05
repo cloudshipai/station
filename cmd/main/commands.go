@@ -1634,13 +1634,15 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	alwaysOn, _ := cmd.Flags().GetBool("always-on")
 	instanceType, _ := cmd.Flags().GetString("instance-type")
 	destroy, _ := cmd.Flags().GetBool("destroy")
+	withOpenCode, _ := cmd.Flags().GetBool("with-opencode")
+	withSandbox, _ := cmd.Flags().GetBool("with-sandbox")
 
 	if alwaysOn {
 		sleepAfter = "168h"
 	}
 
 	ctx := context.Background()
-	return handlers.HandleDeploy(ctx, envName, target, region, sleepAfter, instanceType, destroy, alwaysOn)
+	return handlers.HandleDeploy(ctx, envName, target, region, sleepAfter, instanceType, destroy, alwaysOn, withOpenCode, withSandbox)
 }
 
 // bootstrapGitHubWorkflows creates GitHub Actions workflow files in .github/workflows/

@@ -53,7 +53,7 @@ var ConfigSchema = []ConfigField{
 
 	// Coding Backend Settings - Common
 	{Key: "coding.backend", Type: FieldTypeString, Description: "Coding backend (opencode, opencode-nats, opencode-cli, claudecode)", Default: "opencode-cli", Section: "coding", Options: []string{"opencode", "opencode-nats", "opencode-cli", "claudecode"}},
-	{Key: "coding.workspace_base_path", Type: FieldTypeString, Description: "Base path for coding workspaces", Default: "/tmp/station-coding", Section: "coding"},
+	{Key: "coding.workspace_base_path", Type: FieldTypeString, Description: "Base path for coding workspaces (defaults to /workspaces/station-coding on Fly.io, /tmp/station-coding otherwise)", Default: "", Section: "coding"},
 	{Key: "coding.max_attempts", Type: FieldTypeInt, Description: "Maximum retry attempts for coding tasks", Default: 3, Section: "coding"},
 	{Key: "coding.task_timeout_min", Type: FieldTypeInt, Description: "Task timeout in minutes", Default: 30, Section: "coding"},
 

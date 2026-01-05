@@ -61,4 +61,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 
 # Run OpenCode in serve mode
 # The plugin auto-loads from ~/.config/opencode/plugin/
-ENTRYPOINT ["opencode", "serve", "--hostname", "0.0.0.0"]
+# Use :: to listen on IPv6 (required for Fly.io internal networking)
+ENTRYPOINT ["opencode", "serve", "--hostname", "::"]

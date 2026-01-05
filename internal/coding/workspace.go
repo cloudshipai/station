@@ -73,8 +73,16 @@ func WithPushTimeout(d time.Duration) WorkspaceManagerOption {
 }
 
 func NewWorkspaceManager(opts ...WorkspaceManagerOption) *WorkspaceManager {
+	// Default to /workspaces/station-coding for OpenCode compatibility on Fly.io.
+	// OpenCode's bash tool only works reliably when the working directory is under /workspaces.
+	// Fall back to /tmp if /workspaces doesn't exist (local dev without OpenCode container).
+	defaultBasePath := "/workspaces/station-coding"
+	if _, err := os.Stat("/workspaces"); os.IsNotExist(err) {
+		defaultBasePath = filepath.Join(os.TempDir(), "station-coding")
+	}
+
 	m := &WorkspaceManager{
-		basePath:      filepath.Join(os.TempDir(), "station-coding"),
+		basePath:      defaultBasePath,
 		cleanupPolicy: CleanupOnSessionEnd,
 		cloneTimeout:  5 * time.Minute,
 		pushTimeout:   2 * time.Minute,

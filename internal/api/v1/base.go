@@ -587,6 +587,13 @@ func (h *APIHandlers) RegisterRoutes(router *gin.RouterGroup) {
 	}
 	h.registerSettingsRoutes(settingsGroup)
 
+	// Config routes - admin only
+	configGroup := router.Group("/config")
+	if !h.localMode {
+		configGroup.Use(h.requireAdminInServerMode())
+	}
+	h.registerConfigRoutes(configGroup)
+
 	// Sync route - admin only in server mode
 	syncGroup := router.Group("/sync")
 	if !h.localMode {
