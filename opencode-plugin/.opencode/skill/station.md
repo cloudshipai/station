@@ -200,6 +200,53 @@ stn workflow delete <workflow-id>
 stn workflow delete --all --force       # Delete all workflows
 ```
 
+#### Workflow Agent Input Patterns (CRITICAL)
+
+When passing data to agent steps in workflows, **use template variables (`${var}`) for task/userInput**:
+
+```yaml
+# ✅ WORKS - Template variable in userInput
+input:
+  userInput: "${query}"
+
+# ✅ WORKS - Template variable in task field
+task: "${query}"
+
+# ✅ WORKS - JSONPath in variables
+input:
+  variables:
+    service: "$.input.service_name"
+
+# ❌ BROKEN - JSONPath in userInput (returns literal "$.query")
+input:
+  userInput: "$.query"
+```
+
+**Multi-step data flow between agents:**
+```yaml
+states:
+  - id: get-data
+    type: agent
+    agent: data-fetcher
+    input:
+      userInput: "Fetch user ${user_id}"
+    output:
+      email: "$.response"              # Store at $.email
+    transition: notify
+
+  - id: notify
+    type: agent
+    agent: notifier
+    input:
+      userInput: "Email ${email}"      # Uses previous step output!
+    end: true
+```
+
+| Syntax | Works In | Example |
+|--------|----------|---------|
+| `${var}` | task, userInput, anywhere | `"Process ${query}"` |
+| `$.path` | output, variables, dataPath | `output: { x: "$.response" }` |
+
 ### Server & Deployment
 
 ```bash
