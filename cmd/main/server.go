@@ -13,6 +13,7 @@ import (
 	"station/internal/db/repositories"
 	"station/internal/genkit/anthropic_oauth"
 	"station/internal/lattice"
+	"station/internal/lattice/work"
 	"station/internal/lighthouse"
 	lighthouseServices "station/internal/lighthouse/services"
 	"station/internal/mcp"
@@ -313,6 +314,7 @@ func runMainServer() error {
 	var latticeRegistry *lattice.Registry
 	var latticePresence *lattice.Presence
 	var latticeInvoker *lattice.Invoker
+	var latticeWorkHook *work.Hook
 
 	latticeOrchestration := viper.GetBool("lattice_orchestration")
 	latticeURL := viper.GetString("lattice_url")
@@ -404,6 +406,14 @@ func runMainServer() error {
 									log.Printf("⚠️  Failed to start lattice invoker: %v", err)
 								} else {
 									log.Printf("✅ Lattice invoker listening for remote agent/workflow requests")
+								}
+
+								latticeWorkHook = work.NewHook(latticeClient, executorAdapter, latticeClient.StationID())
+								if err := latticeWorkHook.Start(ctx); err != nil {
+									log.Printf("⚠️  Failed to start lattice work hook: %v", err)
+									latticeWorkHook = nil
+								} else {
+									log.Printf("✅ Lattice work hook listening for async work assignments")
 								}
 							}
 						}
@@ -527,6 +537,11 @@ func runMainServer() error {
 		} else {
 			log.Printf("🌐 Remote control service stopped gracefully")
 		}
+	}
+
+	if latticeWorkHook != nil {
+		latticeWorkHook.Stop()
+		log.Printf("🔗 Lattice work hook stopped")
 	}
 
 	if latticeInvoker != nil {
