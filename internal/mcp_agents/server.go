@@ -645,7 +645,12 @@ func (das *DynamicAgentServer) authenticateWebhookRequest(r *http.Request) (*mod
 		return &models.User{ID: 1, Username: "local", IsAdmin: true}, nil
 	}
 
-	// Extract bearer token
+	// If no webhook API key is configured, allow unauthenticated access
+	if das.config == nil || das.config.Webhook.APIKey == "" {
+		return &models.User{ID: 1, Username: "anonymous", IsAdmin: true}, nil
+	}
+
+	// Webhook API key is configured - require authentication
 	authHeader := r.Header.Get("Authorization")
 	if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
 		return nil, fmt.Errorf("bearer token required")
@@ -656,39 +661,13 @@ func (das *DynamicAgentServer) authenticateWebhookRequest(r *http.Request) (*mod
 		return nil, fmt.Errorf("bearer token required")
 	}
 
-	// Check static webhook API key first (highest priority)
-	if das.config != nil && das.config.Webhook.APIKey != "" {
-		if token == das.config.Webhook.APIKey {
-			log.Printf("Webhook auth: authenticated via static API key")
-			return &models.User{ID: 1, Username: "webhook", IsAdmin: true}, nil
-		}
-		// If static key is configured, only that key is valid
-		return nil, fmt.Errorf("invalid API key")
+	// Check static webhook API key
+	if token == das.config.Webhook.APIKey {
+		log.Printf("Webhook auth: authenticated via static API key")
+		return &models.User{ID: 1, Username: "webhook", IsAdmin: true}, nil
 	}
 
-	// Try local API key (sk-* prefix)
-	if strings.HasPrefix(token, "sk-") {
-		user, err := das.repos.Users.GetByAPIKey(token)
-		if err == nil {
-			log.Printf("Webhook auth: authenticated via user API key (user: %s)", user.Username)
-			return user, nil
-		}
-	}
-
-	// Try OAuth if enabled
-	if das.oauthHandler != nil && das.oauthHandler.IsEnabled() {
-		tokenInfo, err := das.oauthHandler.ValidateToken(token)
-		if err == nil && tokenInfo.Active {
-			log.Printf("Webhook auth: authenticated via OAuth (user: %s, org: %s)", tokenInfo.Email, tokenInfo.OrgID)
-			return &models.User{
-				ID:       0,
-				Username: tokenInfo.Email,
-				IsAdmin:  false,
-			}, nil
-		}
-	}
-
-	return nil, fmt.Errorf("invalid token")
+	return nil, fmt.Errorf("invalid API key")
 }
 
 // resolveAgent resolves an agent by name or ID
