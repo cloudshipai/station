@@ -35,6 +35,8 @@ func NewCodingToolFactory(cfg config.CodingConfig) *CodingToolFactory {
 		}
 	case "opencode-cli":
 		backend = coding.NewCLIBackend(cfg)
+	case "claudecode":
+		backend = coding.NewClaudeCodeBackend(cfg)
 	default:
 		logging.Debug("Coding backend not configured or unsupported (%s), coding tools disabled", cfg.Backend)
 		return &CodingToolFactory{enabled: false}
@@ -80,6 +82,12 @@ func NewCodingToolFactory(cfg config.CodingConfig) *CodingToolFactory {
 			binaryPath = "opencode"
 		}
 		logging.Info("Coding tool factory initialized with CLI backend (binary: %s, workspace: %s)", binaryPath, basePath)
+	case "claudecode":
+		binaryPath := cfg.ClaudeCode.BinaryPath
+		if binaryPath == "" {
+			binaryPath = "claude"
+		}
+		logging.Info("Coding tool factory initialized with Claude Code backend (binary: %s, workspace: %s)", binaryPath, basePath)
 	default:
 		logging.Info("Coding tool factory initialized with OpenCode backend (URL: %s, workspace: %s)", cfg.OpenCode.URL, basePath)
 	}

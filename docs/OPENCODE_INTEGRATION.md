@@ -1,11 +1,20 @@
-# OpenCode Integration Guide
+# Coding Backend Integration Guide
 
-Station integrates with [OpenCode](https://opencode.ai) (SST's AI coding assistant) to delegate complex coding tasks. When your Station agent needs to write code, fix bugs, or make changes to a repository, it can hand off the work to OpenCode.
+Station integrates with AI coding assistants to delegate complex coding tasks. When your Station agent needs to write code, fix bugs, or make changes to a repository, it can hand off the work to a coding backend.
+
+## Supported Backends
+
+| Backend | Command | Description |
+|---------|---------|-------------|
+| `opencode` | HTTP API | [OpenCode](https://opencode.ai) server (SST's AI coding assistant) |
+| `opencode-cli` | CLI subprocess | OpenCode CLI binary |
+| `opencode-nats` | NATS messaging | OpenCode via NATS for distributed deployments |
+| `claudecode` | CLI subprocess | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI (Anthropic's official coding agent) |
 
 ## Architecture Overview
 
 ```
-Station Agent                    OpenCode
+Station Agent                    Coding Backend
 ┌─────────────┐                 ┌─────────────────┐
 │ coding_open │────repo_url────▶│ git clone       │
 │             │                 │ create workspace│
@@ -22,20 +31,100 @@ Station Agent                    OpenCode
 └─────────────┘                 └─────────────────┘
 ```
 
-**Key Design**: OpenCode owns ALL workspace and git operations. Station just sends tasks and receives results. This enables:
-- Multi-tenant OpenCode (one instance serving many Stations)
-- Remote Station (no filesystem access to OpenCode needed)
-- Git-as-transport for code changes
+**Key Design**: The coding backend owns ALL workspace and git operations. Station just sends tasks and receives results.
 
-## Quick Start
+---
 
-### 1. Start OpenCode
+## Claude Code Backend
+
+Claude Code is Anthropic's official AI coding agent CLI. It uses your Claude Max/Pro subscription or API key.
+
+### Prerequisites
+
+1. Install Claude Code CLI: https://docs.anthropic.com/en/docs/claude-code
+2. Authenticate: `claude login` (for Max/Pro) or set `ANTHROPIC_API_KEY`
+
+### Configuration
+
+```yaml
+# ~/.config/station/config.yaml
+
+coding:
+  backend: claudecode
+  claudecode:
+    binary_path: claude          # Path to claude CLI (default: "claude")
+    timeout_sec: 300             # Task timeout in seconds (default: 300)
+    model: sonnet                # Model: sonnet, opus, haiku (optional)
+    max_turns: 10                # Max agentic turns (default: 10)
+    allowed_tools:               # Whitelist specific tools (optional)
+      - Read
+      - Write
+      - Bash
+      - Glob
+      - Grep
+    disallowed_tools: []         # Blacklist tools (optional)
+  
+  # Git credentials (for private repos)
+  git:
+    token_env: GITHUB_TOKEN
+    user_name: "Station Bot"
+    user_email: "bot@example.com"
+```
+
+### Authentication
+
+Claude Code CLI manages its own authentication, separate from Station:
+
+| Auth Method | Setup |
+|-------------|-------|
+| Claude Max/Pro | Run `claude login` in terminal |
+| API Key | Set `ANTHROPIC_API_KEY` environment variable |
+
+Station's OAuth tokens (from `stn auth anthropic login`) are used for Station's orchestration layer, NOT for Claude Code. This separation allows:
+- Using different accounts for orchestration vs coding
+- Claude Code inherits host system's claude authentication
+- Simpler setup - just run `claude login` once
+
+### Quick Start
 
 ```bash
-# Option A: Run OpenCode locally
+# 1. Ensure claude CLI is authenticated
+claude --version
+claude login  # if needed
+
+# 2. Configure Station
+cat >> ~/.config/station/config.yaml << 'EOF'
+coding:
+  backend: claudecode
+  claudecode:
+    timeout_sec: 300
+    max_turns: 10
+EOF
+
+# 3. Create a coding agent
+stn agent create coder \
+  --description "Coding assistant using Claude Code" \
+  --prompt "You are a coding assistant. Use coding tools to accomplish tasks." \
+  --coding '{"enabled":true}' \
+  --max-steps 10
+
+# 4. Run it
+stn agent run coder "Create a hello.py that prints Hello World" --tail
+```
+
+---
+
+## OpenCode Backend
+
+OpenCode is SST's AI coding assistant. It can run as an HTTP server or CLI.
+
+### HTTP Server Mode
+
+```bash
+# Start OpenCode server
 opencode serve --port 4096
 
-# Option B: Run in Docker
+# Or via Docker
 docker run -d \
   -p 4096:4096 \
   -e ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY \
@@ -43,61 +132,147 @@ docker run -d \
   opencode serve --hostname 0.0.0.0 --port 4096
 ```
 
-### 2. Configure Station
-
-Add to your `~/.config/station/config.yaml`:
-
 ```yaml
+# ~/.config/station/config.yaml
 coding:
   backend: opencode
   opencode:
     url: http://localhost:4096
-  
-  # Timeouts
-  task_timeout_min: 10        # Max time for coding tasks
-  clone_timeout_sec: 300      # Max time for git clone
-  push_timeout_sec: 120       # Max time for git push
-  
-  # Git credentials (for private repos)
+    model: claude-sonnet-4  # optional
+```
+
+### CLI Mode
+
+```yaml
+# ~/.config/station/config.yaml
+coding:
+  backend: opencode-cli
+  cli:
+    binary_path: opencode      # Path to opencode binary
+    timeout_sec: 300           # Task timeout
+```
+
+### NATS Mode (Distributed)
+
+For multi-tenant or distributed deployments:
+
+```yaml
+# ~/.config/station/config.yaml
+coding:
+  backend: opencode-nats
+  nats:
+    url: nats://localhost:4222
+    creds_file: /path/to/nats.creds  # optional
+    subjects:
+      task: station.coding.task
+      stream: station.coding.stream
+      result: station.coding.result
+    kv:
+      sessions: coding-sessions
+      state: coding-state
+    object_store: coding-artifacts
+```
+
+---
+
+## Git Repository Integration
+
+All coding backends support cloning repositories, creating branches, committing, and pushing changes.
+
+### Setting Up Git Credentials
+
+#### Option 1: Environment Variable (Recommended)
+
+```bash
+# Create a GitHub Personal Access Token with 'repo' scope
+# https://github.com/settings/tokens
+
+export GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxx
+```
+
+```yaml
+# ~/.config/station/config.yaml
+coding:
   git:
-    token_env: GITHUB_TOKEN   # Read token from this env var
-    user_name: "Station Bot"
+    token_env: GITHUB_TOKEN      # Reads from this env var
+    user_name: "Station Bot"     # For commit author
     user_email: "bot@example.com"
 ```
 
-### 3. Create a Coding Agent
-
-Create `~/.config/station/environments/default/agents/coder.prompt`:
+#### Option 2: Direct Token (Not Recommended)
 
 ```yaml
----
-model: openai/gpt-4o-mini
 coding:
-  enabled: true
-  backend: opencode
----
-You are a coding assistant. When asked to write code or make changes to a repository:
-
-1. Use `coding_open` with the repo_url to clone the repository
-2. Use `code` to make the requested changes
-3. Use `coding_commit` to commit the changes
-4. Use `coding_push` to push to the remote
-5. Use `coding_close` to clean up
-
-Always explain what changes you made.
-
-{{userInput}}
+  git:
+    token: ${GITHUB_TOKEN}       # Supports env var expansion
+    # token: ghp_xxxxx           # Or hardcode (avoid in shared configs)
 ```
 
-### 4. Run the Agent
+#### Option 3: GitHub App Installation Token
+
+For GitHub Actions or automated systems:
 
 ```bash
-# Clone a repo and make changes
-stn agent run coder "Clone https://github.com/myorg/myrepo and add a health check endpoint at /health"
-
-# Work on a local directory (explicit workspace)
-stn agent run coder "Open workspace /path/to/repo and fix the bug in auth.go"
+# Generate installation token
+export GITHUB_TOKEN=$(gh api \
+  -X POST /app/installations/$INSTALLATION_ID/access_tokens \
+  --jq '.token')
 ```
+
+### How Token Injection Works
+
+When cloning or pushing to private repos, Station automatically injects credentials:
+
+```
+Original:  https://github.com/org/private-repo.git
+Injected:  https://x-access-token:TOKEN@github.com/org/private-repo.git
+```
+
+**Security Notes:**
+- Tokens are NEVER logged - all output is redacted
+- Tokens are passed via HTTPS URL injection (not command line args)
+- Each session can have isolated credentials
+
+### Working with Private Repositories
+
+```bash
+# Set credentials
+export GITHUB_TOKEN=ghp_xxxxxxxxxxxx
+
+# Clone and modify a private repo
+stn agent run coder "Clone https://github.com/myorg/private-repo, add a README, commit and push" --tail
+```
+
+### Git Operations Reference
+
+| Tool | Description | Example |
+|------|-------------|---------|
+| `coding_open` | Clone repo or open workspace | `repo_url: "https://github.com/org/repo"` |
+| `coding_branch` | Create/switch branches | `branch: "feature/new", create: true` |
+| `coding_commit` | Commit changes | `message: "Add feature", add_all: true` |
+| `coding_push` | Push to remote | `remote: "origin", set_upstream: true` |
+
+### Example: Full Git Workflow
+
+```bash
+stn agent run coder "
+Clone https://github.com/myorg/myrepo,
+create a branch called 'feature/add-tests',
+add unit tests for the auth module,
+commit with message 'Add auth unit tests',
+and push the branch
+" --tail
+```
+
+The agent will:
+1. `coding_open` - Clone the repo
+2. `coding_branch` - Create feature/add-tests
+3. `code` - Write the tests
+4. `coding_commit` - Commit changes
+5. `coding_push` - Push to remote
+6. `coding_close` - Cleanup
+
+---
 
 ## Tools Reference
 
@@ -107,12 +282,12 @@ Opens a coding session. Optionally clones a git repository.
 
 ```json
 {
-  "repo_url": "https://github.com/org/repo.git",  // OpenCode clones this
-  "branch": "main",                                // Optional: branch to checkout
-  "workspace_path": "/path/to/existing/repo",     // Optional: use existing directory
-  "title": "Fix auth bug",                        // Optional: session title
-  "scope": "agent",                               // "agent" or "workflow"
-  "scope_id": "workflow-123"                      // For workflow scope
+  "repo_url": "https://github.com/org/repo.git",
+  "branch": "main",
+  "workspace_path": "/path/to/existing/repo",
+  "title": "Fix auth bug",
+  "scope": "agent",
+  "scope_id": "workflow-123"
 }
 ```
 
@@ -120,7 +295,7 @@ Opens a coding session. Optionally clones a git repository.
 ```json
 {
   "session_id": "coding_1234567890",
-  "workspace_path": "/tmp/opencode-workspace-xxx",
+  "workspace_path": "/tmp/station-coding/ws_xxx",
   "repo_cloned": true,
   "managed": true
 }
@@ -132,10 +307,10 @@ Execute a coding task in the session.
 
 ```json
 {
-  "session_id": "coding_1234567890",  // Required: from coding_open
+  "session_id": "coding_1234567890",
   "instruction": "Add a /health endpoint that returns {status: ok}",
-  "context": "This is a Flask API",   // Optional: additional context
-  "files": ["src/api.py"]             // Optional: files to focus on
+  "context": "This is a Flask API",
+  "files": ["src/api.py"]
 }
 ```
 
@@ -147,8 +322,23 @@ Execute a coding task in the session.
   "files_changed": [
     {"path": "src/api.py", "status": "modified"}
   ],
-  "tokens_used": 1500,
-  "cost": 0.0045
+  "trace": {
+    "tokens": {"input": 1500, "output": 200},
+    "cost": 0.0045,
+    "tool_calls": [{"tool": "Write", "output": "..."}]
+  }
+}
+```
+
+### coding_branch
+
+Create or switch git branches.
+
+```json
+{
+  "session_id": "coding_1234567890",
+  "branch": "feature/new-feature",
+  "create": true
 }
 ```
 
@@ -160,7 +350,7 @@ Commit changes in the workspace.
 {
   "session_id": "coding_1234567890",
   "message": "Add health check endpoint",
-  "add_all": true  // Default: true. Runs git add -A before commit
+  "add_all": true
 }
 ```
 
@@ -169,7 +359,6 @@ Commit changes in the workspace.
 {
   "success": true,
   "commit_hash": "abc123def456...",
-  "message": "Add health check endpoint",
   "files_changed": 2,
   "insertions": 15,
   "deletions": 3
@@ -183,19 +372,9 @@ Push commits to remote.
 ```json
 {
   "session_id": "coding_1234567890",
-  "remote": "origin",        // Default: origin
-  "branch": "feature/health", // Optional: defaults to current branch
-  "set_upstream": true       // Add -u flag
-}
-```
-
-**Returns:**
-```json
-{
-  "success": true,
   "remote": "origin",
   "branch": "feature/health",
-  "message": "Pushed to origin/feature/health"
+  "set_upstream": true
 }
 ```
 
@@ -206,89 +385,88 @@ Close the session and clean up.
 ```json
 {
   "session_id": "coding_1234567890",
-  "workspace_id": "ws_xxx",  // Optional: for managed workspaces
-  "success": true            // Affects cleanup policy
+  "success": true
 }
 ```
 
+---
+
 ## Configuration Reference
 
-### Full Config Example
+### Full Example
 
 ```yaml
 # ~/.config/station/config.yaml
 
 coding:
-  # Backend selection
-  backend: opencode           # Currently only "opencode" supported
+  # Backend selection: opencode, opencode-cli, opencode-nats, claudecode
+  backend: claudecode
   
-  # OpenCode connection
+  # Claude Code settings
+  claudecode:
+    binary_path: claude
+    timeout_sec: 300
+    model: sonnet                # sonnet, opus, haiku
+    max_turns: 10
+    allowed_tools:
+      - Read
+      - Write
+      - Edit
+      - Bash
+      - Glob
+      - Grep
+  
+  # OpenCode HTTP settings (when backend: opencode)
   opencode:
     url: http://localhost:4096
+    model: claude-sonnet-4
   
-  # Retry settings
-  max_attempts: 3             # Retry failed API calls
+  # OpenCode CLI settings (when backend: opencode-cli)
+  cli:
+    binary_path: opencode
+    timeout_sec: 300
   
-  # Timeouts
-  task_timeout_min: 10        # Max time for coding tasks (minutes)
-  clone_timeout_sec: 300      # Max time for git clone (seconds)
-  push_timeout_sec: 120       # Max time for git push (seconds)
+  # Retry and timeout settings
+  max_attempts: 3
+  task_timeout_min: 10
+  clone_timeout_sec: 300
+  push_timeout_sec: 120
   
   # Workspace management
   workspace_base_path: /tmp/station-coding
-  cleanup_policy: on_session_end  # "on_session_end", "on_success", "manual"
+  cleanup_policy: on_session_end  # on_session_end, on_success, manual
   
   # Git configuration
   git:
-    # Authentication (choose one)
-    token_env: GITHUB_TOKEN     # Read from environment variable (recommended)
-    # token: ghp_xxxx           # Or hardcode (not recommended)
-    
-    # Commit author
+    token_env: GITHUB_TOKEN       # Read from env var (recommended)
+    # token: ${GITHUB_TOKEN}      # Or direct with expansion
     user_name: "Station Bot"
     user_email: "bot@cloudship.ai"
 ```
 
 ### Agent-Level Config
 
-Override settings per agent in the dotprompt:
+Enable coding in agent dotprompt:
 
 ```yaml
 ---
-model: openai/gpt-4o
+model: claude-sonnet-4-20250514
 coding:
   enabled: true
-  backend: opencode
-  # Agent-specific overrides (future)
 ---
+You are a coding assistant...
 ```
 
-## Private Repositories
+Or via CLI:
 
-### GitHub Token Authentication
-
-1. Create a personal access token with `repo` scope
-2. Set the environment variable:
-   ```bash
-   export GITHUB_TOKEN=ghp_xxxxxxxxxxxx
-   ```
-3. Configure Station to use it:
-   ```yaml
-   coding:
-     git:
-       token_env: GITHUB_TOKEN
-   ```
-
-Station automatically injects the token when cloning/pushing:
-```
-https://x-access-token:TOKEN@github.com/org/repo.git
+```bash
+stn agent create my-coder \
+  --description "Coding agent" \
+  --prompt "You are a coding assistant." \
+  --coding '{"enabled":true}'
 ```
 
-### Security Notes
-
-- Tokens are **never logged** - all output is redacted
-- Tokens are passed via HTTPS URL injection (not command line)
-- Each session can have isolated credentials
+---
 
 ## Workspace Scopes
 
@@ -311,118 +489,104 @@ Workspace persists across multiple agent runs in a workflow.
 }
 ```
 
-Use `GetByScope` to retrieve existing workspace:
-```go
-ws, err := manager.GetByScope(ScopeWorkflow, "my-workflow-123")
-```
+---
 
 ## Observability
 
-### Traces
+### OpenTelemetry Traces
 
-OpenCode execution is traced via OpenTelemetry:
+Coding execution is traced:
 
 ```
 station.agent.execute
-  └── opencode.task
+  └── claudecode.task              # or opencode.task
         ├── session_id: coding_xxx
-        ├── model: claude-opus-4-5
-        ├── provider: anthropic
+        ├── workspace: /tmp/station-coding/...
         ├── cost: 0.0234
         ├── tokens.input: 5000
         ├── tokens.output: 1200
-        └── tool_calls: 5
+        └── claudecode.tool.Write  # child spans for each tool
+              └── tool.name: Write
 ```
 
-### Result Data
-
-Each coding task returns:
+### Result Trace Data
 
 | Field | Description |
 |-------|-------------|
-| `Trace.Model` | Model used (e.g., claude-opus-4-5) |
-| `Trace.Provider` | Provider (anthropic, openai) |
+| `Trace.SessionID` | Backend session identifier |
 | `Trace.Cost` | Execution cost in USD |
 | `Trace.Tokens` | Input/output/cache token counts |
 | `Trace.Duration` | Total execution time |
-| `Trace.ToolCalls` | List of tools OpenCode used |
-| `Trace.Reasoning` | Extended thinking text (if model supports) |
+| `Trace.ToolCalls` | List of tools the backend used |
+
+---
 
 ## Troubleshooting
 
-### OpenCode Not Responding
+### Claude Code: Permission Denied
 
-```bash
-# Check health
-curl http://localhost:4096/global/health
+Claude Code runs with `--dangerously-skip-permissions` for non-interactive use. If you see permission errors:
 
-# Check if sessions exist
-curl http://localhost:4096/session
-```
+1. Ensure the workspace directory is writable
+2. Check claude CLI is authenticated: `claude --version`
 
 ### Clone Fails for Private Repo
 
 1. Verify token is set: `echo $GITHUB_TOKEN`
-2. Verify config uses `token_env`: 
+2. Verify config uses `token_env`:
    ```yaml
    git:
      token_env: GITHUB_TOKEN
    ```
-3. Check token has `repo` scope
+3. Check token has `repo` scope (for GitHub)
+4. For GitHub Enterprise, ensure the token is authorized for SSO
 
 ### Task Timeout
 
 Increase timeout in config:
+
 ```yaml
 coding:
-  task_timeout_min: 30  # Increase from default 10
+  claudecode:
+    timeout_sec: 600  # 10 minutes
+  # or for opencode
+  task_timeout_min: 15
 ```
 
-### Empty Response from OpenCode
+### Backend Not Found
 
-Ensure the `directory` parameter matches the session workspace. This is handled automatically by Station.
-
-## E2E Testing
-
-Run integration tests (requires OpenCode running):
+Ensure the CLI is in PATH:
 
 ```bash
-# Start OpenCode first
-opencode serve --port 4096
+# For Claude Code
+which claude
+claude --version
 
-# Run E2E tests
-OPENCODE_E2E=true go test ./internal/coding/... -run TestE2E -v
+# For OpenCode
+which opencode
+opencode --version
 ```
 
-## What's Next
+---
 
-### Workflow Integration (Coming Soon)
+## Backend Comparison
 
-Multi-step coding tasks sharing workspace:
+| Feature | Claude Code | OpenCode HTTP | OpenCode CLI |
+|---------|-------------|---------------|--------------|
+| Setup | `claude login` | Start server | Install binary |
+| Auth | Max/Pro or API key | API key | API key |
+| Latency | Low (local) | Medium (HTTP) | Low (local) |
+| Multi-tenant | No | Yes | No |
+| Session Resume | Yes (`--resume`) | Yes | Yes |
+| Streaming | Yes | Yes | Yes |
+| OTEL Tracing | Yes | Yes | Yes |
 
-```yaml
-workflow:
-  - agent: analyzer
-    task: "Analyze codebase structure"
-  - agent: coder
-    task: "Implement changes based on analysis"
-    workspace_from: analyzer  # Share workspace
-  - agent: reviewer
-    task: "Review and test changes"
-    workspace_from: coder
-```
+Choose **Claude Code** if:
+- You have Claude Max/Pro subscription
+- You want minimal setup
+- You prefer Anthropic's official tooling
 
-### PR Creation (Coming Soon)
-
-Automatic pull request creation after push:
-
-```json
-{
-  "tool": "coding_create_pr",
-  "input": {
-    "session_id": "coding_xxx",
-    "title": "Add health check endpoint",
-    "body": "Adds /health endpoint for monitoring"
-  }
-}
-```
+Choose **OpenCode** if:
+- You need multi-tenant/server deployment
+- You want to use different LLM providers
+- You need NATS-based distributed architecture

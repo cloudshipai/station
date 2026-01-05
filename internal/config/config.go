@@ -131,17 +131,18 @@ type SandboxConfig struct {
 }
 
 type CodingConfig struct {
-	Backend           string               `yaml:"backend"` // "opencode" (HTTP), "opencode-nats" (NATS), or "opencode-cli" (CLI subprocess)
-	OpenCode          CodingOpenCodeConfig `yaml:"opencode"`
-	NATS              CodingNATSConfig     `yaml:"nats"`
-	CLI               CodingCLIConfig      `yaml:"cli"`
-	MaxAttempts       int                  `yaml:"max_attempts"`
-	TaskTimeoutMin    int                  `yaml:"task_timeout_min"`
-	CloneTimeoutSec   int                  `yaml:"clone_timeout_sec"`
-	PushTimeoutSec    int                  `yaml:"push_timeout_sec"`
-	WorkspaceBasePath string               `yaml:"workspace_base_path"`
-	CleanupPolicy     string               `yaml:"cleanup_policy"`
-	Git               CodingGitConfig      `yaml:"git"`
+	Backend           string                 `yaml:"backend"` // "opencode" (HTTP), "opencode-nats" (NATS), "opencode-cli" (CLI subprocess), or "claudecode" (Claude Code CLI)
+	OpenCode          CodingOpenCodeConfig   `yaml:"opencode"`
+	NATS              CodingNATSConfig       `yaml:"nats"`
+	CLI               CodingCLIConfig        `yaml:"cli"`
+	ClaudeCode        CodingClaudeCodeConfig `yaml:"claudecode"`
+	MaxAttempts       int                    `yaml:"max_attempts"`
+	TaskTimeoutMin    int                    `yaml:"task_timeout_min"`
+	CloneTimeoutSec   int                    `yaml:"clone_timeout_sec"`
+	PushTimeoutSec    int                    `yaml:"push_timeout_sec"`
+	WorkspaceBasePath string                 `yaml:"workspace_base_path"`
+	CleanupPolicy     string                 `yaml:"cleanup_policy"`
+	Git               CodingGitConfig        `yaml:"git"`
 }
 
 // CodingNATSConfig holds NATS configuration for the opencode-nats backend.
@@ -203,6 +204,15 @@ type CodingOpenCodeConfig struct {
 type CodingCLIConfig struct {
 	BinaryPath string `yaml:"binary_path"`
 	TimeoutSec int    `yaml:"timeout_sec"`
+}
+
+type CodingClaudeCodeConfig struct {
+	BinaryPath      string   `yaml:"binary_path"`
+	TimeoutSec      int      `yaml:"timeout_sec"`
+	Model           string   `yaml:"model"`
+	MaxTurns        int      `yaml:"max_turns"`
+	AllowedTools    []string `yaml:"allowed_tools"`
+	DisallowedTools []string `yaml:"disallowed_tools"`
 }
 
 // TelemetryProvider defines the type of telemetry backend
@@ -1093,6 +1103,24 @@ func refreshClaudeToken(refreshToken string) *oauthTokenResponse {
 	}
 
 	return &tokenResp
+}
+
+func RefreshOAuthToken(refreshToken string) (accessToken, newRefreshToken string, expiresAt int64, err error) {
+	tokens := refreshClaudeToken(refreshToken)
+	if tokens == nil || tokens.AccessToken == "" {
+		return "", "", 0, fmt.Errorf("failed to refresh OAuth token - token may be revoked")
+	}
+
+	now := time.Now().UnixMilli()
+	expiresAt = now + (tokens.ExpiresIn * 1000)
+	newRefreshToken = tokens.RefreshToken
+	if newRefreshToken == "" {
+		newRefreshToken = refreshToken
+	}
+
+	_ = SaveOAuthTokens(tokens.AccessToken, newRefreshToken, expiresAt)
+
+	return tokens.AccessToken, newRefreshToken, expiresAt, nil
 }
 
 func SaveOAuthTokens(accessToken, refreshToken string, expiresAt int64) error {
