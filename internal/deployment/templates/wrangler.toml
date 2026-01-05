@@ -1,67 +1,24 @@
-# Cloudflare Containers deployment configuration for Station {{.EnvironmentName}}
-# Deploy with: wrangler deploy
-# Docs: https://developers.cloudflare.com/containers/
-
 name = "station-{{.EnvironmentName}}"
 main = "src/worker.js"
-compatibility_date = "2024-12-01"
+compatibility_date = "2025-01-01"
 
-# Container configuration - uses base Station image, bundle pulled at runtime
 [[containers]]
 class_name = "StationContainer"
-image = "ghcr.io/cloudshipai/station:latest"
+image = "./Dockerfile"
 max_instances = {{.CloudflareMaxInstances}}
 instance_type = "{{.CloudflareInstanceType}}"
 
-# Durable Object binding for container lifecycle management
 [[durable_objects.bindings]]
-name = "STATION"
 class_name = "StationContainer"
+name = "STATION"
 
-# Environment variables (non-secret, can be in config)
+[[migrations]]
+new_sqlite_classes = ["StationContainer"]
+tag = "v1"
+
 [vars]
 STATION_AI_PROVIDER = "{{.AIProvider}}"
 STATION_AI_MODEL = "{{.AIModel}}"
 STN_DEV_MODE = "false"
 STATION_MCP_POOLING = "true"
 STATION_MCP_PORT = "8587"
-
-# Secrets (set via: wrangler secret put <KEY>)
-# Required secrets:
-#   wrangler secret put STATION_AI_API_KEY
-#   wrangler secret put STATION_ENCRYPTION_KEY
-#   wrangler secret put STN_BUNDLE_ID
-{{range $key, $value := .EnvironmentVariables}}
-#   wrangler secret put {{$key}}
-{{end}}
-
-# Deployment notes:
-#
-# Base Image: ghcr.io/cloudshipai/station:latest
-# Bundle: Downloaded from CloudShip using STN_BUNDLE_ID on startup
-#
-# Instance Types:
-#   - lite: 256 MiB RAM, 1/16 vCPU, 2 GB disk (~$0.001/hr)
-#   - basic: 1 GiB RAM, 1/4 vCPU, 4 GB disk (~$0.004/hr)
-#   - standard-1: 4 GiB RAM, 1/2 vCPU, 8 GB disk (~$0.015/hr)
-#   - standard-2: 6 GiB RAM, 1 vCPU, 12 GB disk (~$0.025/hr)
-#   - standard-3: 8 GiB RAM, 2 vCPU, 16 GB disk (~$0.040/hr)
-#   - standard-4: 12 GiB RAM, 4 vCPU, 20 GB disk (~$0.070/hr)
-#
-# Container sleeps after {{.CloudflareSleepAfter}} of inactivity (scale to zero)
-# Set to "24h" or higher for always-on behavior
-#
-# Startup sequence:
-#   1. Container wakes on request
-#   2. Station checks STN_BUNDLE_ID env var
-#   3. Downloads bundle from CloudShip if not already installed
-#   4. Installs to 'default' environment
-#   5. Runs: stn serve
-#
-# Limitations:
-#   - Ephemeral disk (bundle re-downloaded on each wake)
-#   - No Docker-in-Docker support
-#   - HTTP/WebSocket only (no raw TCP)
-#
-# MCP Endpoint will be available at:
-#   https://station-{{.EnvironmentName}}.<your-subdomain>.workers.dev/mcp

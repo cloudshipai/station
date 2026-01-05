@@ -472,7 +472,31 @@ func deployToCloudflare(ctx context.Context, envName string, aiConfig *Deploymen
 	if err := os.WriteFile(workerPath, []byte(workerConfig), 0644); err != nil {
 		return fmt.Errorf("failed to write worker.js: %w", err)
 	}
-	fmt.Printf("   ✓ Generated %s\n\n", workerPath)
+	fmt.Printf("   ✓ Generated %s\n", workerPath)
+
+	// Generate Dockerfile (wrangler builds and pushes to Cloudflare's registry)
+	dockerfileContent := fmt.Sprintf("FROM %s\n", deployConfig.DockerImage)
+	dockerfilePath := filepath.Join(outputDir, "Dockerfile")
+	if err := os.WriteFile(dockerfilePath, []byte(dockerfileContent), 0644); err != nil {
+		return fmt.Errorf("failed to write Dockerfile: %w", err)
+	}
+	fmt.Printf("   ✓ Generated %s\n", dockerfilePath)
+
+	packageJSON := fmt.Sprintf(`{
+  "name": "station-%s",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "src/worker.js",
+  "dependencies": {
+    "@cloudflare/containers": "^0.0.31"
+  }
+}
+`, envName)
+	packagePath := filepath.Join(outputDir, "package.json")
+	if err := os.WriteFile(packagePath, []byte(packageJSON), 0644); err != nil {
+		return fmt.Errorf("failed to write package.json: %w", err)
+	}
+	fmt.Printf("   ✓ Generated %s\n\n", packagePath)
 
 	secrets := map[string]string{
 		"STATION_AI_API_KEY": aiConfig.APIKey,
@@ -509,6 +533,16 @@ func deployToCloudflare(ctx context.Context, envName string, aiConfig *Deploymen
 		}
 	}
 	fmt.Println()
+
+	fmt.Printf("📦 Installing dependencies...\n")
+	npmCmd := exec.CommandContext(ctx, "npm", "install")
+	npmCmd.Dir = outputDir
+	npmCmd.Stdout = os.Stdout
+	npmCmd.Stderr = os.Stderr
+	if err := npmCmd.Run(); err != nil {
+		return fmt.Errorf("npm install failed: %w", err)
+	}
+	fmt.Printf("   ✓ Dependencies installed\n\n")
 
 	fmt.Printf("🚀 Deploying to Cloudflare (this may take a few minutes)...\n\n")
 	deployCmd := exec.CommandContext(ctx, "wrangler", "deploy")

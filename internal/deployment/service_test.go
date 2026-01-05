@@ -26,9 +26,6 @@ func TestGenerateCloudflareTemplate(t *testing.T) {
 		if !strings.Contains(output, `name = "station-test-env"`) {
 			t.Error("expected app name in output")
 		}
-		if !strings.Contains(output, `instance_type = "basic"`) {
-			t.Error("expected instance_type in output")
-		}
 		if !strings.Contains(output, `max_instances = 1`) {
 			t.Error("expected max_instances in output")
 		}
@@ -38,8 +35,14 @@ func TestGenerateCloudflareTemplate(t *testing.T) {
 		if !strings.Contains(output, `STATION_AI_MODEL = "gpt-4o-mini"`) {
 			t.Error("expected AI model in output")
 		}
-		if !strings.Contains(output, "ghcr.io/cloudshipai/station:latest") {
-			t.Error("expected docker image in output")
+		if !strings.Contains(output, `image = "./Dockerfile"`) {
+			t.Error("expected Dockerfile image reference in output")
+		}
+		if !strings.Contains(output, `[[migrations]]`) {
+			t.Error("expected migrations section in output")
+		}
+		if !strings.Contains(output, `new_sqlite_classes = ["StationContainer"]`) {
+			t.Error("expected new_sqlite_classes in migrations")
 		}
 	})
 
@@ -55,33 +58,20 @@ func TestGenerateCloudflareTemplate(t *testing.T) {
 		if !strings.Contains(output, "StationContainer") {
 			t.Error("expected StationContainer class in worker")
 		}
-	})
-
-	t.Run("different instance types", func(t *testing.T) {
-		instanceTypes := []string{"lite", "basic", "standard-1", "standard-2", "standard-3", "standard-4"}
-		for _, instanceType := range instanceTypes {
-			cfg := config
-			cfg.CloudflareInstanceType = instanceType
-			output, err := GenerateDeploymentTemplate("cloudflare", cfg)
-			if err != nil {
-				t.Fatalf("failed to generate template for %s: %v", instanceType, err)
-			}
-			expected := `instance_type = "` + instanceType + `"`
-			if !strings.Contains(output, expected) {
-				t.Errorf("expected %s in output for instance type %s", expected, instanceType)
-			}
+		if !strings.Contains(output, `sleepAfter = "10m"`) {
+			t.Error("expected sleepAfter in Container class")
 		}
 	})
 
-	t.Run("always-on mode", func(t *testing.T) {
+	t.Run("sleep duration in worker", func(t *testing.T) {
 		cfg := config
-		cfg.CloudflareSleepAfter = "168h"
-		output, err := GenerateDeploymentTemplate("cloudflare", cfg)
+		cfg.CloudflareSleepAfter = "1h"
+		output, err := GenerateDeploymentTemplate("cloudflare-worker", cfg)
 		if err != nil {
 			t.Fatalf("failed to generate template: %v", err)
 		}
-		if !strings.Contains(output, "168h") {
-			t.Error("expected 168h sleep duration for always-on mode")
+		if !strings.Contains(output, `sleepAfter = "1h"`) {
+			t.Error("expected 1h sleep duration in worker")
 		}
 	})
 }
