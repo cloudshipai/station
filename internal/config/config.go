@@ -388,6 +388,10 @@ func bindEnvVars() {
 }
 
 func Load() (*Config, error) {
+	// Ensure env var bindings are set up before reading config
+	// This is critical for container deployments where InitViper may not be called
+	bindEnvVars()
+
 	cfg := &Config{
 		DatabaseURL:    getEnvOrDefault("DATABASE_URL", GetDatabasePath()),
 		SSHPort:        getEnvIntOrDefault("SSH_PORT", 2222),
