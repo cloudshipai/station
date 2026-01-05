@@ -280,7 +280,7 @@ func NewEmbeddedEngineForTests() (*NATSEngine, error) {
 		Stream:         "WORKFLOW_EVENTS",
 		SubjectPrefix:  "workflow",
 		ConsumerName:   "test-consumer",
-		Embedded:       true,
+		Embedded:       false, // Server already started above, don't start another
 		WorkerPoolSize: 10,
 	}
 	engine, err := NewEngine(opts)

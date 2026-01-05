@@ -42,14 +42,6 @@ RUN mkdir -p /root/.config/opencode/plugin \
 # The plugin is built during CI and copied here
 COPY dist/index.js /root/.config/opencode/plugin/station-plugin.js
 
-# Default OpenCode configuration with NATS settings
-# Users can override via environment variables or mounted config
-COPY <<EOF /root/.config/opencode/opencode.json
-{
-  "autoApprove": true
-}
-EOF
-
 # Environment variables with sensible defaults
 # Override these at runtime as needed
 ENV NATS_URL=""
@@ -69,4 +61,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 
 # Run OpenCode in serve mode
 # The plugin auto-loads from ~/.config/opencode/plugin/
-ENTRYPOINT ["opencode", "serve", "--host", "0.0.0.0"]
+ENTRYPOINT ["opencode", "serve", "--hostname", "0.0.0.0"]
