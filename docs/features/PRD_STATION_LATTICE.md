@@ -38,12 +38,19 @@ Orchestrator: # Receives results asynchronously, continues coordination
 - [x] Configurable NATS ports
 - [x] E2E tests passing with traces in Jaeger
 
+### Completed (Phase 5A.3)
+- [x] **Phase 5A.3**: Async Work Assignment
+  - `internal/lattice/work/messages.go` - Message types (WorkAssignment, WorkResponse, WorkStatus)
+  - `internal/lattice/work/dispatcher.go` - WorkDispatcher (AssignWork, AwaitWork, CheckWork, StreamProgress)
+  - `internal/lattice/work/hook.go` - WorkHook (receives work, executes agents, sends responses)
+  - `internal/lattice/work/integration_test.go` - E2E tests (single/multi-station, parallel, timeout, progress)
+  - Hook wired into `stn serve` via `cmd/main/server.go`
+
 ### Pending (Phases 5-6)
 - [ ] **Phase 5A.1**: Agent Discovery & Schema Awareness
 - [ ] **Phase 5A.2**: Unique Agent Names in Lattice
-- [ ] **Phase 5A.3**: Async Work Assignment
 - [ ] **Phase 5B**: Distributed Run Tracking with UUID
-- [ ] **Phase 5C**: Integration & CLI Commands
+- [ ] **Phase 5C**: Integration & CLI Commands (partially done - Hook wired, needs CLI)
 - [ ] Phase 6: Production hardening and multi-region support
 
 ---
