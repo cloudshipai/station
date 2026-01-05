@@ -102,14 +102,37 @@ func HandleDeploy(ctx context.Context, envName, target, region, sleepAfter, inst
 	}
 }
 
+func getAppName(envName string) string {
+	cfg, err := config.Load()
+	if err == nil && cfg.CloudShip.Name != "" {
+		return cfg.CloudShip.Name
+	}
+	return fmt.Sprintf("station-%s", envName)
+}
+
 func handleDeployDestroy(ctx context.Context, envName, target string) error {
-	appName := fmt.Sprintf("station-%s", envName)
+	appName := getAppName(envName)
 
 	switch strings.ToLower(target) {
 	case "fly", "flyio", "fly.io":
 		if _, err := exec.LookPath("fly"); err != nil {
 			return fmt.Errorf("fly CLI not found")
 		}
+
+		openCodeAppName := fmt.Sprintf("%s-opencode", appName)
+		checkCmd := exec.CommandContext(ctx, "fly", "status", "--app", openCodeAppName)
+		if checkCmd.Run() == nil {
+			fmt.Printf("🗑️  Destroying OpenCode sidecar '%s'...\n", openCodeAppName)
+			destroyCmd := exec.CommandContext(ctx, "fly", "apps", "destroy", openCodeAppName, "--yes")
+			destroyCmd.Stdout = os.Stdout
+			destroyCmd.Stderr = os.Stderr
+			if err := destroyCmd.Run(); err != nil {
+				fmt.Printf("⚠️  Warning: failed to destroy OpenCode sidecar: %v\n", err)
+			} else {
+				fmt.Printf("✅ OpenCode sidecar '%s' destroyed\n", openCodeAppName)
+			}
+		}
+
 		fmt.Printf("🗑️  Destroying Fly.io app '%s'...\n", appName)
 		cmd := exec.CommandContext(ctx, "fly", "apps", "destroy", appName, "--yes")
 		cmd.Stdout = os.Stdout
@@ -294,8 +317,7 @@ func deployToFly(ctx context.Context, envName string, aiConfig *DeploymentAIConf
 		return fmt.Errorf("fly CLI not found. Install from https://fly.io/docs/hands-on/install-flyctl/")
 	}
 
-	// Generate fly.toml
-	appName := fmt.Sprintf("station-%s", envName)
+	appName := getAppName(envName)
 	deployConfig := deployment.DeploymentConfig{
 		EnvironmentName:      envName,
 		DockerImage:          imageName,
@@ -442,7 +464,7 @@ func deployToFly(ctx context.Context, envName string, aiConfig *DeploymentAIConf
 	fmt.Printf("\n💡 Add to Claude Desktop:\n")
 	fmt.Printf("{\n")
 	fmt.Printf("  \"mcpServers\": {\n")
-	fmt.Printf("    \"station-%s\": {\n", envName)
+	fmt.Printf("    \"%s\": {\n", appName)
 	fmt.Printf("      \"url\": \"https://%s.fly.dev/mcp\"\n", appName)
 	fmt.Printf("    }\n")
 	fmt.Printf("  }\n")
@@ -463,7 +485,7 @@ func deployToCloudflare(ctx context.Context, envName string, aiConfig *Deploymen
 		return fmt.Errorf("wrangler CLI not found. Install with: npm install -g wrangler")
 	}
 
-	appName := fmt.Sprintf("station-%s", envName)
+	appName := getAppName(envName)
 	outputDir := fmt.Sprintf("cloudflare-%s", envName)
 	srcDir := filepath.Join(outputDir, "src")
 	bundlePath := filepath.Join(outputDir, fmt.Sprintf("%s.tar.gz", envName))
@@ -549,7 +571,7 @@ func deployToCloudflare(ctx context.Context, envName string, aiConfig *Deploymen
 	fmt.Printf("   ✓ Generated %s\n", dockerfilePath)
 
 	packageJSON := fmt.Sprintf(`{
-  "name": "station-%s",
+  "name": "%s",
   "version": "1.0.0",
   "type": "module",
   "main": "src/worker.js",
@@ -557,7 +579,7 @@ func deployToCloudflare(ctx context.Context, envName string, aiConfig *Deploymen
     "@cloudflare/containers": "^0.0.31"
   }
 }
-`, envName)
+`, appName)
 	packagePath := filepath.Join(outputDir, "package.json")
 	if err := os.WriteFile(packagePath, []byte(packageJSON), 0644); err != nil {
 		return fmt.Errorf("failed to write package.json: %w", err)
@@ -633,7 +655,7 @@ func deployToCloudflare(ctx context.Context, envName string, aiConfig *Deploymen
 	fmt.Printf("\n💡 Add to Claude Desktop:\n")
 	fmt.Printf("{\n")
 	fmt.Printf("  \"mcpServers\": {\n")
-	fmt.Printf("    \"station-%s\": {\n", envName)
+	fmt.Printf("    \"%s\": {\n", appName)
 	fmt.Printf("      \"url\": \"https://%s.<your-subdomain>.workers.dev/mcp\"\n", appName)
 	fmt.Printf("    }\n")
 	fmt.Printf("  }\n")
