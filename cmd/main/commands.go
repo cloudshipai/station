@@ -966,6 +966,11 @@ ssh_host_key.pub
 		logging.Info("⚠️  Failed to create Jaeger docker-compose: %v", err)
 	}
 
+	// Create OpenCode docker-compose file for AI coding sandbox
+	if _, err := handlers.EnsureOpenCodeComposeFile(); err != nil {
+		logging.Info("⚠️  Failed to create OpenCode docker-compose: %v", err)
+	}
+
 	fmt.Printf("\n🎉 Station initialized successfully!\n\n")
 	fmt.Printf("📁 Config file: %s\n", configFile)
 	fmt.Printf("🗄️  Database: %s\n", viper.GetString("database_url"))
