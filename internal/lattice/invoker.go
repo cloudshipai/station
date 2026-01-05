@@ -158,3 +158,45 @@ func (i *Invoker) InvokeRemoteAgent(ctx context.Context, targetStationID string,
 
 	return &response, nil
 }
+
+type RunWorkflowRequest struct {
+	WorkflowID string            `json:"workflow_id"`
+	Input      map[string]string `json:"input,omitempty"`
+}
+
+type RunWorkflowResponse struct {
+	Status    string `json:"status"`
+	RunID     string `json:"run_id,omitempty"`
+	Result    string `json:"result,omitempty"`
+	Error     string `json:"error,omitempty"`
+	StationID string `json:"station_id"`
+}
+
+func (i *Invoker) InvokeRemoteWorkflow(ctx context.Context, targetStationID string, req RunWorkflowRequest) (*RunWorkflowResponse, error) {
+	if i.client == nil || !i.client.IsConnected() {
+		return nil, fmt.Errorf("client not connected")
+	}
+
+	subject := fmt.Sprintf("lattice.station.%s.workflow.run", targetStationID)
+	data, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	timeout := 10 * time.Minute
+	if deadline, ok := ctx.Deadline(); ok {
+		timeout = time.Until(deadline)
+	}
+
+	respMsg, err := i.client.Request(subject, data, timeout)
+	if err != nil {
+		return nil, fmt.Errorf("workflow invoke request failed: %w", err)
+	}
+
+	var response RunWorkflowResponse
+	if err := json.Unmarshal(respMsg.Data, &response); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	return &response, nil
+}

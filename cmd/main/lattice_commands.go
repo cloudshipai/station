@@ -58,7 +58,30 @@ the task will be dispatched to that station for execution.`,
 		RunE: runLatticeAgentExec,
 	}
 
-	execOnStation string
+	latticeWorkflowsCmd = &cobra.Command{
+		Use:   "workflows",
+		Short: "List all workflows across the lattice",
+		Long:  "Display all workflows available across all connected stations in the lattice.",
+		RunE:  runLatticeWorkflows,
+	}
+
+	latticeWorkflowCmd = &cobra.Command{
+		Use:   "workflow",
+		Short: "Workflow operations",
+		Long:  "Run or manage workflows across the lattice.",
+	}
+
+	latticeWorkflowRunCmd = &cobra.Command{
+		Use:   "run <workflow-id>",
+		Short: "Run a workflow (local or remote)",
+		Long: `Run a workflow by ID or name. If the workflow exists on a remote station,
+it will be dispatched to that station for execution.`,
+		Args: cobra.ExactArgs(1),
+		RunE: runLatticeWorkflowRun,
+	}
+
+	execOnStation     string
+	workflowOnStation string
 )
 
 func init() {
@@ -67,6 +90,11 @@ func init() {
 	latticeCmd.AddCommand(latticeAgentCmd)
 	latticeAgentCmd.AddCommand(latticeAgentExecCmd)
 	latticeAgentExecCmd.Flags().StringVar(&execOnStation, "station", "", "Execute on specific station")
+
+	latticeCmd.AddCommand(latticeWorkflowsCmd)
+	latticeCmd.AddCommand(latticeWorkflowCmd)
+	latticeWorkflowCmd.AddCommand(latticeWorkflowRunCmd)
+	latticeWorkflowRunCmd.Flags().StringVar(&workflowOnStation, "station", "", "Run on specific station")
 }
 
 func runLatticeStatus(cmd *cobra.Command, args []string) error {
@@ -326,6 +354,169 @@ func runLatticeAgentExec(cmd *cobra.Command, args []string) error {
 
 	fmt.Println(response.Result)
 	fmt.Printf("\nExecution completed in %.2fs (via %s)\n",
+		time.Since(start).Seconds(), response.StationID)
+
+	return nil
+}
+
+func runLatticeWorkflows(cmd *cobra.Command, args []string) error {
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	orchestrationMode := viper.GetBool("lattice_orchestration")
+	latticeURL := viper.GetString("lattice_url")
+
+	if !orchestrationMode && latticeURL == "" {
+		fmt.Println("Error: Not connected to lattice")
+		fmt.Println("Start with --orchestration or --lattice <url>")
+		return nil
+	}
+
+	if orchestrationMode {
+		cfg.Lattice.NATS.URL = fmt.Sprintf("nats://127.0.0.1:%d", cfg.Lattice.Orchestrator.EmbeddedNATS.Port)
+		if cfg.Lattice.Orchestrator.EmbeddedNATS.Port == 0 {
+			cfg.Lattice.NATS.URL = "nats://127.0.0.1:4222"
+		}
+	} else {
+		cfg.Lattice.NATS.URL = latticeURL
+	}
+
+	client, err := lattice.NewClient(cfg.Lattice)
+	if err != nil {
+		return fmt.Errorf("failed to create client: %w", err)
+	}
+
+	if err := client.Connect(); err != nil {
+		return fmt.Errorf("failed to connect: %w", err)
+	}
+	defer client.Close()
+
+	registry := lattice.NewRegistry(client)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := registry.Initialize(ctx); err != nil {
+		return fmt.Errorf("failed to initialize registry: %w", err)
+	}
+
+	router := lattice.NewAgentRouter(registry, client.StationID())
+	workflows, err := router.ListAllWorkflows(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to list workflows: %w", err)
+	}
+
+	if len(workflows) == 0 {
+		fmt.Println("No workflows found in lattice")
+		return nil
+	}
+
+	fmt.Printf("Workflows in Lattice (%d total)\n", len(workflows))
+	fmt.Println("============================================================")
+	fmt.Printf("%-20s %-20s %-30s\n", "WORKFLOW", "STATION", "DESCRIPTION")
+	fmt.Println("------------------------------------------------------------")
+	for _, wf := range workflows {
+		localStr := ""
+		if wf.IsLocal {
+			localStr = " (this)"
+		}
+		stationName := wf.StationName + localStr
+		if len(stationName) > 18 {
+			stationName = stationName[:15] + "..."
+		}
+		desc := wf.Description
+		if len(desc) > 28 {
+			desc = desc[:25] + "..."
+		}
+		fmt.Printf("%-20s %-20s %-30s\n", wf.WorkflowName, stationName, desc)
+	}
+
+	return nil
+}
+
+func runLatticeWorkflowRun(cmd *cobra.Command, args []string) error {
+	workflowID := args[0]
+
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	orchestrationMode := viper.GetBool("lattice_orchestration")
+	latticeURL := viper.GetString("lattice_url")
+
+	if !orchestrationMode && latticeURL == "" {
+		fmt.Println("Error: Not connected to lattice")
+		fmt.Println("Start with --orchestration or --lattice <url>")
+		return nil
+	}
+
+	if orchestrationMode {
+		cfg.Lattice.NATS.URL = fmt.Sprintf("nats://127.0.0.1:%d", cfg.Lattice.Orchestrator.EmbeddedNATS.Port)
+		if cfg.Lattice.Orchestrator.EmbeddedNATS.Port == 0 {
+			cfg.Lattice.NATS.URL = "nats://127.0.0.1:4222"
+		}
+	} else {
+		cfg.Lattice.NATS.URL = latticeURL
+	}
+
+	client, err := lattice.NewClient(cfg.Lattice)
+	if err != nil {
+		return fmt.Errorf("failed to create client: %w", err)
+	}
+
+	if err := client.Connect(); err != nil {
+		return fmt.Errorf("failed to connect: %w", err)
+	}
+	defer client.Close()
+
+	registry := lattice.NewRegistry(client)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+
+	if err := registry.Initialize(ctx); err != nil {
+		return fmt.Errorf("failed to initialize registry: %w", err)
+	}
+
+	router := lattice.NewAgentRouter(registry, client.StationID())
+
+	var targetStation string
+	if workflowOnStation != "" {
+		targetStation = workflowOnStation
+	} else {
+		location, err := router.FindBestWorkflow(ctx, workflowID)
+		if err != nil {
+			return fmt.Errorf("failed to find workflow: %w", err)
+		}
+		if location == nil {
+			return fmt.Errorf("workflow '%s' not found in lattice", workflowID)
+		}
+		targetStation = location.StationID
+		fmt.Printf("[routing to %s]\n\n", location.StationName)
+	}
+
+	invoker := lattice.NewInvoker(client, client.StationID(), nil)
+	req := lattice.RunWorkflowRequest{
+		WorkflowID: workflowID,
+	}
+
+	start := time.Now()
+	response, err := invoker.InvokeRemoteWorkflow(ctx, targetStation, req)
+	if err != nil {
+		return fmt.Errorf("workflow invocation failed: %w", err)
+	}
+
+	if response.Status == "error" {
+		fmt.Printf("Error: %s\n", response.Error)
+		return nil
+	}
+
+	fmt.Printf("Run ID: %s\n", response.RunID)
+	if response.Result != "" {
+		fmt.Println(response.Result)
+	}
+	fmt.Printf("\nWorkflow completed in %.2fs (via %s)\n",
 		time.Since(start).Seconds(), response.StationID)
 
 	return nil

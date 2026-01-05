@@ -9,12 +9,18 @@ import (
 	"station/internal/db/queries"
 )
 
-type AgentCollector struct {
+type ManifestCollector struct {
 	db *sql.DB
 }
 
+func NewManifestCollector(db *sql.DB) *ManifestCollector {
+	return &ManifestCollector{db: db}
+}
+
+type AgentCollector = ManifestCollector
+
 func NewAgentCollector(db *sql.DB) *AgentCollector {
-	return &AgentCollector{db: db}
+	return NewManifestCollector(db)
 }
 
 func (c *AgentCollector) CollectAgents(ctx context.Context) ([]AgentInfo, error) {
@@ -86,4 +92,70 @@ func extractCapabilities(agent queries.Agent) []string {
 	}
 
 	return caps
+}
+
+func (c *ManifestCollector) CollectWorkflows(ctx context.Context) ([]WorkflowInfo, error) {
+	if c.db == nil {
+		return nil, nil
+	}
+
+	q := queries.New(c.db)
+	workflows, err := q.ListLatestWorkflows(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list workflows: %w", err)
+	}
+
+	var infos []WorkflowInfo
+	for _, wf := range workflows {
+		if wf.Status != "active" && wf.Status != "enabled" {
+			continue
+		}
+
+		desc := ""
+		if wf.Description.Valid {
+			desc = wf.Description.String
+		}
+
+		infos = append(infos, WorkflowInfo{
+			ID:          wf.WorkflowID,
+			Name:        wf.Name,
+			Description: desc,
+		})
+	}
+
+	return infos, nil
+}
+
+func (c *ManifestCollector) GetWorkflowByID(ctx context.Context, workflowID string) (*queries.Workflow, error) {
+	if c.db == nil {
+		return nil, fmt.Errorf("database not available")
+	}
+
+	q := queries.New(c.db)
+	wf, err := q.GetLatestWorkflow(ctx, workflowID)
+	if err != nil {
+		return nil, fmt.Errorf("workflow not found: %w", err)
+	}
+
+	return &wf, nil
+}
+
+func (c *ManifestCollector) CollectFullManifest(ctx context.Context, stationID, stationName string) (*StationManifest, error) {
+	agents, err := c.CollectAgents(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to collect agents: %w", err)
+	}
+
+	workflows, err := c.CollectWorkflows(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to collect workflows: %w", err)
+	}
+
+	return &StationManifest{
+		StationID:   stationID,
+		StationName: stationName,
+		Agents:      agents,
+		Workflows:   workflows,
+		Status:      StatusOnline,
+	}, nil
 }
