@@ -211,8 +211,8 @@ func (s *Server) setupTools() {
 		mcp.WithString("server_name", mcp.Required(), mcp.Description("Name of the MCP server")),
 		mcp.WithString("command", mcp.Required(), mcp.Description("Command to execute the MCP server")),
 		mcp.WithString("description", mcp.Description("Description of the MCP server")),
-		mcp.WithArray("args", mcp.Description("Command line arguments for the MCP server"), mcp.WithStringItems()),
-		mcp.WithObject("env", mcp.Description("Environment variables for the MCP server")),
+		mcp.WithArray("args", mcp.Description("Command line arguments for the MCP server. Use {{.VAR_NAME}} syntax for template variables that will be resolved at sync time."), mcp.WithStringItems()),
+		mcp.WithObject("env", mcp.Description("Environment variables for the MCP server. Use {{.VAR_NAME}} syntax for secrets that will be prompted at sync time (e.g., \"API_KEY\": \"{{.MY_API_KEY}}\")")),
 	)
 	s.mcpServer.AddTool(addMCPServerTool, s.handleAddMCPServerToEnvironment)
 
@@ -222,8 +222,8 @@ func (s *Server) setupTools() {
 		mcp.WithString("server_name", mcp.Required(), mcp.Description("Name of the MCP server to update")),
 		mcp.WithString("command", mcp.Required(), mcp.Description("Command to execute the MCP server")),
 		mcp.WithString("description", mcp.Description("Description of the MCP server")),
-		mcp.WithArray("args", mcp.Description("Command line arguments for the MCP server"), mcp.WithStringItems()),
-		mcp.WithObject("env", mcp.Description("Environment variables for the MCP server")),
+		mcp.WithArray("args", mcp.Description("Command line arguments for the MCP server. Use {{.VAR_NAME}} syntax for template variables that will be resolved at sync time."), mcp.WithStringItems()),
+		mcp.WithObject("env", mcp.Description("Environment variables for the MCP server. Use {{.VAR_NAME}} syntax for secrets that will be prompted at sync time (e.g., \"API_KEY\": \"{{.MY_API_KEY}}\")")),
 	)
 	s.mcpServer.AddTool(updateMCPServerTool, s.handleUpdateMCPServerInEnvironment)
 
@@ -508,7 +508,7 @@ func (s *Server) setupTools() {
 		mcp.WithDescription("Save a raw MCP server template configuration to an environment. Accepts any valid MCP server config JSON and saves it as {template_name}.json. Use this for maximum flexibility when creating MCP servers with custom configurations."),
 		mcp.WithString("environment_name", mcp.Required(), mcp.Description("Name of the environment")),
 		mcp.WithString("template_name", mcp.Required(), mcp.Description("Name for the template file (will be saved as {template_name}.json)")),
-		mcp.WithString("config", mcp.Required(), mcp.Description("Raw JSON configuration for the MCP server. Must be valid JSON matching the MCP template schema: {\"name\": \"...\", \"description\": \"...\", \"mcpServers\": {\"server-name\": {\"command\": \"...\", \"args\": [...], \"env\": {...}}}}")),
+		mcp.WithString("config", mcp.Required(), mcp.Description("Raw JSON configuration for the MCP server. Must be valid JSON matching the MCP template schema: {\"name\": \"...\", \"description\": \"...\", \"mcpServers\": {\"server-name\": {\"command\": \"...\", \"args\": [...], \"env\": {...}}}}. Use {{.VAR_NAME}} syntax in args or env values for template variables resolved at sync time.")),
 	)
 	s.mcpServer.AddTool(saveMCPTemplateTool, s.handleSaveMCPTemplate)
 
