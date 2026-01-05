@@ -7,6 +7,9 @@ BINARY="$PROJECT_ROOT/stn"
 WORKSPACE_DIR=$(mktemp -d)
 LOG_DIR="$WORKSPACE_DIR/logs"
 
+NATS_PORT="${NATS_PORT:-14222}"
+NATS_HTTP_PORT="${NATS_HTTP_PORT:-18222}"
+
 mkdir -p "$LOG_DIR"
 
 cleanup() {
@@ -34,6 +37,8 @@ trap cleanup EXIT
 echo "=== Station Lattice E2E Test ==="
 echo "Project root: $PROJECT_ROOT"
 echo "Workspace: $WORKSPACE_DIR"
+echo "NATS port: $NATS_PORT"
+echo "NATS HTTP port: $NATS_HTTP_PORT"
 echo ""
 
 echo "=== Building Station binary ==="
@@ -56,6 +61,11 @@ mcp_port: 18586
 ai_provider: openai
 ai_model: gpt-4o-mini
 local_mode: true
+lattice:
+  orchestrator:
+    embedded_nats:
+      port: $NATS_PORT
+      http_port: $NATS_HTTP_PORT
 EOF
 
 cat > "$MEMBER_WORKSPACE/config.yaml" << EOF
@@ -99,7 +109,7 @@ echo ""
 
 echo "=== Starting Member Station (connecting to orchestrator) ==="
 cd "$MEMBER_WORKSPACE"
-"$BINARY" serve --lattice nats://localhost:4222 --config "$MEMBER_WORKSPACE/config.yaml" > "$LOG_DIR/member.log" 2>&1 &
+"$BINARY" serve --lattice "nats://localhost:$NATS_PORT" --config "$MEMBER_WORKSPACE/config.yaml" > "$LOG_DIR/member.log" 2>&1 &
 MEMBER_PID=$!
 echo "Member PID: $MEMBER_PID"
 

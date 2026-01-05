@@ -45,7 +45,8 @@ const (
 )
 
 type Registry struct {
-	client *Client
+	client    *Client
+	telemetry *Telemetry
 
 	mu          sync.RWMutex
 	stationsKV  nats.KeyValue
@@ -54,7 +55,10 @@ type Registry struct {
 }
 
 func NewRegistry(client *Client) *Registry {
-	return &Registry{client: client}
+	return &Registry{
+		client:    client,
+		telemetry: NewTelemetry(),
+	}
 }
 
 func (r *Registry) Initialize(ctx context.Context) error {
@@ -111,10 +115,15 @@ func (r *Registry) getOrCreateKV(js nats.JetStreamContext, bucket string) (nats.
 }
 
 func (r *Registry) RegisterStation(ctx context.Context, manifest StationManifest) error {
+	_, span := r.telemetry.StartRegistrySpan(ctx, "register", manifest.StationID)
+	var resultErr error
+	defer func() { r.telemetry.EndSpan(span, resultErr) }()
+
 	r.mu.RLock()
 	if !r.initialized {
 		r.mu.RUnlock()
-		return fmt.Errorf("registry not initialized")
+		resultErr = fmt.Errorf("registry not initialized")
+		return resultErr
 	}
 	stationsKV := r.stationsKV
 	agentsKV := r.agentsKV
@@ -125,12 +134,14 @@ func (r *Registry) RegisterStation(ctx context.Context, manifest StationManifest
 
 	data, err := json.Marshal(manifest)
 	if err != nil {
-		return fmt.Errorf("failed to marshal station manifest: %w", err)
+		resultErr = fmt.Errorf("failed to marshal station manifest: %w", err)
+		return resultErr
 	}
 
 	_, err = stationsKV.Put(manifest.StationID, data)
 	if err != nil {
-		return fmt.Errorf("failed to store station manifest: %w", err)
+		resultErr = fmt.Errorf("failed to store station manifest: %w", err)
+		return resultErr
 	}
 
 	for _, agent := range manifest.Agents {
@@ -160,10 +171,15 @@ func (r *Registry) RegisterStation(ctx context.Context, manifest StationManifest
 }
 
 func (r *Registry) UnregisterStation(ctx context.Context, stationID string) error {
+	_, span := r.telemetry.StartRegistrySpan(ctx, "unregister", stationID)
+	var resultErr error
+	defer func() { r.telemetry.EndSpan(span, resultErr) }()
+
 	r.mu.RLock()
 	if !r.initialized {
 		r.mu.RUnlock()
-		return fmt.Errorf("registry not initialized")
+		resultErr = fmt.Errorf("registry not initialized")
+		return resultErr
 	}
 	stationsKV := r.stationsKV
 	agentsKV := r.agentsKV
@@ -171,7 +187,8 @@ func (r *Registry) UnregisterStation(ctx context.Context, stationID string) erro
 
 	entry, err := stationsKV.Get(stationID)
 	if err != nil && err != nats.ErrKeyNotFound {
-		return fmt.Errorf("failed to get station: %w", err)
+		resultErr = fmt.Errorf("failed to get station: %w", err)
+		return resultErr
 	}
 
 	if entry != nil {
@@ -185,17 +202,23 @@ func (r *Registry) UnregisterStation(ctx context.Context, stationID string) erro
 	}
 
 	if err := stationsKV.Delete(stationID); err != nil && err != nats.ErrKeyNotFound {
-		return fmt.Errorf("failed to delete station: %w", err)
+		resultErr = fmt.Errorf("failed to delete station: %w", err)
+		return resultErr
 	}
 
 	return nil
 }
 
 func (r *Registry) GetStation(ctx context.Context, stationID string) (*StationManifest, error) {
+	_, span := r.telemetry.StartRegistrySpan(ctx, "get", stationID)
+	var resultErr error
+	defer func() { r.telemetry.EndSpan(span, resultErr) }()
+
 	r.mu.RLock()
 	if !r.initialized {
 		r.mu.RUnlock()
-		return nil, fmt.Errorf("registry not initialized")
+		resultErr = fmt.Errorf("registry not initialized")
+		return nil, resultErr
 	}
 	stationsKV := r.stationsKV
 	r.mu.RUnlock()
@@ -205,22 +228,29 @@ func (r *Registry) GetStation(ctx context.Context, stationID string) (*StationMa
 		if err == nats.ErrKeyNotFound {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("failed to get station: %w", err)
+		resultErr = fmt.Errorf("failed to get station: %w", err)
+		return nil, resultErr
 	}
 
 	var manifest StationManifest
 	if err := json.Unmarshal(entry.Value(), &manifest); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal station manifest: %w", err)
+		resultErr = fmt.Errorf("failed to unmarshal station manifest: %w", err)
+		return nil, resultErr
 	}
 
 	return &manifest, nil
 }
 
 func (r *Registry) ListStations(ctx context.Context) ([]StationManifest, error) {
+	_, span := r.telemetry.StartRegistrySpan(ctx, "list", "")
+	var resultErr error
+	defer func() { r.telemetry.EndSpan(span, resultErr) }()
+
 	r.mu.RLock()
 	if !r.initialized {
 		r.mu.RUnlock()
-		return nil, fmt.Errorf("registry not initialized")
+		resultErr = fmt.Errorf("registry not initialized")
+		return nil, resultErr
 	}
 	stationsKV := r.stationsKV
 	r.mu.RUnlock()
@@ -230,7 +260,8 @@ func (r *Registry) ListStations(ctx context.Context) ([]StationManifest, error) 
 		if err == nats.ErrNoKeysFound {
 			return []StationManifest{}, nil
 		}
-		return nil, fmt.Errorf("failed to list stations: %w", err)
+		resultErr = fmt.Errorf("failed to list stations: %w", err)
+		return nil, resultErr
 	}
 
 	var stations []StationManifest

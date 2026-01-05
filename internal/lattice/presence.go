@@ -34,9 +34,10 @@ const (
 )
 
 type Presence struct {
-	client   *Client
-	registry *Registry
-	manifest StationManifest
+	client    *Client
+	registry  *Registry
+	manifest  StationManifest
+	telemetry *Telemetry
 
 	mu       sync.RWMutex
 	ctx      context.Context
@@ -52,10 +53,11 @@ func NewPresence(client *Client, registry *Registry, manifest StationManifest, i
 	}
 
 	return &Presence{
-		client:   client,
-		registry: registry,
-		manifest: manifest,
-		interval: interval,
+		client:    client,
+		registry:  registry,
+		manifest:  manifest,
+		interval:  interval,
+		telemetry: NewTelemetry(),
 	}
 }
 
@@ -155,10 +157,17 @@ func (p *Presence) sendHeartbeat() error {
 
 	data, err := json.Marshal(msg)
 	if err != nil {
+		p.telemetry.RecordError("heartbeat_marshal", "presence", err)
 		return err
 	}
 
-	return p.client.Publish(PresenceHeartbeat, data)
+	if err := p.client.Publish(PresenceHeartbeat, data); err != nil {
+		p.telemetry.RecordError("heartbeat_publish", "presence", err)
+		return err
+	}
+
+	p.telemetry.RecordHeartbeat(p.manifest.StationID)
+	return nil
 }
 
 func (p *Presence) subscribeToPresence() error {

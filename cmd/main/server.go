@@ -323,9 +323,18 @@ func runMainServer() error {
 		var natsURL string
 
 		if latticeOrchestration {
+			natsPort := viper.GetInt("lattice.orchestrator.embedded_nats.port")
+			if natsPort == 0 {
+				natsPort = 4222
+			}
+			natsHTTPPort := viper.GetInt("lattice.orchestrator.embedded_nats.http_port")
+			if natsHTTPPort == 0 {
+				natsHTTPPort = 8222
+			}
+
 			embeddedCfg := config.LatticeEmbeddedNATSConfig{
-				Port:     4222,
-				HTTPPort: 8222,
+				Port:     natsPort,
+				HTTPPort: natsHTTPPort,
 			}
 			latticeEmbedded = lattice.NewEmbeddedServer(embeddedCfg)
 			if err := latticeEmbedded.Start(); err != nil {
@@ -333,7 +342,7 @@ func runMainServer() error {
 				log.Printf("⚠️  Lattice mesh network disabled")
 			} else {
 				natsURL = latticeEmbedded.ClientURL()
-				log.Printf("✅ Lattice orchestrator mode: embedded NATS on port 4222")
+				log.Printf("✅ Lattice orchestrator mode: embedded NATS on port %d", natsPort)
 			}
 		} else if latticeURL != "" {
 			natsURL = latticeURL
