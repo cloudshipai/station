@@ -1,0 +1,374 @@
+package lattice
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"sync"
+	"time"
+
+	"github.com/nats-io/nats.go"
+)
+
+const (
+	StationsBucket = "lattice-stations"
+	AgentsBucket   = "lattice-agents"
+)
+
+type StationManifest struct {
+	StationID   string         `json:"station_id"`
+	StationName string         `json:"station_name"`
+	Agents      []AgentInfo    `json:"agents"`
+	Workflows   []WorkflowInfo `json:"workflows"`
+	LastSeen    time.Time      `json:"last_seen"`
+	Status      StationStatus  `json:"status"`
+}
+
+type AgentInfo struct {
+	ID           string   `json:"id"`
+	Name         string   `json:"name"`
+	Description  string   `json:"description"`
+	Capabilities []string `json:"capabilities"`
+}
+
+type WorkflowInfo struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
+type StationStatus string
+
+const (
+	StatusOnline  StationStatus = "online"
+	StatusOffline StationStatus = "offline"
+)
+
+type Registry struct {
+	client *Client
+
+	mu          sync.RWMutex
+	stationsKV  nats.KeyValue
+	agentsKV    nats.KeyValue
+	initialized bool
+}
+
+func NewRegistry(client *Client) *Registry {
+	return &Registry{client: client}
+}
+
+func (r *Registry) Initialize(ctx context.Context) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.initialized {
+		return nil
+	}
+
+	js := r.client.JetStream()
+	if js == nil {
+		return fmt.Errorf("JetStream not available")
+	}
+
+	stationsKV, err := r.getOrCreateKV(js, StationsBucket)
+	if err != nil {
+		return fmt.Errorf("failed to initialize stations KV: %w", err)
+	}
+	r.stationsKV = stationsKV
+
+	agentsKV, err := r.getOrCreateKV(js, AgentsBucket)
+	if err != nil {
+		return fmt.Errorf("failed to initialize agents KV: %w", err)
+	}
+	r.agentsKV = agentsKV
+
+	r.initialized = true
+	return nil
+}
+
+func (r *Registry) getOrCreateKV(js nats.JetStreamContext, bucket string) (nats.KeyValue, error) {
+	kv, err := js.KeyValue(bucket)
+	if err == nil {
+		return kv, nil
+	}
+
+	if err != nats.ErrBucketNotFound {
+		return nil, err
+	}
+
+	kv, err = js.CreateKeyValue(&nats.KeyValueConfig{
+		Bucket:      bucket,
+		Description: fmt.Sprintf("Station Lattice %s registry", bucket),
+		Storage:     nats.FileStorage,
+		History:     5,
+		TTL:         0,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create KV bucket %s: %w", bucket, err)
+	}
+
+	return kv, nil
+}
+
+func (r *Registry) RegisterStation(ctx context.Context, manifest StationManifest) error {
+	r.mu.RLock()
+	if !r.initialized {
+		r.mu.RUnlock()
+		return fmt.Errorf("registry not initialized")
+	}
+	stationsKV := r.stationsKV
+	agentsKV := r.agentsKV
+	r.mu.RUnlock()
+
+	manifest.LastSeen = time.Now()
+	manifest.Status = StatusOnline
+
+	data, err := json.Marshal(manifest)
+	if err != nil {
+		return fmt.Errorf("failed to marshal station manifest: %w", err)
+	}
+
+	_, err = stationsKV.Put(manifest.StationID, data)
+	if err != nil {
+		return fmt.Errorf("failed to store station manifest: %w", err)
+	}
+
+	for _, agent := range manifest.Agents {
+		agentKey := fmt.Sprintf("%s.%s", manifest.StationID, agent.ID)
+		agentEntry := struct {
+			AgentInfo
+			StationID   string `json:"station_id"`
+			StationName string `json:"station_name"`
+		}{
+			AgentInfo:   agent,
+			StationID:   manifest.StationID,
+			StationName: manifest.StationName,
+		}
+
+		agentData, err := json.Marshal(agentEntry)
+		if err != nil {
+			continue
+		}
+
+		_, err = agentsKV.Put(agentKey, agentData)
+		if err != nil {
+			fmt.Printf("[registry] Warning: failed to index agent %s: %v\n", agent.Name, err)
+		}
+	}
+
+	return nil
+}
+
+func (r *Registry) UnregisterStation(ctx context.Context, stationID string) error {
+	r.mu.RLock()
+	if !r.initialized {
+		r.mu.RUnlock()
+		return fmt.Errorf("registry not initialized")
+	}
+	stationsKV := r.stationsKV
+	agentsKV := r.agentsKV
+	r.mu.RUnlock()
+
+	entry, err := stationsKV.Get(stationID)
+	if err != nil && err != nats.ErrKeyNotFound {
+		return fmt.Errorf("failed to get station: %w", err)
+	}
+
+	if entry != nil {
+		var manifest StationManifest
+		if err := json.Unmarshal(entry.Value(), &manifest); err == nil {
+			for _, agent := range manifest.Agents {
+				agentKey := fmt.Sprintf("%s.%s", stationID, agent.ID)
+				_ = agentsKV.Delete(agentKey)
+			}
+		}
+	}
+
+	if err := stationsKV.Delete(stationID); err != nil && err != nats.ErrKeyNotFound {
+		return fmt.Errorf("failed to delete station: %w", err)
+	}
+
+	return nil
+}
+
+func (r *Registry) GetStation(ctx context.Context, stationID string) (*StationManifest, error) {
+	r.mu.RLock()
+	if !r.initialized {
+		r.mu.RUnlock()
+		return nil, fmt.Errorf("registry not initialized")
+	}
+	stationsKV := r.stationsKV
+	r.mu.RUnlock()
+
+	entry, err := stationsKV.Get(stationID)
+	if err != nil {
+		if err == nats.ErrKeyNotFound {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get station: %w", err)
+	}
+
+	var manifest StationManifest
+	if err := json.Unmarshal(entry.Value(), &manifest); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal station manifest: %w", err)
+	}
+
+	return &manifest, nil
+}
+
+func (r *Registry) ListStations(ctx context.Context) ([]StationManifest, error) {
+	r.mu.RLock()
+	if !r.initialized {
+		r.mu.RUnlock()
+		return nil, fmt.Errorf("registry not initialized")
+	}
+	stationsKV := r.stationsKV
+	r.mu.RUnlock()
+
+	keys, err := stationsKV.Keys()
+	if err != nil {
+		if err == nats.ErrNoKeysFound {
+			return []StationManifest{}, nil
+		}
+		return nil, fmt.Errorf("failed to list stations: %w", err)
+	}
+
+	var stations []StationManifest
+	for _, key := range keys {
+		entry, err := stationsKV.Get(key)
+		if err != nil {
+			continue
+		}
+
+		var manifest StationManifest
+		if err := json.Unmarshal(entry.Value(), &manifest); err != nil {
+			continue
+		}
+
+		stations = append(stations, manifest)
+	}
+
+	return stations, nil
+}
+
+func (r *Registry) UpdateStationStatus(ctx context.Context, stationID string, status StationStatus) error {
+	r.mu.RLock()
+	if !r.initialized {
+		r.mu.RUnlock()
+		return fmt.Errorf("registry not initialized")
+	}
+	stationsKV := r.stationsKV
+	r.mu.RUnlock()
+
+	entry, err := stationsKV.Get(stationID)
+	if err != nil {
+		return fmt.Errorf("failed to get station: %w", err)
+	}
+
+	var manifest StationManifest
+	if err := json.Unmarshal(entry.Value(), &manifest); err != nil {
+		return fmt.Errorf("failed to unmarshal station manifest: %w", err)
+	}
+
+	manifest.Status = status
+	manifest.LastSeen = time.Now()
+
+	data, err := json.Marshal(manifest)
+	if err != nil {
+		return fmt.Errorf("failed to marshal station manifest: %w", err)
+	}
+
+	_, err = stationsKV.Put(stationID, data)
+	if err != nil {
+		return fmt.Errorf("failed to update station: %w", err)
+	}
+
+	return nil
+}
+
+func (r *Registry) FindAgentsByCapability(ctx context.Context, capability string) ([]AgentInfo, error) {
+	r.mu.RLock()
+	if !r.initialized {
+		r.mu.RUnlock()
+		return nil, fmt.Errorf("registry not initialized")
+	}
+	stationsKV := r.stationsKV
+	r.mu.RUnlock()
+
+	stations, err := r.ListStations(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var matchingAgents []AgentInfo
+	for _, station := range stations {
+		if station.Status != StatusOnline {
+			continue
+		}
+
+		for _, agent := range station.Agents {
+			for _, cap := range agent.Capabilities {
+				if cap == capability {
+					matchingAgents = append(matchingAgents, agent)
+					break
+				}
+			}
+		}
+	}
+
+	_ = stationsKV
+
+	return matchingAgents, nil
+}
+
+func (r *Registry) WatchStations(ctx context.Context) (<-chan StationManifest, error) {
+	r.mu.RLock()
+	if !r.initialized {
+		r.mu.RUnlock()
+		return nil, fmt.Errorf("registry not initialized")
+	}
+	stationsKV := r.stationsKV
+	r.mu.RUnlock()
+
+	watcher, err := stationsKV.WatchAll()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create watcher: %w", err)
+	}
+
+	ch := make(chan StationManifest, 100)
+
+	go func() {
+		defer close(ch)
+		defer watcher.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case entry, ok := <-watcher.Updates():
+				if !ok {
+					return
+				}
+				if entry == nil {
+					continue
+				}
+				if entry.Operation() == nats.KeyValueDelete {
+					continue
+				}
+
+				var manifest StationManifest
+				if err := json.Unmarshal(entry.Value(), &manifest); err != nil {
+					continue
+				}
+
+				select {
+				case ch <- manifest:
+				case <-ctx.Done():
+					return
+				}
+			}
+		}
+	}()
+
+	return ch, nil
+}
