@@ -391,6 +391,8 @@ func deployToFly(ctx context.Context, envName string, aiConfig *DeploymentAIConf
 }
 
 func deployToCloudflare(ctx context.Context, envName string, aiConfig *DeploymentAIConfig, envConfig *EnvironmentConfig, sleepAfter, instanceType string) error {
+	fmt.Printf("⚠️  [EXPERIMENTAL] Cloudflare Containers support is experimental.\n")
+	fmt.Printf("   Known issue: Image disk size limits may cause deployment failures.\n\n")
 	fmt.Printf("☁️  Deploying to Cloudflare Containers...\n\n")
 
 	if _, err := exec.LookPath("wrangler"); err != nil {

@@ -192,7 +192,7 @@ func init() {
 	syncCmd.Flags().BoolP("verbose", "v", false, "Verbose output showing all operations")
 
 	// Deploy command flags
-	deployCmd.Flags().String("target", "fly", "Deployment target (fly, cloudflare)")
+	deployCmd.Flags().String("target", "fly", "Deployment target (fly, cloudflare [experimental])")
 	deployCmd.Flags().String("region", "ord", "Deployment region (e.g., ord, syd, fra)")
 	deployCmd.Flags().String("sleep-after", "10m", "Cloudflare: sleep container after inactivity (e.g., 10m, 1h, 24h)")
 	deployCmd.Flags().Bool("always-on", false, "Cloudflare: keep container always running (sets sleep-after to 168h)")

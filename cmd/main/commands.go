@@ -295,7 +295,7 @@ and makes them available in the Genkit developer UI for interactive testing.`,
 
 Supported targets:
   fly        - Fly.io (builds Docker image, persistent storage)
-  cloudflare - Cloudflare Containers (uses base image + CloudShip bundle)
+  cloudflare - [EXPERIMENTAL] Cloudflare Containers (uses base image + CloudShip bundle)
 
 The deployed instance exposes agents via MCP for public access.
 The management UI is disabled by default for security.`,
