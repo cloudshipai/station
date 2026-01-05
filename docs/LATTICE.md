@@ -2,6 +2,22 @@
 
 Station Lattice is a NATS-based mesh network that enables multiple Station instances to discover each other, share agent/workflow manifests, and invoke agents remotely.
 
+## Table of Contents
+
+- [Quick Start](#quick-start)
+- [Operating Modes](#operating-modes)
+- [Architecture](#architecture)
+- [Components](#components)
+- [API Reference](#api-reference)
+- [NATS Subjects](#nats-subjects)
+- [CLI Commands](#cli-commands)
+- [Configuration](#configuration)
+- [Remote Invocation Flow](#remote-agent-invocation-flow)
+- [Testing](#testing)
+- [Troubleshooting](#troubleshooting)
+- [Implementation Status](#implementation-status)
+- [Next Steps (Phase 4)](#next-steps-phase-4)
+
 ## Quick Start
 
 ```bash
@@ -63,6 +79,22 @@ stn lattice workflow run deploy-app
     └─────────────────┘   └─────────────────┘   └─────────────────┘
 ```
 
+### Component Interaction
+
+```
+┌──────────────┐     ┌──────────────┐     ┌──────────────┐
+│   Client     │────▶│   Registry   │────▶│   Router     │
+│  (NATS conn) │     │  (KV store)  │     │ (find agent) │
+└──────────────┘     └──────────────┘     └──────────────┘
+       │                    ▲                    │
+       │                    │                    │
+       ▼                    │                    ▼
+┌──────────────┐     ┌──────────────┐     ┌──────────────┐
+│  Presence    │────▶│  Discovery   │     │   Invoker    │
+│ (heartbeat)  │     │ (collect DB) │     │(remote exec) │
+└──────────────┘     └──────────────┘     └──────────────┘
+```
+
 ## Components
 
 ### LatticeClient (`internal/lattice/client.go`)
@@ -70,68 +102,275 @@ stn lattice workflow run deploy-app
 NATS connection wrapper with:
 - Multiple auth methods (user/pass, token, NKey, creds file)
 - TLS support
-- Auto-reconnect
-- Station ID generation
+- Auto-reconnect with configurable backoff
+- Station ID generation (UUID if not provided)
+
+```go
+// Create and connect
+client, _ := lattice.NewClient(cfg.Lattice)
+client.Connect()
+defer client.Close()
+
+// Basic operations
+client.Publish(subject, data)
+client.Subscribe(subject, handler)
+client.Request(subject, data, timeout)
+
+// Getters
+client.StationID()    // UUID or configured ID
+client.StationName()  // Human-readable name
+client.IsConnected()  // Connection status
+client.Conn()         // Raw NATS connection
+client.JetStream()    // JetStream context
+```
 
 ### EmbeddedServer (`internal/lattice/embedded.go`)
 
 Embedded NATS server for orchestrator mode:
 - JetStream enabled with file storage
 - HTTP monitoring endpoint (default: 8222)
-- Configurable ports and storage
+- Configurable ports and storage location
+- Auto-creates data directory
+
+```go
+server := lattice.NewEmbeddedServer(cfg.Lattice.Orchestrator.EmbeddedNATS)
+server.Start()
+defer server.Shutdown()
+
+server.ClientURL()      // "nats://127.0.0.1:4222"
+server.MonitoringURL()  // "http://127.0.0.1:8222"
+server.IsRunning()      // true/false
+```
 
 ### Registry (`internal/lattice/registry.go`)
 
 KV-based station manifest storage:
-- `lattice-stations` bucket: Station manifests
-- `lattice-agents` bucket: Agent index
+- `lattice-stations` bucket: Station manifests (JSON)
+- `lattice-agents` bucket: Agent index for fast lookup
 - Watch support for real-time updates
+- Thread-safe with RWMutex
+
+```go
+registry := lattice.NewRegistry(client)
+registry.Initialize(ctx)
+
+// Station operations
+registry.RegisterStation(ctx, manifest)
+registry.UnregisterStation(ctx, stationID)
+registry.GetStation(ctx, stationID)
+registry.ListStations(ctx)
+registry.UpdateStationStatus(ctx, stationID, status)
+
+// Agent operations
+registry.FindAgentsByCapability(ctx, capability)
+
+// Real-time updates
+ch, _ := registry.WatchStations(ctx)
+for manifest := range ch {
+    // Handle station update
+}
+```
 
 ### Presence (`internal/lattice/presence.go`)
 
 Heartbeat and discovery:
-- Broadcasts presence every 10 seconds
-- Subscribes to announce/goodbye messages
-- Auto-registers discovered stations
+- Broadcasts presence every 10 seconds (configurable)
+- Subscribes to announce/goodbye/heartbeat messages
+- Auto-registers discovered stations in registry
+
+```go
+presence := lattice.NewPresence(client, registry, manifest, 10)
+presence.Start(ctx)
+defer presence.Stop()
+
+// Update manifest (triggers re-announce)
+presence.UpdateManifest(newManifest)
+```
 
 ### ManifestCollector (`internal/lattice/discovery.go`)
 
-Collects local agents and workflows:
-- Queries SQLite database
-- Extracts capabilities from agent metadata
-- Builds complete station manifest
+Collects local agents and workflows from SQLite database:
+- Queries agents table via sqlc-generated queries
+- Queries workflows table for active/enabled workflows
+- Extracts capabilities from agent metadata (app, app_subtype)
+
+```go
+collector := lattice.NewManifestCollector(db)
+
+// Collect all
+manifest, _ := collector.CollectFullManifest(ctx, stationID, stationName)
+
+// Individual collections
+agents, _ := collector.CollectAgents(ctx)
+workflows, _ := collector.CollectWorkflows(ctx)
+
+// Lookups
+agent, _ := collector.GetAgentByID(ctx, "123")
+agent, _ := collector.GetAgentByName(ctx, "k8s-admin")
+workflow, _ := collector.GetWorkflowByID(ctx, "deploy-app")
+```
 
 ### AgentRouter (`internal/lattice/router.go`)
 
-Routing logic:
-- Find agent by name or capability
-- Find workflow by ID
-- Prefer local agents when available
+Routing logic for finding agents and workflows:
+- Searches across all online stations
+- Prefers local agents when available
+- Supports lookup by name or capability
+
+```go
+router := lattice.NewAgentRouter(registry, stationID)
+
+// Agent routing
+locations, _ := router.FindAgentByName(ctx, "k8s-admin")
+locations, _ := router.FindAgentByCapability(ctx, "kubernetes")
+best, _ := router.FindBestAgent(ctx, "k8s-admin", "")
+allAgents, _ := router.ListAllAgents(ctx)
+
+// Workflow routing
+locations, _ := router.FindWorkflowByID(ctx, "deploy-app")
+best, _ := router.FindBestWorkflow(ctx, "deploy-app")
+allWorkflows, _ := router.ListAllWorkflows(ctx)
+```
 
 ### Invoker (`internal/lattice/invoker.go`)
 
-Remote execution:
-- Handles `lattice.station.{id}.agent.invoke` requests
-- Handles `lattice.station.{id}.workflow.run` requests
-- NATS request-reply pattern
+Remote execution via NATS request-reply:
+- Handles incoming agent/workflow invocations
+- Sends requests to remote stations
+- 5-minute timeout for agents, 10-minute for workflows
+
+```go
+invoker := lattice.NewInvoker(client, stationID, executor)
+invoker.Start(ctx)  // Start listening for requests
+defer invoker.Stop()
+
+// Remote invocation
+req := lattice.InvokeAgentRequest{AgentName: "k8s-admin", Task: "List pods"}
+response, _ := invoker.InvokeRemoteAgent(ctx, targetStationID, req)
+
+wfReq := lattice.RunWorkflowRequest{WorkflowID: "deploy-app"}
+wfResponse, _ := invoker.InvokeRemoteWorkflow(ctx, targetStationID, wfReq)
+```
+
+## API Reference
+
+### Data Types
+
+```go
+// Station manifest stored in registry
+type StationManifest struct {
+    StationID   string         `json:"station_id"`
+    StationName string         `json:"station_name"`
+    Agents      []AgentInfo    `json:"agents"`
+    Workflows   []WorkflowInfo `json:"workflows"`
+    LastSeen    time.Time      `json:"last_seen"`
+    Status      StationStatus  `json:"status"`  // "online" | "offline"
+}
+
+// Agent information
+type AgentInfo struct {
+    ID           string   `json:"id"`
+    Name         string   `json:"name"`
+    Description  string   `json:"description"`
+    Capabilities []string `json:"capabilities"`
+}
+
+// Workflow information
+type WorkflowInfo struct {
+    ID          string `json:"id"`
+    Name        string `json:"name"`
+    Description string `json:"description"`
+}
+
+// Agent location from router
+type AgentLocation struct {
+    StationID   string
+    StationName string
+    AgentID     string
+    AgentName   string
+    IsLocal     bool
+}
+
+// Workflow location from router
+type WorkflowLocation struct {
+    StationID    string
+    StationName  string
+    WorkflowID   string
+    WorkflowName string
+    Description  string
+    IsLocal      bool
+}
+
+// Agent invocation request
+type InvokeAgentRequest struct {
+    AgentID   string            `json:"agent_id,omitempty"`
+    AgentName string            `json:"agent_name,omitempty"`
+    Task      string            `json:"task"`
+    Context   map[string]string `json:"context,omitempty"`
+}
+
+// Agent invocation response
+type InvokeAgentResponse struct {
+    Status     string  `json:"status"`      // "success" | "error"
+    Result     string  `json:"result"`
+    Error      string  `json:"error,omitempty"`
+    DurationMs float64 `json:"duration_ms"`
+    ToolCalls  int     `json:"tool_calls"`
+    StationID  string  `json:"station_id"`
+}
+
+// Workflow invocation request
+type RunWorkflowRequest struct {
+    WorkflowID string            `json:"workflow_id"`
+    Input      map[string]string `json:"input,omitempty"`
+}
+
+// Workflow invocation response
+type RunWorkflowResponse struct {
+    Status    string `json:"status"`
+    RunID     string `json:"run_id,omitempty"`
+    Result    string `json:"result,omitempty"`
+    Error     string `json:"error,omitempty"`
+    StationID string `json:"station_id"`
+}
+
+// Presence message types
+type PresenceMessage struct {
+    StationID   string           `json:"station_id"`
+    StationName string           `json:"station_name"`
+    Type        PresenceType     `json:"type"`  // "heartbeat" | "announce" | "goodbye"
+    Timestamp   time.Time        `json:"timestamp"`
+    Manifest    *StationManifest `json:"manifest,omitempty"`
+}
+```
+
+### Interfaces
+
+```go
+// AgentExecutor must be implemented to handle local agent execution
+type AgentExecutor interface {
+    ExecuteAgentByID(ctx context.Context, agentID string, task string) (result string, toolCalls int, err error)
+    ExecuteAgentByName(ctx context.Context, agentName string, task string) (result string, toolCalls int, err error)
+}
+```
 
 ## NATS Subjects
 
 ```
 # Station lifecycle
-lattice.presence.announce.{station_id}    # Station online
-lattice.presence.goodbye.{station_id}     # Station offline
-lattice.presence.heartbeat.{station_id}   # Periodic heartbeat
+lattice.presence.announce            # Station online (includes manifest)
+lattice.presence.goodbye             # Station offline
+lattice.presence.heartbeat           # Periodic heartbeat
 
-# Agent invocation
+# Agent invocation (request-reply)
 lattice.station.{station_id}.agent.invoke
-  Request:  { agent_name, agent_id, task, context }
-  Response: { status, result, error, duration_ms, tool_calls }
+  Request:  InvokeAgentRequest
+  Response: InvokeAgentResponse
 
-# Workflow invocation
+# Workflow invocation (request-reply)
 lattice.station.{station_id}.workflow.run
-  Request:  { workflow_id, input }
-  Response: { status, run_id, result, error }
+  Request:  RunWorkflowRequest
+  Response: RunWorkflowResponse
 ```
 
 ## CLI Commands
@@ -167,12 +406,15 @@ lattice:
   
   nats:
     url: "nats://orchestrator:4222"
+    reconnect_wait_sec: 2     # Seconds between reconnect attempts
+    max_reconnects: -1        # -1 = unlimited
     
     auth:
       user: ""
       password: ""
       token: ""
       nkey_seed: ""
+      nkey_file: ""
       creds_file: ""
     
     tls:
@@ -180,6 +422,7 @@ lattice:
       cert_file: ""
       key_file: ""
       ca_file: ""
+      skip_verify: false
   
   orchestrator:
     embedded_nats:
@@ -213,24 +456,24 @@ Station A (caller)              Orchestrator              Station B (target)
      │ k8s-admin "get pods"         │                           │
      │                              │                           │
      │  1. Connect to lattice       │                           │
-     │─────────────────────────────>│                           │
+     │─────────────────────────────▶│                           │
      │                              │                           │
      │  2. Query registry for       │                           │
      │     agent "k8s-admin"        │                           │
-     │─────────────────────────────>│                           │
+     │─────────────────────────────▶│                           │
      │                              │                           │
      │  3. Found: station-k8s       │                           │
-     │<─────────────────────────────│                           │
+     │◀─────────────────────────────│                           │
      │                              │                           │
      │  4. NATS Request:            │                           │
      │  lattice.station.station-k8s.agent.invoke                │
-     │──────────────────────────────────────────────────────────>
+     │──────────────────────────────────────────────────────────▶
      │                              │                           │
      │                              │      5. Execute locally   │
-     │                              │         via AgentEngine   │
+     │                              │         via AgentExecutor │
      │                              │                           │
      │  6. NATS Reply: result       │                           │
-     │<──────────────────────────────────────────────────────────
+     │◀──────────────────────────────────────────────────────────
      │                              │                           │
      │  7. Display result           │                           │
 ```
@@ -243,6 +486,9 @@ go test ./internal/lattice/... -v
 
 # Build verification
 go build ./...
+
+# Integration test (requires no external dependencies)
+go test ./internal/lattice/integration_test.go -v
 
 # Manual E2E test
 # Terminal 1:
@@ -277,6 +523,11 @@ curl http://localhost:8222/varz
 2. Verify NATS port (default 4222) is accessible
 3. Check firewall rules
 
+### NATS authentication errors
+1. Verify auth configuration matches between orchestrator and members
+2. Check credentials file permissions
+3. Ensure NKey seeds are valid
+
 ## Implementation Status
 
 | Phase | Description | Status |
@@ -284,23 +535,78 @@ curl http://localhost:8222/varz
 | 1 | Core infrastructure (client, embedded, registry, presence) | ✅ Complete |
 | 2 | Agent discovery and remote invocation | ✅ Complete |
 | 3 | Workflow discovery and remote invocation | ✅ Complete |
-| 4 | Task groups and polish | 🔄 Planned |
+| 4 | Integration into `stn serve` + task groups | 🔄 Planned |
+
+## Next Steps (Phase 4)
+
+### 4.1 Wire Agent Execution to Invoker
+
+Currently the `Invoker` receives a `nil` executor. Need to create an adapter:
+
+```go
+// internal/lattice/executor_adapter.go
+type ExecutorAdapter struct {
+    engine *services.AgentExecutionEngine
+}
+
+func (e *ExecutorAdapter) ExecuteAgentByID(ctx context.Context, agentID, task string) (string, int, error) {
+    // Convert to RunCreateParams and execute via engine
+}
+
+func (e *ExecutorAdapter) ExecuteAgentByName(ctx context.Context, agentName, task string) (string, int, error) {
+    // Look up agent by name, then execute
+}
+```
+
+### 4.2 Integrate Lattice into `stn serve`
+
+Modify `cmd/main/main.go` serve command to:
+
+1. **If `--orchestration`**:
+   - Start embedded NATS server
+   - Connect client to localhost NATS
+   - Collect and publish manifest
+   - Start presence heartbeat
+   - Start invoker listener
+
+2. **If `--lattice <url>`**:
+   - Connect client to provided URL
+   - Collect and publish manifest
+   - Start presence heartbeat
+   - Start invoker listener
+
+### 4.3 Task Groups (from PRD)
+
+Coordinated multi-task tracking across stations:
+
+```bash
+stn lattice taskgroup create "Deploy and verify"
+stn lattice taskgroup add-task <group-id> --station station-a --workflow deploy
+stn lattice taskgroup add-task <group-id> --station station-b --agent verifier "Check deployment"
+stn lattice taskgroup run <group-id>
+stn lattice taskgroup status <group-id>
+```
 
 ## Files
 
 ```
 internal/lattice/
-├── client.go       # NATS client with auth/TLS
-├── client_test.go  # Client tests
-├── embedded.go     # Embedded NATS server
-├── embedded_test.go
-├── registry.go     # KV-based station registry
-├── presence.go     # Heartbeat and discovery
-├── discovery.go    # Agent/workflow collection from DB
-├── router.go       # Agent/workflow routing
-└── invoker.go      # Remote invocation handler
+├── client.go           # NATS client with auth/TLS
+├── client_test.go      # Client unit tests
+├── embedded.go         # Embedded NATS server
+├── embedded_test.go    # Embedded server tests
+├── registry.go         # KV-based station registry
+├── presence.go         # Heartbeat and discovery
+├── discovery.go        # Agent/workflow collection from DB
+├── router.go           # Agent/workflow routing
+├── invoker.go          # Remote invocation handler
+└── integration_test.go # Full integration test
 
 cmd/main/
 ├── main.go              # --orchestration, --lattice flags
 └── lattice_commands.go  # stn lattice subcommands
+
+docs/
+├── LATTICE.md           # This documentation
+└── LATTICE_PROGRESS.md  # Implementation progress tracking
 ```
