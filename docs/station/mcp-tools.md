@@ -56,9 +56,56 @@ Give your agents secure access to APIs, databases, filesystems, and services usi
 - Station validates each tool call against agent's allowed tools list
 - Credentials are loaded from environment variables or cloud provider IAM
 
-## Configuring MCP Servers
+## Adding MCP Servers
 
-MCP servers are configured in your environment's `template.json` file.
+There are two ways to add MCP servers: **CLI commands** (recommended for automation and AI agents) or **manual JSON files**.
+
+### Method 1: CLI Commands (Recommended)
+
+Use `stn mcp add` to create MCP server configurations:
+
+```bash
+# Basic filesystem server
+stn mcp add filesystem --command npx --args "-y,@modelcontextprotocol/server-filesystem,/home/user/projects"
+
+# GitHub with secret template variable (prompted at sync time)
+stn mcp add github \
+  --command npx \
+  --args "-y,@modelcontextprotocol/server-github" \
+  --env "GITHUB_TOKEN={{.GITHUB_TOKEN}}" \
+  --description "GitHub API integration"
+
+# PostgreSQL with connection string template
+stn mcp add postgres \
+  --command npx \
+  --args "-y,@modelcontextprotocol/server-postgres" \
+  --env "DATABASE_URL={{.DATABASE_URL}}"
+
+# Add to a specific environment
+stn mcp add database --env production --command npx --args "-y,@modelcontextprotocol/server-postgres"
+
+# Interactive mode - opens your $EDITOR with a template
+stn mcp add complex-server -i
+```
+
+After adding servers, sync your environment to activate them:
+
+```bash
+# Sync with browser-based variable input (RECOMMENDED for AI agents)
+# User enters secrets in browser - secrets never appear in CLI or AI context
+stn sync default --browser
+
+# Or sync with terminal prompts
+stn sync default
+```
+
+### Method 2: Manual JSON Files
+
+Create JSON files directly in your environment directory:
+
+```bash
+~/.config/station/environments/default/my-server.json
+```
 
 ### Basic Structure
 
@@ -152,6 +199,37 @@ This pattern enables:
 - Same configuration across dev/staging/prod with different values
 - GitOps workflows (commit configs, deploy with environment-specific variables)
 - No hardcoded paths or regions
+
+### Secure Variable Input with Browser Sync
+
+When working with AI agents (Claude, GPT, Cursor, etc.), use browser-based variable input to keep secrets out of the AI context:
+
+```bash
+# AI agent runs this command
+stn sync default --browser
+```
+
+**What happens:**
+1. Station opens a browser window with a secure form
+2. User enters secret values directly in the browser
+3. Secrets are saved to `variables.yml` and never appear in terminal output
+4. AI agent receives confirmation that sync completed
+5. MCP tools become available with credentials configured
+
+**Why this matters for AI agents:**
+- Secrets never appear in CLI output that the AI might see
+- Secrets are not stored in conversation history
+- Users maintain control over credential entry
+- Supports cancellation if user closes browser
+
+**Programmatic access (MCP tool):**
+```json
+{
+  "tool": "sync_environment",
+  "environment_name": "default",
+  "browser": true
+}
+```
 
 ## Available MCP Servers
 

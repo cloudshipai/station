@@ -5,23 +5,115 @@ description: Connecting Station to MCP clients beyond Claude Desktop
 
 # Other MCP Clients
 
-## 🚧 Coming Soon
+Station works with any MCP-compatible client. This page covers integration with popular AI coding tools.
 
-This page is under construction. We're working on comprehensive documentation for connecting Station to various MCP clients beyond Claude Desktop.
+## Supported Clients
 
-## What This Will Cover
+| Client | Connection | Guide |
+|--------|------------|-------|
+| Claude Desktop | stdio / HTTP | [Claude Desktop Setup](/station/en/mcp/claude-desktop) |
+| Claude Code | stdio / HTTP | [Claude Code Setup](/station/en/mcp/claude-code) |
+| Cursor | stdio | See below |
+| Windsurf | stdio | See below |
+| Zed | stdio | See below |
+| Custom | stdio / HTTP | See below |
 
-- **Cursor Integration** - Setting up Station with Cursor editor
-- **VS Code Extensions** - MCP extensions that work with Station
-- **Custom MCP Clients** - Building your own MCP clients
-- **API Integration** - Using Station's MCP API directly
-- **Third-party Tools** - Other tools that support MCP protocol
+## Claude Code
 
-## Quick Reference
+Claude Code (Anthropic's CLI) has full Station support with an optional skills plugin.
 
-Station works with any MCP-compatible client:
+**Quick Setup:**
 
-**stdio Mode (recommended for local clients):**
+Create `.mcp.json` in your project root:
+```json
+{
+  "mcpServers": {
+    "station": {
+      "command": "stn",
+      "args": ["stdio"]
+    }
+  }
+}
+```
+
+**Full Guide:** [Claude Code Setup](/station/en/mcp/claude-code)
+
+## Cursor
+
+Cursor supports MCP via its settings.
+
+### Configuration
+
+1. Open Cursor Settings (`Cmd+,` / `Ctrl+,`)
+2. Search for "MCP" or navigate to Features > MCP
+3. Add Station server:
+
+```json
+{
+  "mcp": {
+    "servers": {
+      "station": {
+        "command": "stn",
+        "args": ["stdio"]
+      }
+    }
+  }
+}
+```
+
+### Verification
+
+In Cursor chat, ask:
+```
+What Station tools are available?
+```
+
+## Windsurf
+
+Windsurf uses similar MCP configuration.
+
+### Configuration
+
+Add to Windsurf settings:
+
+```json
+{
+  "mcpServers": {
+    "station": {
+      "command": "stn",
+      "args": ["stdio"]
+    }
+  }
+}
+```
+
+## Zed
+
+Zed editor supports MCP through its assistant configuration.
+
+### Configuration
+
+Edit `~/.config/zed/settings.json`:
+
+```json
+{
+  "assistant": {
+    "mcp_servers": {
+      "station": {
+        "command": "stn",
+        "args": ["stdio"]
+      }
+    }
+  }
+}
+```
+
+## Custom MCP Clients
+
+### stdio Mode
+
+For local integrations, use stdio mode:
+
 ```json
 {
   "command": "stn",
@@ -29,23 +121,151 @@ Station works with any MCP-compatible client:
 }
 ```
 
-**HTTP Mode (for remote clients):**
-```bash
-# Start Station MCP server
-stn serve --mcp-port 8586
+The client should:
+1. Spawn `stn stdio` as a child process
+2. Send JSON-RPC messages via stdin
+3. Read JSON-RPC responses from stdout
 
-# Connect via HTTP
-# URL: http://localhost:8586/mcp
+### HTTP Mode
+
+For remote or web-based clients:
+
+**Start Station server:**
+```bash
+stn serve --mcp-port 8586
 ```
 
-## Supported Clients
+**Connect via HTTP:**
+```
+POST http://localhost:8586/mcp
+Content-Type: application/json
 
-- **Claude Desktop** - Primary integration (see dedicated guide)
-- **Claude Code** - Same configuration as Claude Desktop
-- **Cursor** - MCP support (configuration needed)
-- **Custom Clients** - Any tool implementing MCP protocol
+{"jsonrpc":"2.0","method":"tools/list","id":1}
+```
+
+### Protocol Reference
+
+Station implements the full MCP protocol:
+
+**Initialization:**
+```json
+{"jsonrpc":"2.0","method":"initialize","params":{"capabilities":{}},"id":1}
+```
+
+**List Tools:**
+```json
+{"jsonrpc":"2.0","method":"tools/list","id":2}
+```
+
+**Call Tool:**
+```json
+{
+  "jsonrpc":"2.0",
+  "method":"tools/call",
+  "params":{
+    "name":"list_agents",
+    "arguments":{"environment_id":"1"}
+  },
+  "id":3
+}
+```
+
+## Quick Reference
+
+### stdio Mode (Recommended)
+```json
+{
+  "command": "stn",
+  "args": ["stdio"]
+}
+```
+
+**Pros:**
+- No server to manage
+- Direct process communication
+- Works offline
+
+**Cons:**
+- Local only
+- One connection per process
+
+### HTTP Mode
+```bash
+# Start server
+stn serve --mcp-port 8586
+```
+
+```json
+{
+  "url": "http://localhost:8586/mcp"
+}
+```
+
+**Pros:**
+- Remote access possible
+- Multiple concurrent clients
+- Works in containers
+
+**Cons:**
+- Requires running server
+- Network configuration needed
+
+## Troubleshooting
+
+### Client Not Connecting
+
+1. **Test Station directly:**
+   ```bash
+   echo '{"jsonrpc":"2.0","method":"tools/list","id":1}' | stn stdio
+   ```
+
+2. **Check Station is in PATH:**
+   ```bash
+   which stn
+   stn --version
+   ```
+
+3. **Verify permissions:**
+   ```bash
+   chmod +x $(which stn)
+   ```
+
+### Tools Not Appearing
+
+1. **Check environment exists:**
+   ```bash
+   stn env list
+   ```
+
+2. **Sync environment:**
+   ```bash
+   stn sync default
+   ```
+
+3. **Verify MCP tools:**
+   ```bash
+   stn mcp tools
+   ```
+
+### HTTP Mode Issues
+
+1. **Check server is running:**
+   ```bash
+   curl http://localhost:8586/mcp
+   ```
+
+2. **Check port availability:**
+   ```bash
+   netstat -tlnp | grep 8586
+   ```
+
+3. **Try different port:**
+   ```bash
+   stn serve --mcp-port 8587
+   ```
 
 ## Next Steps
 
-- **[Claude Desktop Setup](/station/en/mcp/claude-desktop)** - Detailed Claude integration
+- **[Claude Code Setup](/station/en/mcp/claude-code)** - Full Claude Code integration
+- **[Claude Desktop Setup](/station/en/mcp/claude-desktop)** - Detailed Claude Desktop integration
 - **[MCP Tools & Commands](/station/en/mcp/tools)** - Available MCP tools
