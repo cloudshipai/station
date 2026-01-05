@@ -105,9 +105,9 @@ func TestCodingToolFactory_GetCodingTools(t *testing.T) {
 		assert.Nil(t, tools)
 	})
 
-	t.Run("ReturnsFiveToolsWhenEnabled", func(t *testing.T) {
+	t.Run("ReturnsSixToolsWhenEnabled", func(t *testing.T) {
 		tools := factory.GetCodingTools(&dotprompt.CodingConfig{Enabled: true}, ExecutionContext{})
-		require.Len(t, tools, 5)
+		require.Len(t, tools, 6)
 
 		toolNames := make(map[string]bool)
 		for _, tool := range tools {
@@ -119,6 +119,7 @@ func TestCodingToolFactory_GetCodingTools(t *testing.T) {
 		assert.True(t, toolNames["coding_close"], "Should have coding_close tool")
 		assert.True(t, toolNames["coding_commit"], "Should have coding_commit tool")
 		assert.True(t, toolNames["coding_push"], "Should have coding_push tool")
+		assert.True(t, toolNames["coding_branch"], "Should have coding_branch tool")
 	})
 }
 
@@ -131,9 +132,9 @@ func TestCodingToolFactory_ToolNames(t *testing.T) {
 	})
 
 	tools := factory.GetCodingTools(&dotprompt.CodingConfig{Enabled: true}, ExecutionContext{})
-	require.Len(t, tools, 5)
+	require.Len(t, tools, 6)
 
-	expectedNames := []string{"coding_open", "code", "coding_close", "coding_commit", "coding_push"}
+	expectedNames := []string{"coding_open", "code", "coding_close", "coding_commit", "coding_push", "coding_branch"}
 	for i, tool := range tools {
 		assert.Equal(t, expectedNames[i], tool.Name())
 	}
