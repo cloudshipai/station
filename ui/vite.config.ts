@@ -13,7 +13,23 @@ export default defineConfig({
       output: {
         entryFileNames: `assets/[name]-[hash]-${Date.now()}.js`,
         chunkFileNames: `assets/[name]-[hash]-${Date.now()}.js`,
-        assetFileNames: `assets/[name]-[hash]-${Date.now()}.[ext]`
+        assetFileNames: `assets/[name]-[hash]-${Date.now()}.[ext]`,
+        // Fix TDZ (Temporal Dead Zone) error - Issue #82
+        // Split vendor chunks to prevent circular dependency initialization issues
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('react-dom') || id.includes('react-router-dom') || id.includes('/react/')) {
+              return 'react-vendor'
+            }
+            if (id.includes('@radix-ui') || id.includes('lucide-react') || id.includes('recharts') || id.includes('@xyflow')) {
+              return 'ui-vendor'
+            }
+            if (id.includes('@monaco-editor')) {
+              return 'editor-vendor'
+            }
+            return 'vendor'
+          }
+        }
       }
     }
   },
