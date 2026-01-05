@@ -90,3 +90,30 @@ DELETE FROM agent_runs;
 
 -- name: DeleteAgentRunsByStatus :exec
 DELETE FROM agent_runs WHERE status = ?;
+
+-- name: CreateAgentRunWithOrchestratorContext :one
+INSERT INTO agent_runs (
+    agent_id, user_id, task, final_response, steps_taken, tool_calls, 
+    execution_steps, status, completed_at, parent_run_id,
+    orchestrator_run_id, parent_orchestrator_run_id, originating_station_id, trace_id, work_id
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+RETURNING *;
+
+-- name: GetAgentRunsByOrchestratorRunID :many
+SELECT * FROM agent_runs 
+WHERE orchestrator_run_id LIKE ? || '%'
+ORDER BY started_at ASC;
+
+-- name: GetAgentRunsByWorkID :one
+SELECT * FROM agent_runs WHERE work_id = ?;
+
+-- name: GetAgentRunsByTraceID :many
+SELECT * FROM agent_runs 
+WHERE trace_id = ?
+ORDER BY started_at ASC;
+
+-- name: UpdateAgentRunOrchestratorContext :exec
+UPDATE agent_runs
+SET orchestrator_run_id = ?, parent_orchestrator_run_id = ?, originating_station_id = ?, trace_id = ?, work_id = ?
+WHERE id = ?;

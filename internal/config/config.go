@@ -52,6 +52,8 @@ type Config struct {
 	Sandbox SandboxConfig
 	// Coding Configuration (AI coding backend)
 	Coding CodingConfig
+	// Lattice Configuration (Station-to-Station mesh networking)
+	Lattice LatticeConfig
 	// Faker Templates (for local development)
 	FakerTemplates map[string]FakerTemplate
 	// Note: Station now uses official GenKit v1.0.1 plugins (custom plugin code preserved)
@@ -213,6 +215,123 @@ type CodingClaudeCodeConfig struct {
 	MaxTurns        int      `yaml:"max_turns"`
 	AllowedTools    []string `yaml:"allowed_tools"`
 	DisallowedTools []string `yaml:"disallowed_tools"`
+}
+
+// LatticeMode represents the operating mode of the station in a lattice
+type LatticeMode string
+
+const (
+	// LatticeModeStandalone means no lattice connectivity (default)
+	LatticeModeStandalone LatticeMode = "standalone"
+	// LatticeModeOrchestrator means this station runs embedded NATS and coordinates others
+	LatticeModeOrchestrator LatticeMode = "orchestrator"
+	// LatticeModeMember means this station connects to an orchestrator's NATS
+	LatticeModeMember LatticeMode = "member"
+)
+
+// LatticeConfig holds configuration for Station Lattice (multi-station mesh)
+type LatticeConfig struct {
+	// Mode is set based on CLI flags (standalone, orchestrator, member)
+	Mode LatticeMode `yaml:"-"` // Not from config file, set by CLI
+
+	// StationID is the unique identifier for this station in the lattice
+	// Auto-generated UUID if empty
+	StationID string `yaml:"station_id"`
+
+	// StationName is a human-friendly name for this station
+	StationName string `yaml:"station_name"`
+
+	// NATS connection settings (for member mode)
+	NATS LatticeNATSConfig `yaml:"nats"`
+
+	// Orchestrator settings (for orchestrator mode)
+	Orchestrator LatticeOrchestratorConfig `yaml:"orchestrator"`
+}
+
+// LatticeNATSConfig holds NATS connection settings for lattice members
+type LatticeNATSConfig struct {
+	// URL is the NATS server URL to connect to (e.g., "nats://orchestrator:4222")
+	URL string `yaml:"url"`
+
+	// Auth holds authentication settings
+	Auth LatticeNATSAuthConfig `yaml:"auth"`
+
+	// TLS holds TLS settings
+	TLS LatticeNATSTLSConfig `yaml:"tls"`
+
+	// ReconnectWaitSec is the time to wait before reconnecting (default: 2)
+	ReconnectWaitSec int `yaml:"reconnect_wait_sec"`
+
+	// MaxReconnects is the maximum number of reconnection attempts (-1 = unlimited)
+	MaxReconnects int `yaml:"max_reconnects"`
+}
+
+// LatticeNATSAuthConfig holds NATS authentication settings
+type LatticeNATSAuthConfig struct {
+	// User for user/password auth
+	User string `yaml:"user"`
+	// Password for user/password auth
+	Password string `yaml:"password"`
+	// Token for token-based auth
+	Token string `yaml:"token"`
+	// NKeySeed for NKey authentication (recommended for production)
+	NKeySeed string `yaml:"nkey_seed"`
+	// NKeyFile path to file containing NKey seed
+	NKeyFile string `yaml:"nkey_file"`
+	// CredsFile path to NATS credentials file (user JWT + NKey)
+	CredsFile string `yaml:"creds_file"`
+}
+
+// LatticeNATSTLSConfig holds TLS settings for NATS connections
+type LatticeNATSTLSConfig struct {
+	// Enabled enables TLS for NATS connection
+	Enabled bool `yaml:"enabled"`
+	// CertFile path to client certificate
+	CertFile string `yaml:"cert_file"`
+	// KeyFile path to client key
+	KeyFile string `yaml:"key_file"`
+	// CAFile path to CA certificate for server verification
+	CAFile string `yaml:"ca_file"`
+	// SkipVerify skips server certificate verification (not recommended)
+	SkipVerify bool `yaml:"skip_verify"`
+}
+
+// LatticeOrchestratorConfig holds settings for orchestrator mode
+type LatticeOrchestratorConfig struct {
+	// EmbeddedNATS settings for the embedded NATS server
+	EmbeddedNATS LatticeEmbeddedNATSConfig `yaml:"embedded_nats"`
+
+	// Registry settings
+	Registry LatticeRegistryConfig `yaml:"registry"`
+
+	// Routing settings
+	Routing LatticeRoutingConfig `yaml:"routing"`
+}
+
+// LatticeEmbeddedNATSConfig holds settings for embedded NATS server
+type LatticeEmbeddedNATSConfig struct {
+	// Port for NATS client connections (default: 4222)
+	Port int `yaml:"port"`
+	// HTTPPort for NATS monitoring endpoint (default: 8222)
+	HTTPPort int `yaml:"http_port"`
+	// StoreDir for JetStream storage (default: $STATION_DATA/nats)
+	StoreDir string `yaml:"store_dir"`
+}
+
+// LatticeRegistryConfig holds settings for station registry
+type LatticeRegistryConfig struct {
+	// PresenceTTLSec is the TTL for presence records (default: 30)
+	PresenceTTLSec int `yaml:"presence_ttl_sec"`
+	// CleanupIntervalSec is the interval for cleaning up stale records (default: 60)
+	CleanupIntervalSec int `yaml:"cleanup_interval_sec"`
+}
+
+// LatticeRoutingConfig holds settings for work routing
+type LatticeRoutingConfig struct {
+	// TimeoutSec is the timeout for remote invocations (default: 60)
+	TimeoutSec int `yaml:"timeout_sec"`
+	// RetryCount is the number of retries for failed invocations (default: 3)
+	RetryCount int `yaml:"retry_count"`
 }
 
 // TelemetryProvider defines the type of telemetry backend
@@ -385,6 +504,26 @@ func bindEnvVars() {
 	viper.BindEnv("coding.nats.url", "STN_NATS_URL")
 	viper.BindEnv("coding.nats.creds_file", "STN_NATS_CREDS_FILE")
 
+	// Lattice config
+	viper.BindEnv("lattice.station_id", "STN_LATTICE_STATION_ID")
+	viper.BindEnv("lattice.station_name", "STN_LATTICE_STATION_NAME")
+	viper.BindEnv("lattice.nats.url", "STN_LATTICE_NATS_URL")
+	viper.BindEnv("lattice.nats.auth.user", "STN_LATTICE_NATS_USER")
+	viper.BindEnv("lattice.nats.auth.password", "STN_LATTICE_NATS_PASSWORD")
+	viper.BindEnv("lattice.nats.auth.token", "STN_LATTICE_NATS_TOKEN")
+	viper.BindEnv("lattice.nats.auth.nkey_seed", "STN_LATTICE_NATS_NKEY_SEED")
+	viper.BindEnv("lattice.nats.auth.nkey_file", "STN_LATTICE_NATS_NKEY_FILE")
+	viper.BindEnv("lattice.nats.auth.creds_file", "STN_LATTICE_NATS_CREDS_FILE")
+	viper.BindEnv("lattice.nats.tls.enabled", "STN_LATTICE_NATS_TLS_ENABLED")
+	viper.BindEnv("lattice.nats.tls.cert_file", "STN_LATTICE_NATS_TLS_CERT_FILE")
+	viper.BindEnv("lattice.nats.tls.key_file", "STN_LATTICE_NATS_TLS_KEY_FILE")
+	viper.BindEnv("lattice.nats.tls.ca_file", "STN_LATTICE_NATS_TLS_CA_FILE")
+	viper.BindEnv("lattice.orchestrator.embedded_nats.port", "STN_LATTICE_NATS_PORT")
+	viper.BindEnv("lattice.orchestrator.embedded_nats.http_port", "STN_LATTICE_NATS_HTTP_PORT")
+	viper.BindEnv("lattice.orchestrator.embedded_nats.store_dir", "STN_LATTICE_NATS_STORE_DIR")
+	viper.BindEnv("lattice.orchestrator.registry.presence_ttl_sec", "STN_LATTICE_PRESENCE_TTL_SEC")
+	viper.BindEnv("lattice.orchestrator.routing.timeout_sec", "STN_LATTICE_ROUTING_TIMEOUT_SEC")
+
 	// Telemetry config
 	viper.BindEnv("telemetry_enabled", "STN_TELEMETRY_ENABLED", "STATION_TELEMETRY_ENABLED")
 	viper.BindEnv("telemetry.enabled", "STN_TELEMETRY_ENABLED", "STATION_TELEMETRY_ENABLED")
@@ -481,6 +620,31 @@ func Load() (*Config, error) {
 			},
 			MaxAttempts:    3,
 			TaskTimeoutMin: 10,
+		},
+		Lattice: LatticeConfig{
+			Mode:        LatticeModeStandalone,
+			StationID:   "",
+			StationName: "",
+			NATS: LatticeNATSConfig{
+				URL:              "",
+				ReconnectWaitSec: 2,
+				MaxReconnects:    -1,
+			},
+			Orchestrator: LatticeOrchestratorConfig{
+				EmbeddedNATS: LatticeEmbeddedNATSConfig{
+					Port:     4222,
+					HTTPPort: 8222,
+					StoreDir: "",
+				},
+				Registry: LatticeRegistryConfig{
+					PresenceTTLSec:     30,
+					CleanupIntervalSec: 60,
+				},
+				Routing: LatticeRoutingConfig{
+					TimeoutSec: 60,
+					RetryCount: 3,
+				},
+			},
 		},
 		// Legacy fields for backward compatibility
 		TelemetryEnabled: true,
@@ -666,6 +830,77 @@ func Load() (*Config, error) {
 	}
 	if viper.IsSet("sandbox.cleanup_interval_minutes") {
 		cfg.Sandbox.CleanupIntervalMinutes = viper.GetInt("sandbox.cleanup_interval_minutes")
+	}
+
+	// Lattice configuration overrides from config file
+	if viper.IsSet("lattice.station_id") {
+		cfg.Lattice.StationID = viper.GetString("lattice.station_id")
+	}
+	if viper.IsSet("lattice.station_name") {
+		cfg.Lattice.StationName = viper.GetString("lattice.station_name")
+	}
+	if viper.IsSet("lattice.nats.url") {
+		cfg.Lattice.NATS.URL = viper.GetString("lattice.nats.url")
+	}
+	if viper.IsSet("lattice.nats.auth.user") {
+		cfg.Lattice.NATS.Auth.User = viper.GetString("lattice.nats.auth.user")
+	}
+	if viper.IsSet("lattice.nats.auth.password") {
+		cfg.Lattice.NATS.Auth.Password = viper.GetString("lattice.nats.auth.password")
+	}
+	if viper.IsSet("lattice.nats.auth.token") {
+		cfg.Lattice.NATS.Auth.Token = viper.GetString("lattice.nats.auth.token")
+	}
+	if viper.IsSet("lattice.nats.auth.nkey_seed") {
+		cfg.Lattice.NATS.Auth.NKeySeed = viper.GetString("lattice.nats.auth.nkey_seed")
+	}
+	if viper.IsSet("lattice.nats.auth.nkey_file") {
+		cfg.Lattice.NATS.Auth.NKeyFile = viper.GetString("lattice.nats.auth.nkey_file")
+	}
+	if viper.IsSet("lattice.nats.auth.creds_file") {
+		cfg.Lattice.NATS.Auth.CredsFile = viper.GetString("lattice.nats.auth.creds_file")
+	}
+	if viper.IsSet("lattice.nats.tls.enabled") {
+		cfg.Lattice.NATS.TLS.Enabled = viper.GetBool("lattice.nats.tls.enabled")
+	}
+	if viper.IsSet("lattice.nats.tls.cert_file") {
+		cfg.Lattice.NATS.TLS.CertFile = viper.GetString("lattice.nats.tls.cert_file")
+	}
+	if viper.IsSet("lattice.nats.tls.key_file") {
+		cfg.Lattice.NATS.TLS.KeyFile = viper.GetString("lattice.nats.tls.key_file")
+	}
+	if viper.IsSet("lattice.nats.tls.ca_file") {
+		cfg.Lattice.NATS.TLS.CAFile = viper.GetString("lattice.nats.tls.ca_file")
+	}
+	if viper.IsSet("lattice.nats.tls.skip_verify") {
+		cfg.Lattice.NATS.TLS.SkipVerify = viper.GetBool("lattice.nats.tls.skip_verify")
+	}
+	if viper.IsSet("lattice.nats.reconnect_wait_sec") {
+		cfg.Lattice.NATS.ReconnectWaitSec = viper.GetInt("lattice.nats.reconnect_wait_sec")
+	}
+	if viper.IsSet("lattice.nats.max_reconnects") {
+		cfg.Lattice.NATS.MaxReconnects = viper.GetInt("lattice.nats.max_reconnects")
+	}
+	if viper.IsSet("lattice.orchestrator.embedded_nats.port") {
+		cfg.Lattice.Orchestrator.EmbeddedNATS.Port = viper.GetInt("lattice.orchestrator.embedded_nats.port")
+	}
+	if viper.IsSet("lattice.orchestrator.embedded_nats.http_port") {
+		cfg.Lattice.Orchestrator.EmbeddedNATS.HTTPPort = viper.GetInt("lattice.orchestrator.embedded_nats.http_port")
+	}
+	if viper.IsSet("lattice.orchestrator.embedded_nats.store_dir") {
+		cfg.Lattice.Orchestrator.EmbeddedNATS.StoreDir = viper.GetString("lattice.orchestrator.embedded_nats.store_dir")
+	}
+	if viper.IsSet("lattice.orchestrator.registry.presence_ttl_sec") {
+		cfg.Lattice.Orchestrator.Registry.PresenceTTLSec = viper.GetInt("lattice.orchestrator.registry.presence_ttl_sec")
+	}
+	if viper.IsSet("lattice.orchestrator.registry.cleanup_interval_sec") {
+		cfg.Lattice.Orchestrator.Registry.CleanupIntervalSec = viper.GetInt("lattice.orchestrator.registry.cleanup_interval_sec")
+	}
+	if viper.IsSet("lattice.orchestrator.routing.timeout_sec") {
+		cfg.Lattice.Orchestrator.Routing.TimeoutSec = viper.GetInt("lattice.orchestrator.routing.timeout_sec")
+	}
+	if viper.IsSet("lattice.orchestrator.routing.retry_count") {
+		cfg.Lattice.Orchestrator.Routing.RetryCount = viper.GetInt("lattice.orchestrator.routing.retry_count")
 	}
 
 	if viper.IsSet("notify.webhook_url") {

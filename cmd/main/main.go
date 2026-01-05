@@ -72,6 +72,7 @@ func init() {
 	rootCmd.AddCommand(workflowCmd)
 	rootCmd.AddCommand(providerCmd)
 	rootCmd.AddCommand(filesCmd)
+	rootCmd.AddCommand(latticeCmd)
 
 	filesCmd.AddCommand(filesUploadCmd)
 	filesCmd.AddCommand(filesDownloadCmd)
@@ -153,7 +154,8 @@ func init() {
 	serveCmd.Flags().Bool("debug", false, "Enable debug logging")
 	serveCmd.Flags().Bool("local", false, "Run in local mode (single user, no authentication)")
 	serveCmd.Flags().Bool("dev", false, "Enable development mode with GenKit reflection server (default: disabled)")
-	// Jaeger removed - run separately if needed. Tracing configured via config.yaml otel_endpoint
+	serveCmd.Flags().Bool("orchestration", false, "Run as lattice orchestrator with embedded NATS hub (enables Station-to-Station mesh)")
+	serveCmd.Flags().String("lattice", "", "Connect to lattice orchestrator NATS URL (e.g., nats://orchestrator:4222)")
 
 	// MCP Add command flags
 	mcpAddCmd.Flags().StringP("environment", "e", "default", "Environment to add configuration to")
@@ -341,6 +343,8 @@ func init() {
 	viper.BindPFlag("debug", serveCmd.Flags().Lookup("debug"))
 	viper.BindPFlag("local_mode", serveCmd.Flags().Lookup("local"))
 	viper.BindPFlag("dev_mode", serveCmd.Flags().Lookup("dev"))
+	viper.BindPFlag("lattice_orchestration", serveCmd.Flags().Lookup("orchestration"))
+	viper.BindPFlag("lattice_url", serveCmd.Flags().Lookup("lattice"))
 
 	// Set default values
 	viper.SetDefault("telemetry_enabled", false)

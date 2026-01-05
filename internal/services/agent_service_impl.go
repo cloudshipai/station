@@ -116,6 +116,12 @@ func (s *AgentService) SetFileStore(store storage.FileStore) {
 	}
 }
 
+func (s *AgentService) SetWorkToolFactory(factory *WorkToolFactory) {
+	if s.executionEngine != nil {
+		s.executionEngine.SetWorkToolFactory(factory)
+	}
+}
+
 // NewAgentServiceWithLighthouse creates a new agent service with Lighthouse integration
 // If telemetryService is provided, it will be used instead of creating a new one.
 // This prevents multiple TracerProvider registrations which can cause org_id to be missing from spans.

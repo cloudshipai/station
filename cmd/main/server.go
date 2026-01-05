@@ -12,6 +12,8 @@ import (
 	"station/internal/db"
 	"station/internal/db/repositories"
 	"station/internal/genkit/anthropic_oauth"
+	"station/internal/lattice"
+	"station/internal/lattice/work"
 	"station/internal/lighthouse"
 	lighthouseServices "station/internal/lighthouse/services"
 	"station/internal/mcp"
@@ -305,8 +307,150 @@ func runMainServer() error {
 		}
 	}
 
-	// Check if we're in local mode
 	localMode := viper.GetBool("local_mode")
+
+	var latticeEmbedded *lattice.EmbeddedServer
+	var latticeClient *lattice.Client
+	var latticeRegistry *lattice.Registry
+	var latticePresence *lattice.Presence
+	var latticeInvoker *lattice.Invoker
+	var latticeWorkHook *work.Hook
+	var latticeWorkDispatcher *work.Dispatcher
+
+	latticeOrchestration := viper.GetBool("lattice_orchestration")
+	latticeURL := viper.GetString("lattice_url")
+
+	if latticeOrchestration || latticeURL != "" {
+		log.Printf("🔗 Initializing Station Lattice mesh network...")
+
+		var natsURL string
+
+		if latticeOrchestration {
+			natsPort := viper.GetInt("lattice.orchestrator.embedded_nats.port")
+			if natsPort == 0 {
+				natsPort = 4222
+			}
+			natsHTTPPort := viper.GetInt("lattice.orchestrator.embedded_nats.http_port")
+			if natsHTTPPort == 0 {
+				natsHTTPPort = 8222
+			}
+
+			embeddedCfg := config.LatticeEmbeddedNATSConfig{
+				Port:     natsPort,
+				HTTPPort: natsHTTPPort,
+			}
+			latticeEmbedded = lattice.NewEmbeddedServer(embeddedCfg)
+			if err := latticeEmbedded.Start(); err != nil {
+				log.Printf("⚠️  Failed to start embedded NATS server: %v", err)
+				log.Printf("⚠️  Lattice mesh network disabled")
+			} else {
+				natsURL = latticeEmbedded.ClientURL()
+				log.Printf("✅ Lattice orchestrator mode: embedded NATS on port %d", natsPort)
+			}
+		} else if latticeURL != "" {
+			natsURL = latticeURL
+			log.Printf("✅ Lattice client mode: connecting to %s", latticeURL)
+		}
+
+		if natsURL != "" {
+			latticeCfg := config.LatticeConfig{
+				StationName: cfg.CloudShip.Name,
+				NATS: config.LatticeNATSConfig{
+					URL: natsURL,
+				},
+			}
+
+			var err error
+			latticeClient, err = lattice.NewClient(latticeCfg)
+			if err != nil {
+				log.Printf("⚠️  Failed to create lattice client: %v", err)
+			} else {
+				if err := latticeClient.Connect(); err != nil {
+					log.Printf("⚠️  Failed to connect to lattice NATS: %v", err)
+					latticeClient = nil
+				} else {
+					log.Printf("✅ Connected to lattice NATS at %s (station ID: %s)", natsURL, latticeClient.StationID())
+
+					latticeRegistry = lattice.NewRegistry(latticeClient)
+					if err := latticeRegistry.Initialize(ctx); err != nil {
+						log.Printf("⚠️  Failed to initialize lattice registry: %v", err)
+					} else {
+						log.Printf("✅ Lattice registry initialized")
+
+						manifestCollector := lattice.NewManifestCollector(database.Conn())
+						manifest, err := manifestCollector.CollectFullManifest(ctx, latticeClient.StationID(), latticeClient.StationName())
+						if err != nil {
+							log.Printf("⚠️  Failed to collect station manifest: %v", err)
+						} else {
+							if err := latticeRegistry.RegisterStation(ctx, *manifest); err != nil {
+								log.Printf("⚠️  Failed to register station: %v", err)
+							} else {
+								log.Printf("✅ Station registered with %d agents and %d workflows", len(manifest.Agents), len(manifest.Workflows))
+
+								latticePresence = lattice.NewPresence(latticeClient, latticeRegistry, *manifest, 10)
+								if err := latticePresence.Start(ctx); err != nil {
+									log.Printf("⚠️  Failed to start lattice presence: %v", err)
+								} else {
+									log.Printf("✅ Lattice presence heartbeat started")
+								}
+
+								executorAdapter := lattice.NewExecutorAdapter(agentSvc, repos, database.Conn())
+								latticeInvoker = lattice.NewInvoker(latticeClient, latticeClient.StationID(), executorAdapter)
+
+								if workflowService != nil {
+									workflowExecutorAdapter := lattice.NewWorkflowExecutorAdapter(workflowService, repos)
+									latticeInvoker.SetWorkflowExecutor(workflowExecutorAdapter)
+									log.Printf("✅ Lattice workflow executor configured")
+								}
+
+								if err := latticeInvoker.Start(ctx); err != nil {
+									log.Printf("⚠️  Failed to start lattice invoker: %v", err)
+								} else {
+									log.Printf("✅ Lattice invoker listening for remote agent/workflow requests")
+								}
+
+								latticeWorkHook = work.NewHook(latticeClient, executorAdapter, latticeClient.StationID())
+								if err := latticeWorkHook.Start(ctx); err != nil {
+									log.Printf("⚠️  Failed to start lattice work hook: %v", err)
+									latticeWorkHook = nil
+								} else {
+									log.Printf("✅ Lattice work hook listening for async work assignments")
+								}
+
+								var workStoreOpt work.DispatcherOption
+								if js := latticeClient.JetStream(); js != nil {
+									workStore, err := work.NewWorkStore(js, work.DefaultWorkStoreConfig())
+									if err != nil {
+										log.Printf("⚠️  Failed to create work store (work state will be in-memory only): %v", err)
+									} else {
+										workStoreOpt = work.WithWorkStore(workStore)
+										log.Printf("✅ Lattice work store initialized (JetStream KV persistence)")
+									}
+								}
+
+								if workStoreOpt != nil {
+									latticeWorkDispatcher = work.NewDispatcher(latticeClient, latticeClient.StationID(), workStoreOpt)
+								} else {
+									latticeWorkDispatcher = work.NewDispatcher(latticeClient, latticeClient.StationID())
+								}
+								if err := latticeWorkDispatcher.Start(ctx); err != nil {
+									log.Printf("⚠️  Failed to start lattice work dispatcher: %v", err)
+									latticeWorkDispatcher = nil
+								} else {
+									log.Printf("✅ Lattice work dispatcher ready for agent orchestration")
+
+									registryAdapter := newLatticeRegistryAdapter(latticeRegistry)
+									workToolFactory := services.NewWorkToolFactory(latticeWorkDispatcher, registryAdapter, latticeClient.StationID())
+									agentSvc.SetWorkToolFactory(workToolFactory)
+									log.Printf("✅ Lattice work tools wired to agent service")
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
 
 	log.Printf("🤖 Serving agents from environment: %s", environmentName)
 
@@ -416,13 +560,42 @@ func runMainServer() error {
 	// Signal all goroutines to start shutdown immediately
 	cancel()
 
-	// Stop remote control service
 	if remoteControlSvc != nil {
 		if err := remoteControlSvc.Stop(); err != nil {
 			log.Printf("Error stopping remote control service: %v", err)
 		} else {
 			log.Printf("🌐 Remote control service stopped gracefully")
 		}
+	}
+
+	if latticeWorkHook != nil {
+		latticeWorkHook.Stop()
+		log.Printf("🔗 Lattice work hook stopped")
+	}
+
+	if latticeWorkDispatcher != nil {
+		latticeWorkDispatcher.Stop()
+		log.Printf("🔗 Lattice work dispatcher stopped")
+	}
+
+	if latticeInvoker != nil {
+		latticeInvoker.Stop()
+		log.Printf("🔗 Lattice invoker stopped")
+	}
+
+	if latticePresence != nil {
+		latticePresence.Stop()
+		log.Printf("🔗 Lattice presence stopped")
+	}
+
+	if latticeClient != nil {
+		latticeClient.Close()
+		log.Printf("🔗 Lattice client disconnected")
+	}
+
+	if latticeEmbedded != nil {
+		latticeEmbedded.Shutdown()
+		log.Printf("🔗 Lattice embedded NATS server stopped")
 	}
 
 	if workflowConsumer != nil {

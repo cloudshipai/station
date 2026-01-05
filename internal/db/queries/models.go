@@ -70,26 +70,31 @@ type AgentReportDetail struct {
 }
 
 type AgentRun struct {
-	ID              int64           `json:"id"`
-	AgentID         int64           `json:"agent_id"`
-	UserID          int64           `json:"user_id"`
-	Task            string          `json:"task"`
-	FinalResponse   string          `json:"final_response"`
-	StepsTaken      int64           `json:"steps_taken"`
-	ToolCalls       sql.NullString  `json:"tool_calls"`
-	ExecutionSteps  sql.NullString  `json:"execution_steps"`
-	Status          string          `json:"status"`
-	StartedAt       sql.NullTime    `json:"started_at"`
-	CompletedAt     sql.NullTime    `json:"completed_at"`
-	InputTokens     sql.NullInt64   `json:"input_tokens"`
-	OutputTokens    sql.NullInt64   `json:"output_tokens"`
-	TotalTokens     sql.NullInt64   `json:"total_tokens"`
-	DurationSeconds sql.NullFloat64 `json:"duration_seconds"`
-	ModelName       sql.NullString  `json:"model_name"`
-	ToolsUsed       sql.NullInt64   `json:"tools_used"`
-	DebugLogs       sql.NullString  `json:"debug_logs"`
-	Error           sql.NullString  `json:"error"`
-	ParentRunID     sql.NullInt64   `json:"parent_run_id"`
+	ID                      int64           `json:"id"`
+	AgentID                 int64           `json:"agent_id"`
+	UserID                  int64           `json:"user_id"`
+	Task                    string          `json:"task"`
+	FinalResponse           string          `json:"final_response"`
+	StepsTaken              int64           `json:"steps_taken"`
+	ToolCalls               sql.NullString  `json:"tool_calls"`
+	ExecutionSteps          sql.NullString  `json:"execution_steps"`
+	Status                  string          `json:"status"`
+	StartedAt               sql.NullTime    `json:"started_at"`
+	CompletedAt             sql.NullTime    `json:"completed_at"`
+	InputTokens             sql.NullInt64   `json:"input_tokens"`
+	OutputTokens            sql.NullInt64   `json:"output_tokens"`
+	TotalTokens             sql.NullInt64   `json:"total_tokens"`
+	DurationSeconds         sql.NullFloat64 `json:"duration_seconds"`
+	ModelName               sql.NullString  `json:"model_name"`
+	ToolsUsed               sql.NullInt64   `json:"tools_used"`
+	DebugLogs               sql.NullString  `json:"debug_logs"`
+	Error                   sql.NullString  `json:"error"`
+	ParentRunID             sql.NullInt64   `json:"parent_run_id"`
+	OrchestratorRunID       sql.NullString  `json:"orchestrator_run_id"`
+	ParentOrchestratorRunID sql.NullString  `json:"parent_orchestrator_run_id"`
+	OriginatingStationID    sql.NullString  `json:"originating_station_id"`
+	TraceID                 sql.NullString  `json:"trace_id"`
+	WorkID                  sql.NullString  `json:"work_id"`
 }
 
 type AgentTool struct {
