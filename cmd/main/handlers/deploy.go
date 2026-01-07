@@ -175,7 +175,7 @@ func HandleDeploy(ctx context.Context, envName, target, region, sleepAfter, inst
 		return deployToCloudflare(ctx, envName, aiConfig, envConfig, sleepAfter, instanceType)
 
 	case "kubernetes", "k8s":
-		return deployToKubernetes(ctx, envName, aiConfig, cloudShipConfig, envConfig, externalSecrets, namespace, k8sContext, outputDir, dryRun)
+		return deployToKubernetes(ctx, envName, aiConfig, cloudShipConfig, envConfig, externalSecrets, namespace, k8sContext, outputDir, dryRun, bundlePath)
 
 	case "ansible":
 		return deployToAnsible(ctx, envName, aiConfig, cloudShipConfig, envConfig, externalSecrets, outputDir, dryRun, hosts, sshKey, sshUser, bundlePath)
@@ -1158,7 +1158,7 @@ primary_region = "%s"
 `, appName, region)
 }
 
-func deployToKubernetes(ctx context.Context, envName string, aiConfig *DeploymentAIConfig, cloudShipConfig *DeploymentCloudShipConfig, envConfig *EnvironmentConfig, externalSecrets map[string]string, namespace, k8sContext, outputDir string, dryRun bool) error {
+func deployToKubernetes(ctx context.Context, envName string, aiConfig *DeploymentAIConfig, cloudShipConfig *DeploymentCloudShipConfig, envConfig *EnvironmentConfig, externalSecrets map[string]string, namespace, k8sContext, outputDir string, dryRun bool, bundlePath string) error {
 	fmt.Printf("☸️  Deploying to Kubernetes...\n\n")
 
 	target, ok := deployment.GetDeploymentTarget("kubernetes")
@@ -1166,16 +1166,24 @@ func deployToKubernetes(ctx context.Context, envName string, aiConfig *Deploymen
 		return fmt.Errorf("kubernetes deployment target not registered")
 	}
 
-	// Skip CLI validation in dry-run mode - only generate configs
 	if !dryRun {
 		if err := target.Validate(ctx); err != nil {
 			return fmt.Errorf("kubernetes validation failed: %w", err)
 		}
 	}
 
-	imageName, err := buildDeploymentImage(ctx, envName, envConfig, aiConfig)
-	if err != nil {
-		return err
+	var imageName string
+	if bundlePath != "" {
+		imageName = baseStationImage
+		fmt.Printf("📦 Using base image with bundle ConfigMap:\n")
+		fmt.Printf("   Image: %s\n", imageName)
+		fmt.Printf("   Bundle: %s\n\n", bundlePath)
+	} else {
+		var err error
+		imageName, err = buildDeploymentImage(ctx, envName, envConfig, aiConfig)
+		if err != nil {
+			return err
+		}
 	}
 
 	deployConfig := &deployment.DeploymentConfig{
@@ -1190,10 +1198,11 @@ func deployToKubernetes(ctx context.Context, envName string, aiConfig *Deploymen
 	secrets := buildAllSecrets(aiConfig, cloudShipConfig, envConfig, externalSecrets)
 
 	options := deployment.DeployOptions{
-		DryRun:    dryRun,
-		OutputDir: outputDir,
-		Namespace: namespace,
-		Context:   k8sContext,
+		DryRun:     dryRun,
+		OutputDir:  outputDir,
+		Namespace:  namespace,
+		Context:    k8sContext,
+		BundlePath: bundlePath,
 	}
 
 	return target.Deploy(ctx, deployConfig, secrets, options)

@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -1747,27 +1748,36 @@ func deployLocalBundle(cmd *cobra.Command, bundlePath, target, region, sleepAfte
 	}
 
 	envName := resolveDeployEnvName(appName, cfg, bundlePath)
-	fmt.Printf("📦 Installing bundle to environment: %s\n", envName)
 
-	database, err := db.New(cfg.DatabaseURL)
-	if err != nil {
-		return fmt.Errorf("failed to connect to database: %w", err)
-	}
-	defer func() { _ = database.Close() }()
+	normalizedTarget := strings.ToLower(target)
+	skipLocalInstall := normalizedTarget == "kubernetes" || normalizedTarget == "k8s" || normalizedTarget == "ansible"
 
-	repos := repositories.New(database)
-	bundleService := services.NewBundleServiceWithRepos(repos)
+	if skipLocalInstall {
+		fmt.Printf("📦 Using bundle file directly (no local installation): %s\n", bundlePath)
+		fmt.Printf("   Environment name: %s\n", envName)
+	} else {
+		fmt.Printf("📦 Installing bundle to environment: %s\n", envName)
 
-	result, err := bundleService.InstallBundleWithOptions(bundlePath, envName, false)
-	if err != nil || !result.Success {
-		errorMsg := result.Error
-		if errorMsg == "" && err != nil {
-			errorMsg = err.Error()
+		database, err := db.New(cfg.DatabaseURL)
+		if err != nil {
+			return fmt.Errorf("failed to connect to database: %w", err)
 		}
-		return fmt.Errorf("bundle installation failed: %s", errorMsg)
-	}
+		defer func() { _ = database.Close() }()
 
-	fmt.Printf("✅ Bundle installed: %d agents, %d MCP configs\n", result.InstalledAgents, result.InstalledMCPs)
+		repos := repositories.New(database)
+		bundleService := services.NewBundleServiceWithRepos(repos)
+
+		result, err := bundleService.InstallBundleWithOptions(bundlePath, envName, false)
+		if err != nil || !result.Success {
+			errorMsg := result.Error
+			if errorMsg == "" && err != nil {
+				errorMsg = err.Error()
+			}
+			return fmt.Errorf("bundle installation failed: %s", errorMsg)
+		}
+
+		fmt.Printf("✅ Bundle installed: %d agents, %d MCP configs\n", result.InstalledAgents, result.InstalledMCPs)
+	}
 
 	if !autoStop {
 		sleepAfter = "168h"

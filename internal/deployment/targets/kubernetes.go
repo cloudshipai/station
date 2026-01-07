@@ -2,9 +2,11 @@ package targets
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"station/internal/deployment"
@@ -28,6 +30,10 @@ func (k *KubernetesTarget) Validate(ctx context.Context) error {
 }
 
 func (k *KubernetesTarget) GenerateConfig(ctx context.Context, config *deployment.DeploymentConfig, secrets map[string]string) (map[string]string, error) {
+	return k.GenerateConfigWithOptions(ctx, config, secrets, deployment.DeployOptions{})
+}
+
+func (k *KubernetesTarget) GenerateConfigWithOptions(ctx context.Context, config *deployment.DeploymentConfig, secrets map[string]string, options deployment.DeployOptions) (map[string]string, error) {
 	files := make(map[string]string)
 
 	namespace := "default"
@@ -39,17 +45,25 @@ func (k *KubernetesTarget) GenerateConfig(ctx context.Context, config *deploymen
 
 	files["namespace.yaml"] = k.generateNamespace(namespace)
 	files["secret.yaml"] = k.generateSecret(appName, namespace, secrets)
-	files["deployment.yaml"] = k.generateDeployment(appName, namespace, config, secrets)
+	files["deployment.yaml"] = k.generateDeployment(appName, namespace, config, secrets, options)
 	files["service.yaml"] = k.generateService(appName, namespace, config)
 	files["ingress.yaml"] = k.generateIngress(appName, namespace, config)
 	files["pvc.yaml"] = k.generatePVC(appName, namespace)
-	files["kustomization.yaml"] = k.generateKustomization(appName)
+	files["kustomization.yaml"] = k.generateKustomization(appName, options)
+
+	if options.BundlePath != "" {
+		bundleConfigMap, err := k.generateBundleConfigMap(appName, namespace, options.BundlePath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate bundle ConfigMap: %w", err)
+		}
+		files["bundle-configmap.yaml"] = bundleConfigMap
+	}
 
 	return files, nil
 }
 
 func (k *KubernetesTarget) Deploy(ctx context.Context, config *deployment.DeploymentConfig, secrets map[string]string, options deployment.DeployOptions) error {
-	files, err := k.GenerateConfig(ctx, config, secrets)
+	files, err := k.GenerateConfigWithOptions(ctx, config, secrets, options)
 	if err != nil {
 		return fmt.Errorf("failed to generate config: %w", err)
 	}
@@ -180,7 +194,7 @@ stringData:
 %s`, appName, namespace, secretData.String())
 }
 
-func (k *KubernetesTarget) generateDeployment(appName, namespace string, config *deployment.DeploymentConfig, secrets map[string]string) string {
+func (k *KubernetesTarget) generateDeployment(appName, namespace string, config *deployment.DeploymentConfig, secrets map[string]string, options deployment.DeployOptions) string {
 	var envVars strings.Builder
 
 	for key := range secrets {
@@ -207,6 +221,29 @@ func (k *KubernetesTarget) generateDeployment(appName, namespace string, config 
 		replicas = config.Replicas
 	}
 
+	bundleVolumeMount := ""
+	bundleVolume := ""
+	commandOverride := ""
+
+	if options.BundlePath != "" {
+		bundleVolumeMount = `        - name: bundle-source
+          mountPath: /bundle
+          readOnly: true
+`
+		bundleVolume = fmt.Sprintf(`      - name: bundle-source
+        configMap:
+          name: %s-bundle
+`, appName)
+		commandOverride = `        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          stn init && \
+          stn bundle install /bundle/bundle.tar.gz default --force && \
+          stn sync default -i=false && \
+          stn serve
+`
+	}
+
 	return fmt.Sprintf(`apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -228,7 +265,7 @@ spec:
       - name: station
         image: %s
         imagePullPolicy: IfNotPresent
-        ports:
+%s        ports:
         - name: mcp
           containerPort: 8586
         - name: dynamic-mcp
@@ -244,24 +281,24 @@ spec:
             memory: %s
         volumeMounts:
         - name: data
-          mountPath: /root/.config/station
-        livenessProbe:
+          mountPath: /home/station/.config/station
+%s        livenessProbe:
           httpGet:
             path: /health
             port: 8587
-          initialDelaySeconds: 30
+          initialDelaySeconds: 60
           periodSeconds: 10
         readinessProbe:
           httpGet:
             path: /health
             port: 8587
-          initialDelaySeconds: 5
+          initialDelaySeconds: 10
           periodSeconds: 5
       volumes:
       - name: data
         persistentVolumeClaim:
           claimName: %s-data
-`, appName, namespace, appName, replicas, appName, appName, config.DockerImage, envVars.String(), cpu, memory, cpu, memory, appName)
+%s`, appName, namespace, appName, replicas, appName, appName, config.DockerImage, commandOverride, envVars.String(), cpu, memory, cpu, memory, bundleVolumeMount, appName, bundleVolume)
 }
 
 func (k *KubernetesTarget) generateService(appName, namespace string, config *deployment.DeploymentConfig) string {
@@ -332,22 +369,49 @@ spec:
 `, appName, namespace)
 }
 
-func (k *KubernetesTarget) generateKustomization(appName string) string {
-	return fmt.Sprintf(`apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-
-resources:
-- namespace.yaml
+func (k *KubernetesTarget) generateKustomization(appName string, options deployment.DeployOptions) string {
+	resources := `- namespace.yaml
 - secret.yaml
 - pvc.yaml
 - deployment.yaml
 - service.yaml
-- ingress.yaml
+- ingress.yaml`
+
+	if options.BundlePath != "" {
+		resources += `
+- bundle-configmap.yaml`
+	}
+
+	return fmt.Sprintf(`apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+%s
 
 commonLabels:
   app.kubernetes.io/name: %s
   app.kubernetes.io/managed-by: station-cli
-`, appName)
+`, resources, appName)
+}
+
+func (k *KubernetesTarget) generateBundleConfigMap(appName, namespace, bundlePath string) (string, error) {
+	bundleData, err := os.ReadFile(bundlePath)
+	if err != nil {
+		return "", fmt.Errorf("failed to read bundle file: %w", err)
+	}
+
+	bundleBase64 := base64.StdEncoding.EncodeToString(bundleData)
+	bundleFilename := filepath.Base(bundlePath)
+
+	return fmt.Sprintf(`apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: %s-bundle
+  namespace: %s
+binaryData:
+  bundle.tar.gz: %s
+  original-filename: %s
+`, appName, namespace, bundleBase64, base64.StdEncoding.EncodeToString([]byte(bundleFilename))), nil
 }
 
 func init() {
