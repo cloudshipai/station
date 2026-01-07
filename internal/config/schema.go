@@ -97,16 +97,31 @@ var ConfigSchema = []ConfigField{
 	{Key: "telemetry.provider", Type: FieldTypeString, Description: "Telemetry provider (none, jaeger, otlp, cloudship)", Default: "jaeger", Section: "telemetry", Options: []string{"none", "jaeger", "otlp", "cloudship"}},
 	{Key: "telemetry.endpoint", Type: FieldTypeString, Description: "OTLP endpoint URL", Default: "http://localhost:4318", Section: "telemetry"},
 
-	// Sandbox Settings
+	// Sandbox Settings - Common
 	{Key: "sandbox.enabled", Type: FieldTypeBool, Description: "Enable sandbox code execution", Default: false, Section: "sandbox"},
 	{Key: "sandbox.code_mode_enabled", Type: FieldTypeBool, Description: "Enable code mode in sandbox", Default: false, Section: "sandbox"},
+	{Key: "sandbox.backend", Type: FieldTypeString, Description: "Sandbox backend (docker, fly_machines, opencode, host)", Default: "docker", Section: "sandbox", Options: []string{"docker", "fly_machines", "opencode", "host"}},
 	{Key: "sandbox.idle_timeout_minutes", Type: FieldTypeInt, Description: "Sandbox idle timeout in minutes", Default: 30, Section: "sandbox"},
-	{Key: "sandbox.docker_image", Type: FieldTypeString, Description: "Custom Docker image for sandbox containers", Default: "ubuntu:22.04", Section: "sandbox"},
-	{Key: "sandbox.registry_auth.username", Type: FieldTypeString, Description: "Registry username for private images", Section: "sandbox"},
-	{Key: "sandbox.registry_auth.password", Type: FieldTypeString, Description: "Registry password or access token", Secret: true, Section: "sandbox"},
-	{Key: "sandbox.registry_auth.identity_token", Type: FieldTypeString, Description: "OAuth bearer token (ECR, GCR, ACR)", Secret: true, Section: "sandbox"},
-	{Key: "sandbox.registry_auth.server_address", Type: FieldTypeString, Description: "Registry server URL (e.g., ghcr.io)", Section: "sandbox"},
-	{Key: "sandbox.registry_auth.docker_config_path", Type: FieldTypeString, Description: "Path to Docker config.json", Section: "sandbox"},
+	{Key: "sandbox.docker_image", Type: FieldTypeString, Description: "Default Docker image for sandbox containers", Default: "python:3.11-slim", Section: "sandbox"},
+
+	// Docker Backend Settings (backend: docker)
+	{Key: "sandbox.registry_auth.username", Type: FieldTypeString, Description: "Registry username for private images", Section: "sandbox", ShowWhen: &ShowWhenCondition{Field: "sandbox.backend", Values: []string{"docker"}}},
+	{Key: "sandbox.registry_auth.password", Type: FieldTypeString, Description: "Registry password or access token", Secret: true, Section: "sandbox", ShowWhen: &ShowWhenCondition{Field: "sandbox.backend", Values: []string{"docker"}}},
+	{Key: "sandbox.registry_auth.identity_token", Type: FieldTypeString, Description: "OAuth bearer token (ECR, GCR, ACR)", Secret: true, Section: "sandbox", ShowWhen: &ShowWhenCondition{Field: "sandbox.backend", Values: []string{"docker"}}},
+	{Key: "sandbox.registry_auth.server_address", Type: FieldTypeString, Description: "Registry server URL (e.g., ghcr.io)", Section: "sandbox", ShowWhen: &ShowWhenCondition{Field: "sandbox.backend", Values: []string{"docker"}}},
+	{Key: "sandbox.registry_auth.docker_config_path", Type: FieldTypeString, Description: "Path to Docker config.json", Section: "sandbox", ShowWhen: &ShowWhenCondition{Field: "sandbox.backend", Values: []string{"docker"}}},
+
+	// Fly Machines Backend Settings (backend: fly_machines)
+	{Key: "sandbox.fly_machines.org_slug", Type: FieldTypeString, Description: "Fly.io organization slug (env: FLY_ORG)", Section: "sandbox", ShowWhen: &ShowWhenCondition{Field: "sandbox.backend", Values: []string{"fly_machines"}}},
+	{Key: "sandbox.fly_machines.region", Type: FieldTypeString, Description: "Fly.io region for sandbox machines", Default: "ord", Section: "sandbox", ShowWhen: &ShowWhenCondition{Field: "sandbox.backend", Values: []string{"fly_machines"}}},
+	{Key: "sandbox.fly_machines.app_prefix", Type: FieldTypeString, Description: "Prefix for Fly app names", Default: "stn-sandbox", Section: "sandbox", ShowWhen: &ShowWhenCondition{Field: "sandbox.backend", Values: []string{"fly_machines"}}},
+	{Key: "sandbox.fly_machines.image", Type: FieldTypeString, Description: "Docker image for Fly machines (overrides sandbox.docker_image)", Section: "sandbox", ShowWhen: &ShowWhenCondition{Field: "sandbox.backend", Values: []string{"fly_machines"}}},
+	{Key: "sandbox.fly_machines.memory_mb", Type: FieldTypeInt, Description: "Memory allocation in MB", Default: 256, Section: "sandbox", ShowWhen: &ShowWhenCondition{Field: "sandbox.backend", Values: []string{"fly_machines"}}},
+	{Key: "sandbox.fly_machines.cpu_kind", Type: FieldTypeString, Description: "CPU type (shared, performance)", Default: "shared", Section: "sandbox", Options: []string{"shared", "performance"}, ShowWhen: &ShowWhenCondition{Field: "sandbox.backend", Values: []string{"fly_machines"}}},
+	{Key: "sandbox.fly_machines.cpus", Type: FieldTypeInt, Description: "Number of CPUs", Default: 1, Section: "sandbox", ShowWhen: &ShowWhenCondition{Field: "sandbox.backend", Values: []string{"fly_machines"}}},
+	{Key: "sandbox.fly_machines.registry_auth.username", Type: FieldTypeString, Description: "Registry username for private images", Section: "sandbox", ShowWhen: &ShowWhenCondition{Field: "sandbox.backend", Values: []string{"fly_machines"}}},
+	{Key: "sandbox.fly_machines.registry_auth.password", Type: FieldTypeString, Description: "Registry password or access token", Secret: true, Section: "sandbox", ShowWhen: &ShowWhenCondition{Field: "sandbox.backend", Values: []string{"fly_machines"}}},
+	{Key: "sandbox.fly_machines.registry_auth.server_address", Type: FieldTypeString, Description: "Registry server URL (e.g., ghcr.io, your-registry.com)", Section: "sandbox", ShowWhen: &ShowWhenCondition{Field: "sandbox.backend", Values: []string{"fly_machines"}}},
 
 	// Webhook Settings
 	{Key: "webhook.enabled", Type: FieldTypeBool, Description: "Enable webhook execute endpoint", Default: true, Section: "webhook"},
