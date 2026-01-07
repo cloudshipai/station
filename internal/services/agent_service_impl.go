@@ -116,6 +116,12 @@ func (s *AgentService) SetFileStore(store storage.FileStore) {
 	}
 }
 
+func (s *AgentService) SetSessionStore(store SessionStore) {
+	if s.executionEngine != nil {
+		s.executionEngine.SetSessionStore(store)
+	}
+}
+
 func (s *AgentService) SetWorkToolFactory(factory *WorkToolFactory) {
 	if s.executionEngine != nil {
 		s.executionEngine.SetWorkToolFactory(factory)

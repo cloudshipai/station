@@ -62,6 +62,7 @@ func NewAPIHandlers(
 	}
 
 	h.initFilesHandler()
+	h.initSessionStore()
 	h.startWorkflowConsumer(repos, engine, agentService)
 	return h
 }
@@ -95,6 +96,7 @@ func NewAPIHandlersWithConfig(
 	}
 
 	h.initFilesHandler()
+	h.initSessionStore()
 	h.startWorkflowConsumer(repos, engine, agentService)
 	return h
 }
@@ -128,6 +130,7 @@ func NewAPIHandlersWithAgentService(
 	}
 
 	h.initFilesHandler()
+	h.initSessionStore()
 	h.startWorkflowConsumer(repos, engine, agentService)
 	return h
 }
@@ -159,7 +162,8 @@ func NewAPIHandlersWithWorkflow(
 	}
 
 	h.initFilesHandler()
-	log.Printf("[APIHandlers] Using external workflow engine - no consumer started (server.go handles it)")
+	h.initSessionStore()
+	h.startWorkflowConsumer(repos, workflowEngine, agentService)
 	return h
 }
 
@@ -257,6 +261,32 @@ func (h *APIHandlers) initFilesHandler() {
 	}
 
 	log.Println("Files handler: Initialized with NATS Object Store")
+}
+
+func (h *APIHandlers) initSessionStore() {
+	natsEngine, ok := h.workflowEngine.(*runtime.NATSEngine)
+	if !ok || natsEngine == nil {
+		log.Println("Session store: NATS engine not available, session persistence disabled")
+		return
+	}
+
+	js := natsEngine.JetStream()
+	if js == nil {
+		log.Println("Session store: JetStream not available, session persistence disabled")
+		return
+	}
+
+	store, err := services.NewNATSSessionStore(js, services.DefaultSessionStoreConfig())
+	if err != nil {
+		log.Printf("Session store: Failed to initialize: %v", err)
+		return
+	}
+
+	if h.agentService != nil {
+		h.agentService.SetSessionStore(store)
+	}
+
+	log.Println("Session store: Initialized with NATS KV for sandbox session persistence")
 }
 
 // SetFileStore allows setting a custom file store (useful for testing)

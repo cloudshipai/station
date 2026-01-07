@@ -192,6 +192,19 @@ func (aee *AgentExecutionEngine) SetFileStore(store storage.FileStore) {
 	}
 }
 
+func (aee *AgentExecutionEngine) SetSessionStore(store SessionStore) {
+	if aee.sessionManager != nil {
+		aee.sessionManager.SetStore(store)
+		recovered, err := aee.sessionManager.RecoverSessions(context.Background())
+		if err != nil {
+			logging.Info("Warning: Failed to recover sessions from store: %v", err)
+		} else if recovered > 0 {
+			logging.Info("Recovered %d sandbox sessions from store", recovered)
+		}
+		logging.Info("Session store configured for sandbox session persistence")
+	}
+}
+
 func (aee *AgentExecutionEngine) SetWorkToolFactory(factory *WorkToolFactory) {
 	aee.workToolFactory = factory
 	if factory != nil && factory.IsEnabled() {

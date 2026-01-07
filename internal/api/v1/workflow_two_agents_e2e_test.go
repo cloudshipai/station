@@ -113,6 +113,8 @@ func (m *mockAgentService) DeleteAgent(ctx context.Context, agentID int64) error
 
 func (m *mockAgentService) SetFileStore(store storage.FileStore) {}
 
+func (m *mockAgentService) SetSessionStore(store services.SessionStore) {}
+
 func (m *mockAgentService) registerAgent(agent *models.Agent) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

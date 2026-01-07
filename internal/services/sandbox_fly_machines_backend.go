@@ -329,17 +329,19 @@ func (b *FlyMachinesBackend) CreateSession(ctx context.Context, opts SessionOpti
 	}, nil
 }
 
-// GetSession retrieves a session by ID
 func (b *FlyMachinesBackend) GetSession(ctx context.Context, sessionID string) (*Session, error) {
 	b.mu.RLock()
 	flySession, ok := b.sessions[sessionID]
 	b.mu.RUnlock()
 
 	if !ok {
-		return nil, &SandboxError{Op: "GetSession", Session: sessionID, Err: ErrSessionNotFound}
+		recovered, err := b.RecoverSession(ctx, sessionID)
+		if err != nil {
+			return nil, &SandboxError{Op: "GetSession", Session: sessionID, Err: ErrSessionNotFound}
+		}
+		return recovered, nil
 	}
 
-	// Verify machine is still running
 	machine, err := b.getMachine(ctx, flySession.AppName, flySession.MachineID)
 	if err != nil {
 		return nil, &SandboxError{Op: "GetSession", Session: sessionID, Err: fmt.Errorf("get machine: %w", err)}
@@ -997,6 +999,159 @@ func (b *FlyMachinesBackend) waitForMachineState(ctx context.Context, appName, m
 	}
 
 	return fmt.Errorf("timeout waiting for machine state %s", targetState)
+}
+
+type flyMachineListResponse struct {
+	ID        string            `json:"id"`
+	Name      string            `json:"name"`
+	State     string            `json:"state"`
+	Region    string            `json:"region"`
+	PrivateIP string            `json:"private_ip"`
+	Config    *flyMachineConfig `json:"config,omitempty"`
+}
+
+func (b *FlyMachinesBackend) listMachines(ctx context.Context, appName string) ([]flyMachineListResponse, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET",
+		fmt.Sprintf("https://api.machines.dev/v1/apps/%s/machines", appName),
+		nil)
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+b.config.APIToken)
+
+	resp, err := b.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("list machines failed: status %d, body: %s", resp.StatusCode, string(body))
+	}
+
+	var machines []flyMachineListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&machines); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+
+	return machines, nil
+}
+
+func (b *FlyMachinesBackend) RecoverSession(ctx context.Context, sessionID string) (*Session, error) {
+	b.mu.RLock()
+	if flySession, ok := b.sessions[sessionID]; ok {
+		b.mu.RUnlock()
+		return &Session{
+			ID:          flySession.ID,
+			ContainerID: flySession.MachineID,
+			Image:       flySession.Image,
+			Workdir:     flySession.Workdir,
+			Env:         flySession.Env,
+			Limits:      flySession.Limits,
+			CreatedAt:   flySession.CreatedAt,
+			LastUsedAt:  flySession.LastUsedAt,
+		}, nil
+	}
+	b.mu.RUnlock()
+
+	appName := b.config.AppPrefix
+	machines, err := b.listMachines(ctx, appName)
+	if err != nil {
+		return nil, fmt.Errorf("list machines: %w", err)
+	}
+
+	for _, machine := range machines {
+		if machine.Name == sessionID && machine.State == "started" {
+			image := b.config.DefaultImage
+			workdir := "/workspace"
+			if machine.Config != nil {
+				if machine.Config.Image != "" {
+					image = machine.Config.Image
+				}
+			}
+
+			flySession := &flyMachineSession{
+				ID:         sessionID,
+				MachineID:  machine.ID,
+				AppName:    appName,
+				Image:      image,
+				Workdir:    workdir,
+				Env:        make(map[string]string),
+				CreatedAt:  time.Now(),
+				LastUsedAt: time.Now(),
+				PrivateIP:  machine.PrivateIP,
+			}
+
+			b.mu.Lock()
+			b.sessions[sessionID] = flySession
+			b.mu.Unlock()
+
+			return &Session{
+				ID:          sessionID,
+				ContainerID: machine.ID,
+				Image:       image,
+				Workdir:     workdir,
+				CreatedAt:   flySession.CreatedAt,
+				LastUsedAt:  flySession.LastUsedAt,
+			}, nil
+		}
+	}
+
+	return nil, &SandboxError{Op: "RecoverSession", Session: sessionID, Err: ErrSessionNotFound}
+}
+
+func (b *FlyMachinesBackend) RecoverAllSessions(ctx context.Context) (int, error) {
+	appName := b.config.AppPrefix
+	machines, err := b.listMachines(ctx, appName)
+	if err != nil {
+		return 0, fmt.Errorf("list machines: %w", err)
+	}
+
+	recovered := 0
+	for _, machine := range machines {
+		if !strings.HasPrefix(machine.Name, "fly_") {
+			continue
+		}
+		if machine.State != "started" {
+			continue
+		}
+
+		sessionID := machine.Name
+
+		b.mu.RLock()
+		_, exists := b.sessions[sessionID]
+		b.mu.RUnlock()
+
+		if exists {
+			continue
+		}
+
+		image := b.config.DefaultImage
+		workdir := "/workspace"
+		if machine.Config != nil && machine.Config.Image != "" {
+			image = machine.Config.Image
+		}
+
+		flySession := &flyMachineSession{
+			ID:         sessionID,
+			MachineID:  machine.ID,
+			AppName:    appName,
+			Image:      image,
+			Workdir:    workdir,
+			Env:        make(map[string]string),
+			CreatedAt:  time.Now(),
+			LastUsedAt: time.Now(),
+			PrivateIP:  machine.PrivateIP,
+		}
+
+		b.mu.Lock()
+		b.sessions[sessionID] = flySession
+		b.mu.Unlock()
+		recovered++
+	}
+
+	return recovered, nil
 }
 
 func shellQuoteJoin(args []string) string {
