@@ -1,0 +1,73 @@
+# Sandbox Session Persistence Test Workflow
+# Tests that sandbox sessions persist across workflow steps (via NATS KV)
+#
+# Step 1: Create sandbox and write a marker file
+# Step 2: Open same sandbox (via workflow session key) and read marker file
+#
+# Both steps use the same session key: workflow:{workflow_run_id}:default
+# This verifies that NATS KV session persistence works correctly.
+
+id: sandbox-persistence-test
+version: "1.0"
+name: "Sandbox Session Persistence Test"
+description: "Tests that sandbox sessions persist across workflow steps"
+
+inputSchema:
+  type: object
+  properties:
+    marker_content:
+      type: string
+      description: "Content to write to marker file"
+      default: "PERSISTENCE_TEST_OK"
+  required: []
+
+outputSchema:
+  type: object
+  properties:
+    step1_sandbox_id:
+      type: string
+    step2_sandbox_id:
+      type: string
+    marker_content_read:
+      type: string
+    session_recovered:
+      type: boolean
+
+start: write_marker
+
+states:
+  # Step 1: Create sandbox and write marker file
+  - name: write_marker
+    type: agent
+    agent: "sandbox-test"
+    agentTask: |
+      Open a sandbox and write a marker file. 
+      Run these exact commands:
+      1. echo "PERSISTENCE_TEST_$(date +%s)" > /workspace/marker.txt
+      2. cat /workspace/marker.txt
+      Report the sandbox_id you received and the content of the marker file.
+    resultPath: "steps.write_marker"
+    next: read_marker
+
+  # Step 2: Open same sandbox (should recover session) and read marker
+  - name: read_marker
+    type: agent
+    agent: "sandbox-test"
+    agentTask: |
+      Open a sandbox and read the marker file that was written in the previous step.
+      Run: cat /workspace/marker.txt
+      
+      IMPORTANT: Report whether:
+      1. The sandbox was newly created or recovered (check the 'created' field from sandbox_open)
+      2. The marker file exists and its content
+      3. The sandbox_id you received
+      
+      If the marker file exists with the expected content, the session was successfully recovered!
+    resultPath: "steps.read_marker"
+    end: true
+
+# To run:
+# 1. Deploy: stn workflow validate sandbox-persistence-test.workflow.yaml
+# 2. Run: curl -X POST http://superstation.fly.dev/workflow-runs \
+#      -H "Content-Type: application/json" \
+#      -d '{"workflow_id": "sandbox-persistence-test", "input": {}}'

@@ -640,6 +640,12 @@ func deployToFly(ctx context.Context, envName string, aiConfig *DeploymentAIConf
 			"STATION_SANDBOX_CODE_MODE_ENABLED": "true",
 			"STN_SANDBOX_BACKEND":               "fly_machines",
 		}
+		if flyAPIToken := os.Getenv("FLY_API_TOKEN"); flyAPIToken != "" {
+			sandboxSecrets["FLY_API_TOKEN"] = flyAPIToken
+		}
+		if flyOrg := os.Getenv("FLY_ORG"); flyOrg != "" {
+			sandboxSecrets["FLY_ORG"] = flyOrg
+		}
 		if err := setFlySecrets(ctx, appName, sandboxSecrets); err != nil {
 			return fmt.Errorf("failed to set sandbox secrets: %w", err)
 		}
@@ -1455,6 +1461,12 @@ func deployBundleToFly(ctx context.Context, bundleID, appName string, aiConfig *
 			"STATION_SANDBOX_ENABLED":           "true",
 			"STATION_SANDBOX_CODE_MODE_ENABLED": "true",
 			"STN_SANDBOX_BACKEND":               "fly_machines",
+		}
+		if flyAPIToken := os.Getenv("FLY_API_TOKEN"); flyAPIToken != "" {
+			sandboxSecrets["FLY_API_TOKEN"] = flyAPIToken
+		}
+		if flyOrg := os.Getenv("FLY_ORG"); flyOrg != "" {
+			sandboxSecrets["FLY_ORG"] = flyOrg
 		}
 		if err := setFlySecrets(ctx, appName, sandboxSecrets); err != nil {
 			return fmt.Errorf("failed to set sandbox secrets: %w", err)

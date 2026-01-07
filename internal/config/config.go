@@ -167,6 +167,7 @@ type SandboxRegistryAuthConfig struct {
 type SandboxConfig struct {
 	Enabled                bool                      `yaml:"enabled"`
 	CodeModeEnabled        bool                      `yaml:"code_mode_enabled"`
+	Backend                string                    `yaml:"backend"` // "docker", "fly_machines", "opencode", "host"
 	IdleTimeoutMinutes     int                       `yaml:"idle_timeout_minutes"`
 	CleanupIntervalMinutes int                       `yaml:"cleanup_interval_minutes"`
 	OpenCodeEnabled        bool                      `yaml:"opencode_enabled"`
@@ -174,6 +175,19 @@ type SandboxConfig struct {
 	OpenCodeModel          string                    `yaml:"opencode_model"`
 	DockerImage            string                    `yaml:"docker_image"`  // Custom Docker image for sandbox containers
 	RegistryAuth           SandboxRegistryAuthConfig `yaml:"registry_auth"` // Private registry authentication
+	FlyMachines            SandboxFlyMachinesConfig  `yaml:"fly_machines"`  // Fly Machines backend settings
+}
+
+// SandboxFlyMachinesConfig holds Fly Machines-specific sandbox settings
+type SandboxFlyMachinesConfig struct {
+	AppPrefix    string                    `yaml:"app_prefix"`    // Fly app name prefix for sandbox machines (default: "stn-sandbox")
+	OrgSlug      string                    `yaml:"org_slug"`      // Fly.io organization slug
+	Region       string                    `yaml:"region"`        // Primary region (default: "ord")
+	Image        string                    `yaml:"image"`         // Container image (default: uses sandbox.docker_image or "python:3.11-slim")
+	MemoryMB     int                       `yaml:"memory_mb"`     // Memory per machine (default: 256)
+	CPUKind      string                    `yaml:"cpu_kind"`      // "shared" or "performance" (default: "shared")
+	CPUs         int                       `yaml:"cpus"`          // Number of CPUs (default: 1)
+	RegistryAuth SandboxRegistryAuthConfig `yaml:"registry_auth"` // Private registry authentication (for private images)
 }
 
 type CodingConfig struct {
@@ -555,6 +569,7 @@ func bindEnvVars() {
 	// Sandbox config
 	viper.BindEnv("sandbox.enabled", "STATION_SANDBOX_ENABLED", "STN_SANDBOX_ENABLED")
 	viper.BindEnv("sandbox.code_mode_enabled", "STATION_SANDBOX_CODE_MODE_ENABLED", "STN_SANDBOX_CODE_MODE_ENABLED")
+	viper.BindEnv("sandbox.backend", "STN_SANDBOX_BACKEND")
 	viper.BindEnv("sandbox.idle_timeout_minutes", "STN_SANDBOX_IDLE_TIMEOUT_MINUTES")
 	viper.BindEnv("sandbox.cleanup_interval_minutes", "STN_SANDBOX_CLEANUP_INTERVAL_MINUTES")
 	viper.BindEnv("sandbox.docker_image", "STN_SANDBOX_DOCKER_IMAGE")
@@ -563,6 +578,13 @@ func bindEnvVars() {
 	viper.BindEnv("sandbox.registry_auth.identity_token", "STN_SANDBOX_REGISTRY_TOKEN")
 	viper.BindEnv("sandbox.registry_auth.server_address", "STN_SANDBOX_REGISTRY_SERVER")
 	viper.BindEnv("sandbox.registry_auth.docker_config_path", "STN_SANDBOX_REGISTRY_CONFIG")
+	viper.BindEnv("sandbox.fly_machines.app_prefix", "STN_SANDBOX_FLY_APP_PREFIX")
+	viper.BindEnv("sandbox.fly_machines.org_slug", "STN_SANDBOX_FLY_ORG", "FLY_ORG")
+	viper.BindEnv("sandbox.fly_machines.region", "STN_SANDBOX_FLY_REGION")
+	viper.BindEnv("sandbox.fly_machines.image", "STN_SANDBOX_FLY_IMAGE")
+	viper.BindEnv("sandbox.fly_machines.memory_mb", "STN_SANDBOX_FLY_MEMORY_MB")
+	viper.BindEnv("sandbox.fly_machines.cpu_kind", "STN_SANDBOX_FLY_CPU_KIND")
+	viper.BindEnv("sandbox.fly_machines.cpus", "STN_SANDBOX_FLY_CPUS")
 
 	viper.BindEnv("coding.backend", "STN_CODING_BACKEND")
 	viper.BindEnv("coding.opencode.url", "STN_CODING_OPENCODE_URL")
@@ -686,8 +708,18 @@ func Load() (*Config, error) {
 		Sandbox: SandboxConfig{
 			Enabled:                getEnvBoolOrDefault("STATION_SANDBOX_ENABLED", false),
 			CodeModeEnabled:        getEnvBoolOrDefault("STATION_SANDBOX_CODE_MODE_ENABLED", false),
+			Backend:                getEnvOrDefault("STN_SANDBOX_BACKEND", "docker"),
 			IdleTimeoutMinutes:     getEnvIntOrDefault("STN_SANDBOX_IDLE_TIMEOUT_MINUTES", 30),
 			CleanupIntervalMinutes: getEnvIntOrDefault("STN_SANDBOX_CLEANUP_INTERVAL_MINUTES", 5),
+			FlyMachines: SandboxFlyMachinesConfig{
+				AppPrefix: getEnvOrDefault("STN_SANDBOX_FLY_APP_PREFIX", "stn-sandbox"),
+				OrgSlug:   getEnvOrDefault("FLY_ORG", ""),
+				Region:    getEnvOrDefault("STN_SANDBOX_FLY_REGION", "ord"),
+				Image:     getEnvOrDefault("STN_SANDBOX_FLY_IMAGE", ""),
+				MemoryMB:  getEnvIntOrDefault("STN_SANDBOX_FLY_MEMORY_MB", 256),
+				CPUKind:   getEnvOrDefault("STN_SANDBOX_FLY_CPU_KIND", "shared"),
+				CPUs:      getEnvIntOrDefault("STN_SANDBOX_FLY_CPUS", 1),
+			},
 		},
 		Coding: CodingConfig{
 			Backend: "opencode",
@@ -925,6 +957,30 @@ func Load() (*Config, error) {
 	}
 	if viper.IsSet("sandbox.registry_auth.docker_config_path") {
 		cfg.Sandbox.RegistryAuth.DockerConfigPath = viper.GetString("sandbox.registry_auth.docker_config_path")
+	}
+	if viper.IsSet("sandbox.backend") {
+		cfg.Sandbox.Backend = viper.GetString("sandbox.backend")
+	}
+	if viper.IsSet("sandbox.fly_machines.app_prefix") {
+		cfg.Sandbox.FlyMachines.AppPrefix = viper.GetString("sandbox.fly_machines.app_prefix")
+	}
+	if viper.IsSet("sandbox.fly_machines.org_slug") {
+		cfg.Sandbox.FlyMachines.OrgSlug = viper.GetString("sandbox.fly_machines.org_slug")
+	}
+	if viper.IsSet("sandbox.fly_machines.region") {
+		cfg.Sandbox.FlyMachines.Region = viper.GetString("sandbox.fly_machines.region")
+	}
+	if viper.IsSet("sandbox.fly_machines.image") {
+		cfg.Sandbox.FlyMachines.Image = viper.GetString("sandbox.fly_machines.image")
+	}
+	if viper.IsSet("sandbox.fly_machines.memory_mb") {
+		cfg.Sandbox.FlyMachines.MemoryMB = viper.GetInt("sandbox.fly_machines.memory_mb")
+	}
+	if viper.IsSet("sandbox.fly_machines.cpu_kind") {
+		cfg.Sandbox.FlyMachines.CPUKind = viper.GetString("sandbox.fly_machines.cpu_kind")
+	}
+	if viper.IsSet("sandbox.fly_machines.cpus") {
+		cfg.Sandbox.FlyMachines.CPUs = viper.GetInt("sandbox.fly_machines.cpus")
 	}
 
 	// Lattice configuration overrides from config file

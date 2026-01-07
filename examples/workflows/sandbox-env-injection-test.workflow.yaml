@@ -1,0 +1,84 @@
+# Sandbox Environment Variable Injection Test
+# Tests that STN_CODE_* environment variables are injected into sandbox containers
+#
+# Prerequisites:
+# 1. Set test env vars on Station: fly secrets set STN_CODE_TEST_VAR="injection_test_12345" --app superstation
+# 2. Create sandbox-test agent with mode: code
+#
+# Expected behavior:
+# - STN_CODE_TEST_VAR="injection_test_12345" on host
+# - TEST_VAR="injection_test_12345" inside sandbox (prefix stripped)
+
+id: sandbox-env-injection-test
+version: "1.0"
+name: "Sandbox Environment Variable Injection Test"
+description: "Tests that STN_CODE_* env vars are injected into sandbox containers"
+
+inputSchema:
+  type: object
+  properties:
+    expected_value:
+      type: string
+      description: "Expected value of TEST_VAR"
+      default: "injection_test_12345"
+  required: []
+
+outputSchema:
+  type: object
+  properties:
+    sandbox_id:
+      type: string
+    test_var_value:
+      type: string
+    injection_successful:
+      type: boolean
+    all_env_vars:
+      type: string
+
+start: check_env_vars
+
+states:
+  # Step 1: Open sandbox and check environment variables
+  - name: check_env_vars
+    type: agent
+    agent: "sandbox-test"
+    agentTask: |
+      Open a sandbox and verify that environment variables were injected correctly.
+      
+      Run these commands in order:
+      1. First open a sandbox with sandbox_open({})
+      2. Run: echo "TEST_VAR=$TEST_VAR"
+      3. Run: env | sort
+      
+      Report:
+      1. The sandbox_id you received
+      2. The value of TEST_VAR (should be "injection_test_12345" if injection worked)
+      3. Whether you see other injected variables (AWS_*, TERRAFORM_*, etc.)
+      
+      If TEST_VAR has a value, the STN_CODE_* environment variable injection is working!
+    resultPath: "steps.check_env_vars"
+    next: verify_specific_var
+
+  # Step 2: Verify specific variable with grep
+  - name: verify_specific_var
+    type: agent
+    agent: "sandbox-test"
+    agentTask: |
+      In the same sandbox, verify the TEST_VAR value matches expected.
+      
+      Run: test "$TEST_VAR" = "injection_test_12345" && echo "PASS: Env injection working" || echo "FAIL: TEST_VAR='$TEST_VAR'"
+      
+      Also check if any STN_CODE_ prefixed variables leaked through (they shouldn't):
+      Run: env | grep STN_CODE_ || echo "PASS: No STN_CODE_ prefix leaked"
+      
+      Report whether the test passed or failed.
+    resultPath: "steps.verify_specific_var"
+    end: true
+
+# To test:
+# 1. Set test secret: fly secrets set STN_CODE_TEST_VAR="injection_test_12345" --app superstation
+# 2. Restart to pick up secret: fly apps restart superstation
+# 3. Create workflow via internal API
+# 4. Run: curl -X POST https://superstation.fly.dev/workflow-runs \
+#      -H "Content-Type: application/json" \
+#      -d '{"workflow_id": "sandbox-env-injection-test", "input": {}}'

@@ -146,6 +146,8 @@ func (m *MockAgentService) UpdateAgentPrompt(ctx context.Context, agentID int64,
 
 func (m *MockAgentService) SetFileStore(store storage.FileStore) {}
 
+func (m *MockAgentService) SetSessionStore(store services.SessionStore) {}
+
 // MockAgentExportService for testing - just set to nil since it's optional
 // The real handler will check for nil and skip export
 

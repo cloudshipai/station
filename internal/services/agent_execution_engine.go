@@ -116,13 +116,14 @@ func NewAgentExecutionEngineWithLighthouse(repos *repositories.Repositories, age
 	sandboxService := NewSandboxService(sandboxCfg)
 	var sessionManager *SessionManager
 	if codeModeConfig.Enabled {
-		dockerBackend, err := NewDockerBackend(codeModeConfig)
+		cfg := config.GetLoadedConfig()
+		backend, err := NewSandboxBackendFromConfig(cfg, codeModeConfig)
 		if err != nil {
-			logging.Info("Failed to initialize Docker backend for code mode sandbox: %v (code mode will be disabled)", err)
+			logging.Info("Failed to initialize sandbox backend (%s): %v (code mode will be disabled)", cfg.Sandbox.Backend, err)
 			codeModeConfig.Enabled = false
 		} else {
-			sessionManager = NewSessionManager(dockerBackend)
-			logging.Info("Sandbox code mode enabled with Docker backend")
+			sessionManager = NewSessionManager(backend)
+			logging.Info("Sandbox code mode enabled with %s backend", cfg.Sandbox.Backend)
 		}
 	}
 	unifiedSandboxFactory := NewUnifiedSandboxFactory(sandboxService, sessionManager, codeModeConfig)
@@ -188,6 +189,19 @@ func (aee *AgentExecutionEngine) SetFileStore(store storage.FileStore) {
 	if aee.unifiedSandboxFactory != nil {
 		aee.unifiedSandboxFactory.SetFileStore(store)
 		logging.Info("File store configured for sandbox file staging")
+	}
+}
+
+func (aee *AgentExecutionEngine) SetSessionStore(store SessionStore) {
+	if aee.sessionManager != nil {
+		aee.sessionManager.SetStore(store)
+		recovered, err := aee.sessionManager.RecoverSessions(context.Background())
+		if err != nil {
+			logging.Info("Warning: Failed to recover sessions from store: %v", err)
+		} else if recovered > 0 {
+			logging.Info("Recovered %d sandbox sessions from store", recovered)
+		}
+		logging.Info("Session store configured for sandbox session persistence")
 	}
 }
 
