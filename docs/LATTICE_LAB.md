@@ -391,6 +391,219 @@ examples/lattice-lab/
     └── templates/docker-compose.yml.j2
 ```
 
+## Lab 5: Async Work Distribution
+
+Station Lattice provides async work primitives for fire-and-forget agent execution.
+
+### Commands
+
+```bash
+# Assign work asynchronously (returns work_id immediately)
+stn lattice --nats nats://orchestrator:4222 work assign <agent-name> "task description"
+
+# Check work status (non-blocking)
+stn lattice --nats nats://orchestrator:4222 work check <work_id>
+
+# Wait for work to complete (blocking)
+stn lattice --nats nats://orchestrator:4222 work await <work_id>
+```
+
+### Example: Fire-and-Forget Analysis
+
+```bash
+# Start async work
+WORK_ID=$(stn lattice work assign posthog-dashboard-reporter "Generate weekly metrics report" | grep "Work ID:" | awk '{print $3}')
+echo "Started work: $WORK_ID"
+
+# Do other things...
+
+# Check status periodically
+stn lattice work check $WORK_ID
+
+# When ready, get results
+stn lattice work await $WORK_ID
+```
+
+### Example: Parallel Execution
+
+```bash
+# Start multiple agents in parallel
+WORK1=$(stn lattice work assign security-scanner "Scan production" | grep "Work ID:" | awk '{print $3}')
+WORK2=$(stn lattice work assign metrics-analyzer "Check SLOs" | grep "Work ID:" | awk '{print $3}')
+WORK3=$(stn lattice work assign cost-reporter "Generate cost report" | grep "Work ID:" | awk '{print $3}')
+
+# Wait for all results
+echo "Security: $(stn lattice work await $WORK1)"
+echo "Metrics: $(stn lattice work await $WORK2)"
+echo "Cost: $(stn lattice work await $WORK3)"
+```
+
+### Orchestrated Run (Higher-Level)
+
+For complex tasks that need routing and orchestration:
+
+```bash
+# Auto-routes to appropriate agents
+stn lattice run "Why is my production pod crashing and what should we do about it?"
+
+# With specific orchestrator
+stn lattice run --orchestrator SRECoordinator "Check system health"
+
+# With custom timeout
+stn lattice run --timeout 30m "Perform comprehensive security audit"
+```
+
+---
+
+## Lab 6: Multi-Station Routing
+
+Test agent routing across multiple stations with different capabilities.
+
+### Setup Member 2
+
+Start the optional member2 VM:
+
+```bash
+cd /tmp/lattice-lab/vagrant
+vagrant up member2
+```
+
+Create a different agent bundle (e.g., security agents):
+
+```bash
+# Create security-focused bundle
+stn bundle create security-env --output /tmp/security-bundle.tar.gz
+```
+
+Deploy to member2:
+
+```bash
+cd /tmp/lattice-lab/ansible-member2
+# Edit vars/main.yml with:
+# - STN_LATTICE_STATION_NAME: "security-station"
+# - Point to the security bundle
+ansible-playbook -i inventory.ini playbook.yml
+```
+
+### Verify Multi-Station Discovery
+
+```bash
+stn lattice --nats nats://192.168.56.10:4222 agents
+```
+
+Expected output:
+```
+Agents in Lattice (3 total)
+============================================
+AGENT                       STATION              
+--------------------------------------------
+posthog-dashboard-reporter  agent-member
+security-scanner            security-station
+vulnerability-checker       security-station
+```
+
+### Test Cross-Station Routing
+
+```bash
+# This task will route to the appropriate station
+stn lattice run "Scan for vulnerabilities and report metrics"
+```
+
+The orchestrator will:
+1. Identify required capabilities
+2. Route security tasks to `security-station`
+3. Route metrics tasks to `agent-member`
+4. Aggregate results
+
+### Station Affinity
+
+Force execution on a specific station:
+
+```bash
+# Force to specific station
+stn lattice work assign security-scanner "Full scan" --station security-station
+
+# Agent exec with station hint
+stn lattice agent exec posthog-dashboard-reporter "Get dashboards" --station agent-member
+```
+
+---
+
+## Lab 7: Dashboard & Observability
+
+### TUI Dashboard
+
+Launch the real-time terminal dashboard:
+
+```bash
+stn lattice --nats nats://192.168.56.10:4222 dashboard
+```
+
+Features:
+- Live station status (connected/disconnected)
+- Active work items with progress
+- Completed work history
+- Agent availability by station
+
+### NATS Monitoring
+
+The embedded NATS server exposes monitoring endpoints:
+
+```bash
+# Server variables
+curl http://192.168.56.10:8222/varz
+
+# Connection info
+curl http://192.168.56.10:8222/connz
+
+# Subscription info
+curl http://192.168.56.10:8222/subsz
+
+# JetStream info
+curl http://192.168.56.10:8222/jsz
+```
+
+### OpenTelemetry Tracing
+
+Enable distributed tracing:
+
+```bash
+# Start Jaeger locally
+docker run -d --name jaeger \
+  -p 16686:16686 \
+  -p 4318:4318 \
+  jaegertracing/all-in-one:latest
+
+# Run with tracing enabled
+stn lattice --enable-telemetry --otel-endpoint http://localhost:4318 \
+  run "Analyze system health"
+
+# View traces at http://localhost:16686
+```
+
+Station emits spans for:
+- Agent discovery
+- Work assignment
+- Task execution
+- NATS messaging
+- Result aggregation
+
+### Prometheus Metrics
+
+NATS exports Prometheus metrics:
+
+```bash
+curl http://192.168.56.10:8222/metrics
+```
+
+Key metrics:
+- `nats_server_connz_total` - Total connections
+- `nats_server_subscriptions` - Active subscriptions
+- `nats_server_in_msgs` / `nats_server_out_msgs` - Message throughput
+- `nats_jetstream_*` - JetStream storage metrics
+
+---
+
 ## Lab 8: Centralized NATS Deployment
 
 For production deployments, you may want to run NATS separately from Station instances. This provides:
