@@ -58,7 +58,7 @@ type EnvironmentConfig struct {
 	Agents    []string
 }
 
-func HandleDeploy(ctx context.Context, envName, target, region, sleepAfter, instanceType string, destroy, autoStop, withOpenCode, withSandbox bool, secretsFrom, namespace, k8sContext, outputDir string, dryRun bool, bundleID, appName string, hosts []string, sshKey, sshUser, bundlePath, envFile string) error {
+func HandleDeploy(ctx context.Context, envName, target, region, sleepAfter, instanceType string, destroy, autoStop, withOpenCode, withSandbox bool, secretsFrom, namespace, k8sContext, outputDir string, dryRun bool, bundleID, appName string, hosts []string, sshKey, sshUser, bundlePath, envFile, secretsBackend, secretsPath string) error {
 	if target == "" {
 		target = "fly"
 	}
@@ -81,9 +81,21 @@ func HandleDeploy(ctx context.Context, envName, target, region, sleepAfter, inst
 		return handleDeployDestroy(ctx, envName, target)
 	}
 
+	var runtimeSecrets *RuntimeSecretsConfig
+	if secretsBackend != "" {
+		runtimeSecrets = &RuntimeSecretsConfig{
+			Backend: secretsBackend,
+			Path:    secretsPath,
+		}
+		fmt.Printf("🔐 Runtime Secrets Configuration:\n")
+		fmt.Printf("   ✓ Backend: %s\n", secretsBackend)
+		fmt.Printf("   ✓ Path: %s\n", secretsPath)
+		fmt.Printf("   ℹ️  Container will fetch secrets at startup\n\n")
+	}
+
 	if isBundleDeploy {
 		fmt.Printf("🚀 Deploying bundle '%s' to %s (region: %s)\n\n", bundleID, target, region)
-		return handleBundleDeploy(ctx, bundleID, appName, target, region, sleepAfter, instanceType, autoStop, withOpenCode, withSandbox, secretsFrom, namespace, k8sContext, outputDir, dryRun, envFile)
+		return handleBundleDeploy(ctx, bundleID, appName, target, region, sleepAfter, instanceType, autoStop, withOpenCode, withSandbox, secretsFrom, namespace, k8sContext, outputDir, dryRun, envFile, runtimeSecrets)
 	}
 
 	fmt.Printf("🚀 Deploying environment '%s' to %s (region: %s)\n\n", envName, target, region)
@@ -188,10 +200,10 @@ func HandleDeploy(ctx context.Context, envName, target, region, sleepAfter, inst
 		return deployToCloudflare(ctx, envName, aiConfig, envConfig, sleepAfter, instanceType)
 
 	case "kubernetes", "k8s":
-		return deployToKubernetes(ctx, envName, aiConfig, cloudShipConfig, envConfig, externalSecrets, namespace, k8sContext, outputDir, dryRun, bundlePath)
+		return deployToKubernetes(ctx, envName, aiConfig, cloudShipConfig, envConfig, externalSecrets, namespace, k8sContext, outputDir, dryRun, bundlePath, runtimeSecrets)
 
 	case "ansible":
-		return deployToAnsible(ctx, envName, aiConfig, cloudShipConfig, envConfig, externalSecrets, outputDir, dryRun, hosts, sshKey, sshUser, bundlePath)
+		return deployToAnsible(ctx, envName, aiConfig, cloudShipConfig, envConfig, externalSecrets, outputDir, dryRun, hosts, sshKey, sshUser, bundlePath, runtimeSecrets)
 
 	default:
 		return fmt.Errorf("unsupported deployment target: %s (supported: fly, kubernetes, ansible, cloudflare)", target)
@@ -200,7 +212,7 @@ func HandleDeploy(ctx context.Context, envName, target, region, sleepAfter, inst
 
 const baseStationImage = "ghcr.io/cloudshipai/station:latest"
 
-func handleBundleDeploy(ctx context.Context, bundleID, appName, target, region, sleepAfter, instanceType string, autoStop, withOpenCode, withSandbox bool, secretsFrom, namespace, k8sContext, outputDir string, dryRun bool, envFile string) error {
+func handleBundleDeploy(ctx context.Context, bundleID, appName, target, region, sleepAfter, instanceType string, autoStop, withOpenCode, withSandbox bool, secretsFrom, namespace, k8sContext, outputDir string, dryRun bool, envFile string, runtimeSecrets *RuntimeSecretsConfig) error {
 	aiConfig, err := detectAIConfigForDeployment()
 	if err != nil {
 		return fmt.Errorf("AI configuration error: %w\n\nPlease set the appropriate environment variable for your provider", err)
@@ -278,10 +290,10 @@ func handleBundleDeploy(ctx context.Context, bundleID, appName, target, region, 
 		return deployBundleToFly(ctx, bundleID, resolvedAppName, aiConfig, cloudShipConfig, bundleEnvConfig, region, autoStop, withOpenCode, withSandbox)
 
 	case "kubernetes", "k8s":
-		return deployBundleToKubernetes(ctx, bundleID, resolvedAppName, aiConfig, cloudShipConfig, bundleEnvConfig, externalSecrets, namespace, k8sContext, outputDir, dryRun)
+		return deployBundleToKubernetes(ctx, bundleID, resolvedAppName, aiConfig, cloudShipConfig, bundleEnvConfig, externalSecrets, namespace, k8sContext, outputDir, dryRun, runtimeSecrets)
 
 	case "ansible":
-		return deployBundleToAnsible(ctx, bundleID, resolvedAppName, aiConfig, cloudShipConfig, bundleEnvConfig, externalSecrets, outputDir, dryRun, nil, "", "")
+		return deployBundleToAnsible(ctx, bundleID, resolvedAppName, aiConfig, cloudShipConfig, bundleEnvConfig, externalSecrets, outputDir, dryRun, nil, "", "", runtimeSecrets)
 
 	case "cloudflare", "cf", "cloudflare-containers":
 		return fmt.Errorf("cloudflare target does not support --bundle-id (bundles are already built into the workflow)")
@@ -1225,7 +1237,7 @@ primary_region = "%s"
 `, appName, region)
 }
 
-func deployToKubernetes(ctx context.Context, envName string, aiConfig *DeploymentAIConfig, cloudShipConfig *DeploymentCloudShipConfig, envConfig *EnvironmentConfig, externalSecrets map[string]string, namespace, k8sContext, outputDir string, dryRun bool, bundlePath string) error {
+func deployToKubernetes(ctx context.Context, envName string, aiConfig *DeploymentAIConfig, cloudShipConfig *DeploymentCloudShipConfig, envConfig *EnvironmentConfig, externalSecrets map[string]string, namespace, k8sContext, outputDir string, dryRun bool, bundlePath string, runtimeSecrets *RuntimeSecretsConfig) error {
 	fmt.Printf("☸️  Deploying to Kubernetes...\n\n")
 
 	target, ok := deployment.GetDeploymentTarget("kubernetes")
@@ -1262,7 +1274,7 @@ func deployToKubernetes(ctx context.Context, envName string, aiConfig *Deploymen
 		Namespace:            namespace,
 	}
 
-	secrets := buildAllSecrets(aiConfig, cloudShipConfig, envConfig, externalSecrets)
+	secrets := buildAllSecrets(aiConfig, cloudShipConfig, envConfig, externalSecrets, runtimeSecrets)
 
 	options := deployment.DeployOptions{
 		DryRun:     dryRun,
@@ -1275,7 +1287,7 @@ func deployToKubernetes(ctx context.Context, envName string, aiConfig *Deploymen
 	return target.Deploy(ctx, deployConfig, secrets, options)
 }
 
-func deployToAnsible(ctx context.Context, envName string, aiConfig *DeploymentAIConfig, cloudShipConfig *DeploymentCloudShipConfig, envConfig *EnvironmentConfig, externalSecrets map[string]string, outputDir string, dryRun bool, hosts []string, sshKey, sshUser, bundlePath string) error {
+func deployToAnsible(ctx context.Context, envName string, aiConfig *DeploymentAIConfig, cloudShipConfig *DeploymentCloudShipConfig, envConfig *EnvironmentConfig, externalSecrets map[string]string, outputDir string, dryRun bool, hosts []string, sshKey, sshUser, bundlePath string, runtimeSecrets *RuntimeSecretsConfig) error {
 	fmt.Printf("🔧 Deploying with Ansible...\n\n")
 
 	target, ok := deployment.GetDeploymentTarget("ansible")
@@ -1297,7 +1309,7 @@ func deployToAnsible(ctx context.Context, envName string, aiConfig *DeploymentAI
 		EnvironmentVariables: envConfig.Variables,
 	}
 
-	secrets := buildAllSecrets(aiConfig, cloudShipConfig, envConfig, externalSecrets)
+	secrets := buildAllSecrets(aiConfig, cloudShipConfig, envConfig, externalSecrets, runtimeSecrets)
 
 	options := deployment.DeployOptions{
 		DryRun:     dryRun,
@@ -1311,8 +1323,20 @@ func deployToAnsible(ctx context.Context, envName string, aiConfig *DeploymentAI
 	return target.Deploy(ctx, deployConfig, secrets, options)
 }
 
-func buildAllSecrets(aiConfig *DeploymentAIConfig, cloudShipConfig *DeploymentCloudShipConfig, envConfig *EnvironmentConfig, externalSecrets map[string]string) map[string]string {
+type RuntimeSecretsConfig struct {
+	Backend string
+	Path    string
+}
+
+func buildAllSecrets(aiConfig *DeploymentAIConfig, cloudShipConfig *DeploymentCloudShipConfig, envConfig *EnvironmentConfig, externalSecrets map[string]string, runtimeSecrets *RuntimeSecretsConfig) map[string]string {
 	secrets := make(map[string]string)
+
+	if runtimeSecrets != nil && runtimeSecrets.Backend != "" {
+		secrets["STN_SECRETS_BACKEND"] = runtimeSecrets.Backend
+		if runtimeSecrets.Path != "" {
+			secrets["STN_SECRETS_PATH"] = runtimeSecrets.Path
+		}
+	}
 
 	secrets["STN_AI_PROVIDER"] = aiConfig.Provider
 	secrets["STN_AI_MODEL"] = aiConfig.Model
@@ -1562,7 +1586,7 @@ func buildBundleFlySecrets(bundleID string, aiConfig *DeploymentAIConfig, cloudS
 	return secrets, nil
 }
 
-func deployBundleToKubernetes(ctx context.Context, bundleID, appName string, aiConfig *DeploymentAIConfig, cloudShipConfig *DeploymentCloudShipConfig, envConfig *EnvironmentConfig, externalSecrets map[string]string, namespace, k8sContext, outputDir string, dryRun bool) error {
+func deployBundleToKubernetes(ctx context.Context, bundleID, appName string, aiConfig *DeploymentAIConfig, cloudShipConfig *DeploymentCloudShipConfig, envConfig *EnvironmentConfig, externalSecrets map[string]string, namespace, k8sContext, outputDir string, dryRun bool, runtimeSecrets *RuntimeSecretsConfig) error {
 	fmt.Printf("☸️  Deploying bundle to Kubernetes...\n\n")
 
 	target, ok := deployment.GetDeploymentTarget("kubernetes")
@@ -1585,7 +1609,7 @@ func deployBundleToKubernetes(ctx context.Context, bundleID, appName string, aiC
 		Namespace:            namespace,
 	}
 
-	secrets := buildAllSecrets(aiConfig, cloudShipConfig, envConfig, externalSecrets)
+	secrets := buildAllSecrets(aiConfig, cloudShipConfig, envConfig, externalSecrets, runtimeSecrets)
 	secrets["STN_BUNDLE_ID"] = bundleID
 
 	options := deployment.DeployOptions{
@@ -1598,7 +1622,7 @@ func deployBundleToKubernetes(ctx context.Context, bundleID, appName string, aiC
 	return target.Deploy(ctx, deployConfig, secrets, options)
 }
 
-func deployBundleToAnsible(ctx context.Context, bundleID, appName string, aiConfig *DeploymentAIConfig, cloudShipConfig *DeploymentCloudShipConfig, envConfig *EnvironmentConfig, externalSecrets map[string]string, outputDir string, dryRun bool, hosts []string, sshKey, sshUser string) error {
+func deployBundleToAnsible(ctx context.Context, bundleID, appName string, aiConfig *DeploymentAIConfig, cloudShipConfig *DeploymentCloudShipConfig, envConfig *EnvironmentConfig, externalSecrets map[string]string, outputDir string, dryRun bool, hosts []string, sshKey, sshUser string, runtimeSecrets *RuntimeSecretsConfig) error {
 	fmt.Printf("🔧 Deploying bundle with Ansible...\n\n")
 
 	target, ok := deployment.GetDeploymentTarget("ansible")
@@ -1620,7 +1644,7 @@ func deployBundleToAnsible(ctx context.Context, bundleID, appName string, aiConf
 		EnvironmentVariables: envConfig.Variables,
 	}
 
-	secrets := buildAllSecrets(aiConfig, cloudShipConfig, envConfig, externalSecrets)
+	secrets := buildAllSecrets(aiConfig, cloudShipConfig, envConfig, externalSecrets, runtimeSecrets)
 	secrets["STN_BUNDLE_ID"] = bundleID
 
 	options := deployment.DeployOptions{

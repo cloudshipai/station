@@ -1692,6 +1692,8 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	sshKey, _ := cmd.Flags().GetString("ssh-key")
 	sshUser, _ := cmd.Flags().GetString("ssh-user")
 	envFile, _ := cmd.Flags().GetString("env-file")
+	secretsBackend, _ := cmd.Flags().GetString("secrets-backend")
+	secretsPath, _ := cmd.Flags().GetString("secrets-path")
 
 	if envName == "" && bundleID == "" && bundlePath == "" {
 		return fmt.Errorf("either environment name, --bundle-id, or --bundle is required\n\nUsage:\n  stn deploy <environment>          Deploy local environment\n  stn deploy --bundle-id <uuid>     Deploy CloudShip bundle\n  stn deploy --bundle ./file.tar.gz Deploy local bundle file")
@@ -1712,7 +1714,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	}
 
 	if bundlePath != "" {
-		return deployLocalBundle(cmd, bundlePath, target, region, sleepAfter, instanceType, destroy, autoStop, withOpenCode, withSandbox, secretsFrom, namespace, k8sContext, outputDir, dryRun, appName, hosts, sshKey, sshUser, envFile)
+		return deployLocalBundle(cmd, bundlePath, target, region, sleepAfter, instanceType, destroy, autoStop, withOpenCode, withSandbox, secretsFrom, namespace, k8sContext, outputDir, dryRun, appName, hosts, sshKey, sshUser, envFile, secretsBackend, secretsPath)
 	}
 
 	if !autoStop {
@@ -1720,7 +1722,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	}
 
 	ctx := context.Background()
-	return handlers.HandleDeploy(ctx, envName, target, region, sleepAfter, instanceType, destroy, autoStop, withOpenCode, withSandbox, secretsFrom, namespace, k8sContext, outputDir, dryRun, bundleID, appName, hosts, sshKey, sshUser, "", envFile)
+	return handlers.HandleDeploy(ctx, envName, target, region, sleepAfter, instanceType, destroy, autoStop, withOpenCode, withSandbox, secretsFrom, namespace, k8sContext, outputDir, dryRun, bundleID, appName, hosts, sshKey, sshUser, "", envFile, secretsBackend, secretsPath)
 }
 
 func resolveDeployEnvName(customName string, cfg *config.Config, bundlePath string) string {
@@ -1743,7 +1745,7 @@ func resolveDeployEnvName(customName string, cfg *config.Config, bundlePath stri
 	return bundleBaseName
 }
 
-func deployLocalBundle(cmd *cobra.Command, bundlePath, target, region, sleepAfter, instanceType string, destroy, autoStop, withOpenCode, withSandbox bool, secretsFrom, namespace, k8sContext, outputDir string, dryRun bool, appName string, hosts []string, sshKey, sshUser, envFile string) error {
+func deployLocalBundle(cmd *cobra.Command, bundlePath, target, region, sleepAfter, instanceType string, destroy, autoStop, withOpenCode, withSandbox bool, secretsFrom, namespace, k8sContext, outputDir string, dryRun bool, appName string, hosts []string, sshKey, sshUser, envFile, secretsBackend, secretsPath string) error {
 	if _, err := os.Stat(bundlePath); os.IsNotExist(err) {
 		return fmt.Errorf("bundle file not found: %s", bundlePath)
 	}
@@ -1790,7 +1792,7 @@ func deployLocalBundle(cmd *cobra.Command, bundlePath, target, region, sleepAfte
 	}
 
 	ctx := context.Background()
-	return handlers.HandleDeploy(ctx, envName, target, region, sleepAfter, instanceType, destroy, autoStop, withOpenCode, withSandbox, secretsFrom, namespace, k8sContext, outputDir, dryRun, "", appName, hosts, sshKey, sshUser, bundlePath, envFile)
+	return handlers.HandleDeploy(ctx, envName, target, region, sleepAfter, instanceType, destroy, autoStop, withOpenCode, withSandbox, secretsFrom, namespace, k8sContext, outputDir, dryRun, "", appName, hosts, sshKey, sshUser, bundlePath, envFile, secretsBackend, secretsPath)
 }
 
 // bootstrapGitHubWorkflows creates GitHub Actions workflow files in .github/workflows/

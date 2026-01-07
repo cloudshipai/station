@@ -54,6 +54,8 @@ type Config struct {
 	Coding CodingConfig
 	// Lattice Configuration (Station-to-Station mesh networking)
 	Lattice LatticeConfig
+	// Secrets Configuration (runtime secrets from external backends)
+	Secrets SecretsConfig
 	// Faker Templates (for local development)
 	FakerTemplates map[string]FakerTemplate
 	// Note: Station now uses official GenKit v1.0.1 plugins (custom plugin code preserved)
@@ -119,6 +121,37 @@ type NotifyConfig struct {
 	APIKey         string `yaml:"api_key"`         // API key/token for authentication (optional)
 	TimeoutSeconds int    `yaml:"timeout_seconds"` // Request timeout in seconds (default: 10)
 	Format         string `yaml:"format"`          // Webhook format: "ntfy" (default), "json", or "auto"
+}
+
+// SecretsConfig holds settings for runtime secrets resolution from external backends
+// This allows Station to fetch secrets from Vault, AWS Secrets Manager, etc. at startup
+// instead of requiring secrets to be baked into K8s Secrets or environment variables.
+type SecretsConfig struct {
+	// Backend is the secrets provider: aws-secretsmanager, aws-ssm, vault, gcp-secretmanager, sops
+	Backend string `yaml:"backend"`
+
+	// Path is provider-specific path to secrets:
+	// - AWS Secrets Manager: secret name or ARN (e.g., "station/prod")
+	// - AWS SSM: parameter path prefix (e.g., "/station/prod/")
+	// - Vault: secret path (e.g., "secret/data/station/prod")
+	// - GCP Secret Manager: secret name (e.g., "projects/my-project/secrets/station-prod")
+	// - SOPS: path to encrypted file (e.g., "./secrets/prod.enc.yaml")
+	Path string `yaml:"path"`
+
+	// Region for AWS providers (optional, uses AWS_REGION if not set)
+	Region string `yaml:"region"`
+
+	// VaultAddr for HashiCorp Vault (optional, uses VAULT_ADDR if not set)
+	VaultAddr string `yaml:"vault_addr"`
+
+	// VaultToken for HashiCorp Vault (optional, uses VAULT_TOKEN if not set)
+	VaultToken string `yaml:"vault_token"`
+
+	// Loaded indicates if secrets have been loaded from the backend
+	Loaded bool `yaml:"-"`
+
+	// LoadedSecrets contains the secrets loaded from the backend (not persisted)
+	LoadedSecrets map[string]string `yaml:"-"`
 }
 
 // SandboxConfig holds settings for sandbox code execution
@@ -523,6 +556,13 @@ func bindEnvVars() {
 	viper.BindEnv("lattice.orchestrator.embedded_nats.store_dir", "STN_LATTICE_NATS_STORE_DIR")
 	viper.BindEnv("lattice.orchestrator.registry.presence_ttl_sec", "STN_LATTICE_PRESENCE_TTL_SEC")
 	viper.BindEnv("lattice.orchestrator.routing.timeout_sec", "STN_LATTICE_ROUTING_TIMEOUT_SEC")
+
+	// Secrets config (runtime secrets from external backends)
+	viper.BindEnv("secrets.backend", "STN_SECRETS_BACKEND")
+	viper.BindEnv("secrets.path", "STN_SECRETS_PATH")
+	viper.BindEnv("secrets.region", "STN_SECRETS_REGION")
+	viper.BindEnv("secrets.vault_addr", "STN_SECRETS_VAULT_ADDR", "VAULT_ADDR")
+	viper.BindEnv("secrets.vault_token", "STN_SECRETS_VAULT_TOKEN", "VAULT_TOKEN")
 
 	// Telemetry config
 	viper.BindEnv("telemetry_enabled", "STN_TELEMETRY_ENABLED", "STATION_TELEMETRY_ENABLED")
@@ -1016,6 +1056,44 @@ func Load() (*Config, error) {
 		if boolValue, err := strconv.ParseBool(envCodeMode); err == nil {
 			cfg.Sandbox.CodeModeEnabled = boolValue
 		}
+	}
+
+	// Secrets backend configuration (for runtime secrets resolution)
+	if viper.IsSet("secrets.backend") {
+		cfg.Secrets.Backend = viper.GetString("secrets.backend")
+	}
+	if envBackend := os.Getenv("STN_SECRETS_BACKEND"); envBackend != "" {
+		cfg.Secrets.Backend = envBackend
+	}
+	if viper.IsSet("secrets.path") {
+		cfg.Secrets.Path = viper.GetString("secrets.path")
+	}
+	if envPath := os.Getenv("STN_SECRETS_PATH"); envPath != "" {
+		cfg.Secrets.Path = envPath
+	}
+	if viper.IsSet("secrets.region") {
+		cfg.Secrets.Region = viper.GetString("secrets.region")
+	}
+	if envRegion := os.Getenv("STN_SECRETS_REGION"); envRegion != "" {
+		cfg.Secrets.Region = envRegion
+	}
+	if viper.IsSet("secrets.vault_addr") {
+		cfg.Secrets.VaultAddr = viper.GetString("secrets.vault_addr")
+	}
+	if envVaultAddr := os.Getenv("VAULT_ADDR"); envVaultAddr != "" {
+		cfg.Secrets.VaultAddr = envVaultAddr
+	}
+	if envVaultAddr := os.Getenv("STN_SECRETS_VAULT_ADDR"); envVaultAddr != "" {
+		cfg.Secrets.VaultAddr = envVaultAddr
+	}
+	if viper.IsSet("secrets.vault_token") {
+		cfg.Secrets.VaultToken = viper.GetString("secrets.vault_token")
+	}
+	if envVaultToken := os.Getenv("VAULT_TOKEN"); envVaultToken != "" {
+		cfg.Secrets.VaultToken = envVaultToken
+	}
+	if envVaultToken := os.Getenv("STN_SECRETS_VAULT_TOKEN"); envVaultToken != "" {
+		cfg.Secrets.VaultToken = envVaultToken
 	}
 
 	// Store loaded config for use by path helpers
