@@ -699,8 +699,8 @@ func runUp(cmd *cobra.Command, args []string) error {
 	// Named volume for cache (persists across container restarts)
 	dockerArgs = append(dockerArgs, "-v", "station-cache:/home/station/.cache")
 
-	// Port mappings - default only exposes Dynamic Agent MCP (8587) and embedded NATS (4222)
-	dockerArgs = append(dockerArgs, "-p", "8587:8587", "-p", "4222:4222")
+	// Port mappings - default only exposes Dynamic Agent MCP (8587) and embedded NATS (4223 to avoid conflict with stdio)
+	dockerArgs = append(dockerArgs, "-p", "8587:8587", "-p", "4223:4222")
 	if devMode {
 		dockerArgs = append(dockerArgs, "-p", "8585:8585", "-p", "8586:8586")
 	}
