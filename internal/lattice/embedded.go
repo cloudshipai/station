@@ -61,6 +61,23 @@ func (e *EmbeddedServer) Start() error {
 		MaxPingsOut:  2,
 	}
 
+	if e.cfg.Auth.Enabled {
+		if e.cfg.Auth.Token != "" {
+			opts.Authorization = e.cfg.Auth.Token
+			fmt.Printf("[lattice] NATS auth enabled: token-based\n")
+		} else if len(e.cfg.Auth.Users) > 0 {
+			var users []*natsserver.User
+			for _, u := range e.cfg.Auth.Users {
+				users = append(users, &natsserver.User{
+					Username: u.User,
+					Password: u.Password,
+				})
+			}
+			opts.Users = users
+			fmt.Printf("[lattice] NATS auth enabled: %d user(s) configured\n", len(users))
+		}
+	}
+
 	server, err := natsserver.NewServer(opts)
 	if err != nil {
 		return fmt.Errorf("failed to create embedded NATS server: %w", err)

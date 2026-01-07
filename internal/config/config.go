@@ -360,6 +360,24 @@ type LatticeEmbeddedNATSConfig struct {
 	HTTPPort int `yaml:"http_port"`
 	// StoreDir for JetStream storage (default: $STATION_DATA/nats)
 	StoreDir string `yaml:"store_dir"`
+	// Auth configures authentication for the embedded NATS server
+	Auth LatticeEmbeddedNATSAuthConfig `yaml:"auth"`
+}
+
+// LatticeEmbeddedNATSAuthConfig holds authentication settings for embedded NATS
+type LatticeEmbeddedNATSAuthConfig struct {
+	// Enabled activates authentication on the embedded NATS server
+	Enabled bool `yaml:"enabled"`
+	// Users is a list of username/password pairs for basic auth
+	Users []LatticeNATSUser `yaml:"users"`
+	// Token is a single token for token-based auth (simpler than users)
+	Token string `yaml:"token"`
+}
+
+// LatticeNATSUser defines a NATS user with credentials
+type LatticeNATSUser struct {
+	User     string `yaml:"user"`
+	Password string `yaml:"password"`
 }
 
 // LatticeRegistryConfig holds settings for station registry
@@ -571,6 +589,8 @@ func bindEnvVars() {
 	viper.BindEnv("lattice.orchestrator.embedded_nats.port", "STN_LATTICE_NATS_PORT")
 	viper.BindEnv("lattice.orchestrator.embedded_nats.http_port", "STN_LATTICE_NATS_HTTP_PORT")
 	viper.BindEnv("lattice.orchestrator.embedded_nats.store_dir", "STN_LATTICE_NATS_STORE_DIR")
+	viper.BindEnv("lattice.orchestrator.embedded_nats.auth.enabled", "STN_LATTICE_AUTH_ENABLED")
+	viper.BindEnv("lattice.orchestrator.embedded_nats.auth.token", "STN_LATTICE_AUTH_TOKEN")
 	viper.BindEnv("lattice.orchestrator.registry.presence_ttl_sec", "STN_LATTICE_PRESENCE_TTL_SEC")
 	viper.BindEnv("lattice.orchestrator.routing.timeout_sec", "STN_LATTICE_ROUTING_TIMEOUT_SEC")
 
@@ -964,6 +984,18 @@ func Load() (*Config, error) {
 	}
 	if viper.IsSet("lattice.orchestrator.embedded_nats.store_dir") {
 		cfg.Lattice.Orchestrator.EmbeddedNATS.StoreDir = viper.GetString("lattice.orchestrator.embedded_nats.store_dir")
+	}
+	if viper.IsSet("lattice.orchestrator.embedded_nats.auth.enabled") {
+		cfg.Lattice.Orchestrator.EmbeddedNATS.Auth.Enabled = viper.GetBool("lattice.orchestrator.embedded_nats.auth.enabled")
+	}
+	if viper.IsSet("lattice.orchestrator.embedded_nats.auth.token") {
+		cfg.Lattice.Orchestrator.EmbeddedNATS.Auth.Token = viper.GetString("lattice.orchestrator.embedded_nats.auth.token")
+	}
+	if viper.IsSet("lattice.orchestrator.embedded_nats.auth.users") {
+		var users []LatticeNATSUser
+		if err := viper.UnmarshalKey("lattice.orchestrator.embedded_nats.auth.users", &users); err == nil {
+			cfg.Lattice.Orchestrator.EmbeddedNATS.Auth.Users = users
+		}
 	}
 	if viper.IsSet("lattice.orchestrator.registry.presence_ttl_sec") {
 		cfg.Lattice.Orchestrator.Registry.PresenceTTLSec = viper.GetInt("lattice.orchestrator.registry.presence_ttl_sec")

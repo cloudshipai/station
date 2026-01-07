@@ -659,6 +659,62 @@ lattice:
       port: 4222
       http_port: 8222
       store_dir: ""           # Defaults to ~/.local/share/station/lattice/nats
+      auth:
+        enabled: false        # Enable authentication on embedded NATS
+        token: ""             # Single token auth (simplest)
+        users:                # Or user/password list
+          - user: "station1"
+            password: "secret1"
+```
+
+### Orchestrator Authentication
+
+To secure your lattice with authentication:
+
+**1. Token Authentication (Simplest)**
+
+On orchestrator:
+```yaml
+# config.yaml or env vars
+lattice:
+  orchestrator:
+    embedded_nats:
+      auth:
+        enabled: true
+        token: "my-secret-lattice-token"
+```
+
+On members:
+```yaml
+lattice:
+  nats:
+    auth:
+      token: "my-secret-lattice-token"
+```
+
+**2. Username/Password Authentication**
+
+On orchestrator:
+```yaml
+lattice:
+  orchestrator:
+    embedded_nats:
+      auth:
+        enabled: true
+        users:
+          - user: "sre-station"
+            password: "secure-password-1"
+          - user: "security-station"
+            password: "secure-password-2"
+```
+
+On members:
+```yaml
+lattice:
+  nats:
+    auth:
+      user: "sre-station"
+      password: "secure-password-1"
 ```
 
 ### Environment Variables
@@ -684,6 +740,8 @@ These env vars are used in Docker/container deployments and config files to acti
 | `STN_LATTICE_NATS_PORT` | Embedded NATS client port | `4222` |
 | `STN_LATTICE_NATS_HTTP_PORT` | Embedded NATS monitoring port | `8222` |
 | `STN_LATTICE_NATS_STORE_DIR` | JetStream storage directory | `~/.local/share/station/lattice/nats` |
+| `STN_LATTICE_AUTH_ENABLED` | Enable auth on embedded NATS | `false` |
+| `STN_LATTICE_AUTH_TOKEN` | Token for embedded NATS auth | - |
 | `STN_LATTICE_PRESENCE_TTL_SEC` | Station heartbeat TTL | `30` |
 | `STN_LATTICE_ROUTING_TIMEOUT_SEC` | Agent routing timeout | `60` |
 
