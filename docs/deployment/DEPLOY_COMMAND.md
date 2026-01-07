@@ -250,110 +250,100 @@ curl http://localhost:8586/health
 
 ## Ansible Deployment
 
-Generate Ansible playbooks for deploying Station to remote servers via SSH + Docker.
+Deploy Station to remote servers via SSH + Docker using Ansible playbooks.
+
+> **Full Documentation**: See [ANSIBLE_DEPLOYMENT.md](./ANSIBLE_DEPLOYMENT.md) for complete guide including image strategies, private registries, and troubleshooting.
 
 ### Prerequisites
 
 1. Ansible installed: `pip install ansible`
-2. SSH access to target hosts
-3. Docker on target hosts (or playbook will install it)
-4. Container registry for your image
+2. SSH access to target hosts (key-based recommended)
+3. Docker on target hosts (playbook can install it)
 
-### Container Registry Setup
+### Quick Deploy (Recommended)
 
-Same as Kubernetes - push your image first:
+The simplest approach uses the base Station image with your local config:
 
 ```bash
-docker build -t your-registry.com/station:v1 .
-docker push your-registry.com/station:v1
+# Deploy to a single host
+stn deploy my-env --target ansible \
+  --hosts "ubuntu@192.168.1.100" \
+  --ssh-key ~/.ssh/id_rsa
+
+# Deploy to multiple hosts
+stn deploy my-env --target ansible \
+  --hosts "ubuntu@10.0.0.5,ubuntu@10.0.0.6" \
+  --ssh-key ~/.ssh/prod_key
 ```
 
-### Generate Playbook (Dry Run)
+### Deploy with Bundle ID
+
+If you've uploaded a bundle to CloudShip:
 
 ```bash
-# Generate Ansible playbook
-stn deploy default --target ansible --dry-run --output-dir ./ansible-deploy
+stn deploy --bundle-id e26b414a-f076-4135-927f-810bc1dc892a \
+  --target ansible \
+  --hosts "ubuntu@192.168.1.100" \
+  --ssh-key ~/.ssh/id_rsa
+```
 
-# Review generated files
+### Ansible-Specific Flags
+
+| Flag | Description | Example |
+|------|-------------|---------|
+| `--hosts` | Target hosts (user@host format) | `ubuntu@10.0.0.5,root@10.0.0.6` |
+| `--ssh-key` | Path to SSH private key | `~/.ssh/id_rsa` |
+| `--ssh-user` | Override SSH user for all hosts | `ubuntu` |
+| `--output-dir` | Output directory for configs | `./ansible-deploy` |
+| `--dry-run` | Generate configs only | (flag) |
+
+### Generate Configs Only (Dry Run)
+
+```bash
+# Generate Ansible playbook without deploying
+stn deploy my-env --target ansible --dry-run --output-dir ./ansible-deploy
+
+# Review and customize generated files
 ls ./ansible-deploy/
 # inventory.ini  playbook.yml  templates/  vars/
-```
 
-### Configure Inventory
-
-Edit `inventory.ini` with your target hosts:
-
-```ini
-[station_servers]
-server1.example.com ansible_user=ubuntu
-server2.example.com ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/mykey
-
-[station_servers:vars]
-ansible_python_interpreter=/usr/bin/python3
-```
-
-### Configure Variables
-
-Edit `vars/main.yml`:
-
-```yaml
-station_install_dir: /opt/station
-station_data_dir: /opt/station/data
-docker_image: your-registry.com/station:v1  # Update this
-station_name: my-production-station
-```
-
-### Run Playbook
-
-```bash
-# Deploy to all hosts
+# Then run manually
 ansible-playbook -i ./ansible-deploy/inventory.ini ./ansible-deploy/playbook.yml
-
-# Deploy to specific host
-ansible-playbook -i ./ansible-deploy/inventory.ini ./ansible-deploy/playbook.yml --limit server1.example.com
-
-# Dry run (check mode)
-ansible-playbook -i ./ansible-deploy/inventory.ini ./ansible-deploy/playbook.yml --check
 ```
 
-### Or Deploy Directly
+### Using Custom Images
+
+If you need a custom image (with specific tools or configurations baked in):
 
 ```bash
-# Generate and run playbook immediately
-stn deploy default --target ansible
+# 1. Build and push to a registry
+stn build env my-env --output my-station:v1.0
+docker tag my-station:v1.0 ghcr.io/myorg/station:v1.0
+docker push ghcr.io/myorg/station:v1.0
+
+# 2. Generate configs (dry-run)
+stn deploy my-env --target ansible --dry-run --output-dir ./ansible-deploy
+
+# 3. Edit vars/main.yml to use your image
+#    docker_image: ghcr.io/myorg/station:v1.0
+
+# 4. Run playbook
+ansible-playbook -i ./ansible-deploy/inventory.ini ./ansible-deploy/playbook.yml
 ```
 
-### Generated Files
-
-| File | Description |
-|------|-------------|
-| `inventory.ini` | Target hosts (edit this!) |
-| `playbook.yml` | Main deployment playbook |
-| `vars/main.yml` | Configuration variables |
-| `templates/docker-compose.yml.j2` | Docker Compose template |
-| `templates/station.service.j2` | Systemd service file |
-
-### What the Playbook Does
-
-1. Installs Docker (if not present)
-2. Creates Station directories
-3. Deploys docker-compose configuration
-4. Sets up systemd service
-5. Starts Station container
-6. Configures auto-restart
+> **Why can't I use a locally-built image directly?** The remote host needs to `docker pull` the image, but locally-built images only exist on your machine. You must push to a registry (Docker Hub, GHCR, private registry) first. See [ANSIBLE_DEPLOYMENT.md](./ANSIBLE_DEPLOYMENT.md#understanding-image-strategies) for details.
 
 ### Post-Deployment
 
 ```bash
-# SSH to server and check status
-ssh user@server1.example.com
-sudo systemctl status station-your-env
+# Check status on remote host
+ssh ubuntu@192.168.1.100 "docker ps && curl http://localhost:8587/health"
+
+# View systemd service status
+ssh ubuntu@192.168.1.100 "sudo systemctl status station-my-env"
 
 # View logs
-sudo journalctl -u station-your-env -f
-
-# Docker logs
-sudo docker logs station-your-env
+ssh ubuntu@192.168.1.100 "docker logs station-my-env --tail 50"
 ```
 
 ---
@@ -545,22 +535,32 @@ ssh user@host "docker ps"
 # Full command syntax
 stn deploy [environment] [flags]
 
-# Flags
+# General Flags
 --target string      Deployment target: fly, kubernetes/k8s, ansible (default: fly)
 --bundle-id string   CloudShip bundle ID (no local environment needed)
 --bundle string      Local bundle file (.tar.gz)
 --name string        Custom app name
+--output-dir string  Output directory for generated configs
+--dry-run            Generate configs only, don't deploy
+--destroy            Tear down deployment
+--secrets-from       Secret provider URI
+
+# Fly.io Flags
 --region string      Deployment region (default: ord)
+--auto-stop          Enable auto-stop when idle
+
+# Kubernetes Flags
 --namespace string   Kubernetes namespace
 --context string     Kubernetes context
---output-dir string  Output directory for generated configs
---dry-run           Generate configs only, don't deploy
---auto-stop         Enable auto-stop when idle (Fly.io)
---destroy           Tear down deployment
---secrets-from      Secret provider URI
+
+# Ansible Flags
+--hosts strings      Target hosts (user@host format, comma-separated)
+--ssh-key string     Path to SSH private key
+--ssh-user string    SSH username (overrides user in --hosts)
 
 # Examples
 stn deploy default --target fly
 stn deploy --bundle-id abc123 --target k8s --namespace prod
-stn deploy --bundle ./bundle.tar.gz --target ansible --dry-run
+stn deploy default --target ansible --hosts "ubuntu@10.0.0.5" --ssh-key ~/.ssh/key
+stn deploy --bundle ./bundle.tar.gz --target ansible --dry-run --output-dir ./configs
 ```

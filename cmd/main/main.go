@@ -218,6 +218,9 @@ func init() {
 	deployCmd.Flags().String("bundle-id", "", "CloudShip bundle ID to deploy (uses base image, no local environment needed)")
 	deployCmd.Flags().String("bundle", "", "Local bundle file (.tar.gz) to deploy - installs to temp environment then deploys")
 	deployCmd.Flags().String("name", "", "Custom name for the deployed app (default: station-<env> or cloudshipai.name from config)")
+	deployCmd.Flags().StringSlice("hosts", nil, "Ansible: target hosts (user@host or host format, can specify multiple)")
+	deployCmd.Flags().String("ssh-key", "", "Ansible: SSH private key path")
+	deployCmd.Flags().String("ssh-user", "root", "Ansible: SSH user (default: root)")
 
 	mcpStatusCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
 	mcpStatusCmd.Flags().String("environment", "default", "Environment to check status for (default shows all)")

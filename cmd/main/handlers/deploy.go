@@ -58,7 +58,7 @@ type EnvironmentConfig struct {
 	Agents    []string
 }
 
-func HandleDeploy(ctx context.Context, envName, target, region, sleepAfter, instanceType string, destroy, autoStop, withOpenCode, withSandbox bool, secretsFrom, namespace, k8sContext, outputDir string, dryRun bool, bundleID, appName string) error {
+func HandleDeploy(ctx context.Context, envName, target, region, sleepAfter, instanceType string, destroy, autoStop, withOpenCode, withSandbox bool, secretsFrom, namespace, k8sContext, outputDir string, dryRun bool, bundleID, appName string, hosts []string, sshKey, sshUser string) error {
 	if target == "" {
 		target = "fly"
 	}
@@ -178,7 +178,7 @@ func HandleDeploy(ctx context.Context, envName, target, region, sleepAfter, inst
 		return deployToKubernetes(ctx, envName, aiConfig, cloudShipConfig, envConfig, externalSecrets, namespace, k8sContext, outputDir, dryRun)
 
 	case "ansible":
-		return deployToAnsible(ctx, envName, aiConfig, cloudShipConfig, envConfig, externalSecrets, outputDir, dryRun)
+		return deployToAnsible(ctx, envName, aiConfig, cloudShipConfig, envConfig, externalSecrets, outputDir, dryRun, hosts, sshKey, sshUser)
 
 	default:
 		return fmt.Errorf("unsupported deployment target: %s (supported: fly, kubernetes, ansible, cloudflare)", target)
@@ -255,7 +255,7 @@ func handleBundleDeploy(ctx context.Context, bundleID, appName, target, region, 
 		return deployBundleToKubernetes(ctx, bundleID, resolvedAppName, aiConfig, cloudShipConfig, bundleEnvConfig, externalSecrets, namespace, k8sContext, outputDir, dryRun)
 
 	case "ansible":
-		return deployBundleToAnsible(ctx, bundleID, resolvedAppName, aiConfig, cloudShipConfig, bundleEnvConfig, externalSecrets, outputDir, dryRun)
+		return deployBundleToAnsible(ctx, bundleID, resolvedAppName, aiConfig, cloudShipConfig, bundleEnvConfig, externalSecrets, outputDir, dryRun, nil, "", "")
 
 	case "cloudflare", "cf", "cloudflare-containers":
 		return fmt.Errorf("cloudflare target does not support --bundle-id (bundles are already built into the workflow)")
@@ -1199,7 +1199,7 @@ func deployToKubernetes(ctx context.Context, envName string, aiConfig *Deploymen
 	return target.Deploy(ctx, deployConfig, secrets, options)
 }
 
-func deployToAnsible(ctx context.Context, envName string, aiConfig *DeploymentAIConfig, cloudShipConfig *DeploymentCloudShipConfig, envConfig *EnvironmentConfig, externalSecrets map[string]string, outputDir string, dryRun bool) error {
+func deployToAnsible(ctx context.Context, envName string, aiConfig *DeploymentAIConfig, cloudShipConfig *DeploymentCloudShipConfig, envConfig *EnvironmentConfig, externalSecrets map[string]string, outputDir string, dryRun bool, hosts []string, sshKey, sshUser string) error {
 	fmt.Printf("🔧 Deploying with Ansible...\n\n")
 
 	target, ok := deployment.GetDeploymentTarget("ansible")
@@ -1207,21 +1207,15 @@ func deployToAnsible(ctx context.Context, envName string, aiConfig *DeploymentAI
 		return fmt.Errorf("ansible deployment target not registered")
 	}
 
-	// Skip CLI validation in dry-run mode - only generate configs
 	if !dryRun {
 		if err := target.Validate(ctx); err != nil {
 			return fmt.Errorf("ansible validation failed: %w", err)
 		}
 	}
 
-	imageName, err := buildDeploymentImage(ctx, envName, envConfig, aiConfig)
-	if err != nil {
-		return err
-	}
-
 	deployConfig := &deployment.DeploymentConfig{
 		EnvironmentName:      envName,
-		DockerImage:          imageName,
+		DockerImage:          baseStationImage,
 		AIProvider:           aiConfig.Provider,
 		AIModel:              aiConfig.Model,
 		EnvironmentVariables: envConfig.Variables,
@@ -1232,6 +1226,9 @@ func deployToAnsible(ctx context.Context, envName string, aiConfig *DeploymentAI
 	options := deployment.DeployOptions{
 		DryRun:    dryRun,
 		OutputDir: outputDir,
+		Hosts:     hosts,
+		SSHKey:    sshKey,
+		SSHUser:   sshUser,
 	}
 
 	return target.Deploy(ctx, deployConfig, secrets, options)
@@ -1524,7 +1521,7 @@ func deployBundleToKubernetes(ctx context.Context, bundleID, appName string, aiC
 	return target.Deploy(ctx, deployConfig, secrets, options)
 }
 
-func deployBundleToAnsible(ctx context.Context, bundleID, appName string, aiConfig *DeploymentAIConfig, cloudShipConfig *DeploymentCloudShipConfig, envConfig *EnvironmentConfig, externalSecrets map[string]string, outputDir string, dryRun bool) error {
+func deployBundleToAnsible(ctx context.Context, bundleID, appName string, aiConfig *DeploymentAIConfig, cloudShipConfig *DeploymentCloudShipConfig, envConfig *EnvironmentConfig, externalSecrets map[string]string, outputDir string, dryRun bool, hosts []string, sshKey, sshUser string) error {
 	fmt.Printf("🔧 Deploying bundle with Ansible...\n\n")
 
 	target, ok := deployment.GetDeploymentTarget("ansible")
@@ -1552,6 +1549,9 @@ func deployBundleToAnsible(ctx context.Context, bundleID, appName string, aiConf
 	options := deployment.DeployOptions{
 		DryRun:    dryRun,
 		OutputDir: outputDir,
+		Hosts:     hosts,
+		SSHKey:    sshKey,
+		SSHUser:   sshUser,
 	}
 
 	return target.Deploy(ctx, deployConfig, secrets, options)
