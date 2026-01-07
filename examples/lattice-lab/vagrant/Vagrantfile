@@ -2,11 +2,15 @@
 # vi: set ft=ruby :
 
 # Station Lattice Lab - Multi-VM Setup
-# Creates 3 VMs for testing distributed agent orchestration
+# Creates VMs for testing distributed agent orchestration
+# Supports two modes:
+#   1. Embedded NATS: orchestrator runs NATS internally
+#   2. Centralized NATS: separate NATS server, stations connect as clients
 
 VAGRANTFILE_API_VERSION = "2"
 
 # Configuration
+NATS_SERVER_IP = "192.168.56.9"     # Standalone NATS server (Lab 8)
 ORCHESTRATOR_IP = "192.168.56.10"
 MEMBER1_IP = "192.168.56.11"
 MEMBER2_IP = "192.168.56.12"
@@ -23,6 +27,59 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
   
   # Disable default synced folder
   config.vm.synced_folder ".", "/vagrant", disabled: true
+  
+  # ============================================
+  # NATS Server VM - Standalone NATS (Lab 8)
+  # ============================================
+  # Use this for centralized NATS deployments where NATS
+  # is managed separately from Station instances.
+  # Start with: vagrant up nats
+  config.vm.define "nats", autostart: false do |nats|
+    nats.vm.hostname = "nats-server"
+    nats.vm.network "private_network", ip: NATS_SERVER_IP
+    
+    # Forward NATS ports
+    nats.vm.network "forwarded_port", guest: 4222, host: 4222    # NATS client
+    nats.vm.network "forwarded_port", guest: 8222, host: 8222    # NATS HTTP monitoring
+    nats.vm.network "forwarded_port", guest: 6222, host: 6222    # NATS cluster (future)
+    
+    # Libvirt provider settings
+    nats.vm.provider "libvirt" do |lv|
+      lv.memory = "1024"
+      lv.cpus = 1
+      lv.title = "nats-server"
+    end
+    
+    # VirtualBox provider settings (fallback)
+    nats.vm.provider "virtualbox" do |vb|
+      vb.memory = "1024"
+      vb.cpus = 1
+      vb.name = "nats-server"
+    end
+    
+    # Provision with Docker and NATS
+    nats.vm.provision "shell", inline: <<-SHELL
+      echo "=== Installing Docker on NATS Server ==="
+      apt-get update
+      apt-get install -y apt-transport-https ca-certificates curl software-properties-common
+      curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+      echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+      apt-get update
+      apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+      usermod -aG docker vagrant
+      systemctl enable docker
+      systemctl start docker
+      
+      # Create NATS config directory
+      mkdir -p /opt/nats/config
+      mkdir -p /opt/nats/data
+      chown -R 1000:1000 /opt/nats
+      
+      echo "=== NATS Server Ready ==="
+      echo "NATS will be available at: #{NATS_SERVER_IP}:4222"
+      echo "Monitoring at: #{NATS_SERVER_IP}:8222"
+    SHELL
+  end
   
   # ============================================
   # Orchestrator VM - NATS Hub + Station

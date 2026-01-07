@@ -1,0 +1,5 @@
+lattice_orchestration: false
+lattice_url: "nats://192.168.56.9:4222"
+
+lattice:
+  station_name: "orchestrator"

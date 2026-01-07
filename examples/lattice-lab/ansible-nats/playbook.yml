@@ -1,0 +1,76 @@
+---
+- name: Deploy Standalone NATS Server
+  hosts: nats
+  become: yes
+  vars_files:
+    - vars/main.yml
+  
+  tasks:
+    - name: Create NATS directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: '1000'
+        group: '1000'
+        mode: '0755'
+      loop:
+        - "{{ nats_config_dir }}"
+        - "{{ nats_data_dir }}"
+    
+    - name: Deploy NATS config
+      template:
+        src: templates/nats.conf.j2
+        dest: "{{ nats_config_dir }}/nats.conf"
+        owner: '1000'
+        group: '1000'
+        mode: '0644'
+      notify: Restart NATS
+    
+    - name: Deploy docker-compose.yml
+      template:
+        src: templates/docker-compose.yml.j2
+        dest: "{{ nats_install_dir }}/docker-compose.yml"
+        owner: root
+        group: root
+        mode: '0644'
+      notify: Restart NATS
+    
+    - name: Pull NATS image
+      shell: docker pull {{ nats_image }}
+      register: pull_result
+      changed_when: "'Downloaded' in pull_result.stdout or 'Pull complete' in pull_result.stdout"
+    
+    - name: Start NATS container
+      shell: |
+        cd {{ nats_install_dir }}
+        docker compose up -d
+      register: compose_result
+      changed_when: "'Started' in compose_result.stdout or 'Creating' in compose_result.stdout"
+    
+    - name: Wait for NATS to be ready
+      uri:
+        url: "http://localhost:8222/varz"
+        status_code: 200
+      register: result
+      until: result.status == 200
+      retries: 30
+      delay: 2
+    
+    - name: Display NATS info
+      debug:
+        msg: |
+          NATS Server deployed successfully!
+          - Client URL: nats://{{ ansible_host }}:4222
+          - Monitoring: http://{{ ansible_host }}:8222
+          {% if nats_auth_enabled %}
+          - Auth: {{ 'Token' if nats_auth_token else 'User/Password' }}
+          {% else %}
+          - Auth: Disabled (development mode)
+          {% endif %}
+  
+  handlers:
+    - name: Restart NATS
+      shell: |
+        cd {{ nats_install_dir }}
+        docker compose down
+        docker compose up -d

@@ -1,0 +1,19 @@
+services:
+  nats:
+    image: {{ nats_image }}
+    container_name: nats-server
+    restart: unless-stopped
+    ports:
+      - "{{ nats_client_port }}:4222"
+      - "{{ nats_http_port }}:8222"
+      - "{{ nats_cluster_port }}:6222"
+    volumes:
+      - {{ nats_config_dir }}/nats.conf:/nats.conf:ro
+      - {{ nats_data_dir }}:/data
+    command: ["-c", "/nats.conf"]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8222/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

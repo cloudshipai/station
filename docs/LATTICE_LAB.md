@@ -391,12 +391,142 @@ examples/lattice-lab/
     └── templates/docker-compose.yml.j2
 ```
 
+## Lab 8: Centralized NATS Deployment
+
+For production deployments, you may want to run NATS separately from Station instances. This provides:
+- Independent scaling of NATS infrastructure
+- Dedicated NATS cluster management
+- Easier NATS upgrades without touching Station
+- Support for existing NATS infrastructure
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Host Machine (CLI Client)                                   │
+│  stn lattice --nats nats://192.168.56.9:4222 ...            │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│  NATS Server VM (192.168.56.9)                              │
+│  Standalone NATS with JetStream                             │
+│  - Client port: 4222                                        │
+│  - Monitoring: 8222                                         │
+│  - Optional: Auth enabled                                   │
+└─────────────────────────────────────────────────────────────┘
+                              │
+              ┌───────────────┴───────────────┐
+              ▼                               ▼
+┌─────────────────────────┐     ┌─────────────────────────┐
+│  Orchestrator VM        │     │  Member VM              │
+│  (192.168.56.10)        │     │  (192.168.56.11)        │
+│  Station (lattice mode) │     │  Station (lattice mode) │
+│  - No embedded NATS     │     │  - Hosts agents         │
+│  - Connects as client   │     │  - Connects as client   │
+└─────────────────────────┘     └─────────────────────────┘
+```
+
+### Step 1: Start NATS Server VM
+
+```bash
+cd /tmp/lattice-lab/vagrant
+vagrant up nats
+```
+
+### Step 2: Deploy Standalone NATS
+
+```bash
+cd /tmp/lattice-lab/ansible-nats
+ansible-playbook -i inventory.ini playbook.yml
+```
+
+Verify NATS is running:
+```bash
+curl http://192.168.56.9:8222/varz
+```
+
+### Step 3: Deploy Stations (Centralized Mode)
+
+For the orchestrator (no embedded NATS):
+```bash
+cd /tmp/lattice-lab/ansible-orchestrator-centralized
+ansible-playbook -i inventory.ini playbook.yml
+```
+
+The key config difference (`files/config.yaml`):
+```yaml
+lattice_orchestration: false
+lattice_url: "nats://192.168.56.9:4222"
+```
+
+For members, use the same `lattice_url` pointing to the NATS server.
+
+### Step 4: Verify Connectivity
+
+```bash
+# Check lattice status (all stations connected to central NATS)
+stn lattice --nats nats://192.168.56.9:4222 status
+
+# List agents from all stations
+stn lattice --nats nats://192.168.56.9:4222 agents
+```
+
+### Enabling Authentication
+
+For production, enable NATS authentication:
+
+1. Edit `ansible-nats/vars/main.yml`:
+```yaml
+nats_auth_enabled: true
+nats_auth_token: "my-secret-lattice-token"
+```
+
+2. Redeploy NATS:
+```bash
+ansible-playbook -i inventory.ini playbook.yml
+```
+
+3. Update Station configs to include auth:
+```yaml
+lattice_url: "nats://my-secret-lattice-token@192.168.56.9:4222"
+```
+
+Or with environment variables:
+```bash
+STN_LATTICE_NATS_URL="nats://my-secret-lattice-token@192.168.56.9:4222"
+```
+
+### Example Files
+
+Complete centralized NATS example files:
+```
+examples/lattice-lab/
+├── ansible-nats/
+│   ├── inventory.ini
+│   ├── playbook.yml
+│   ├── vars/main.yml
+│   ├── vars/main-with-auth.yml
+│   └── templates/
+│       ├── nats.conf.j2
+│       └── docker-compose.yml.j2
+└── ansible-orchestrator-centralized/
+    ├── inventory.ini
+    ├── playbook.yml
+    ├── vars/main.yml
+    ├── files/config.yaml
+    └── templates/docker-compose.yml.j2
+```
+
+---
+
 ## Next Steps
 
 - Add more member stations with different agent bundles
 - Configure NATS authentication for production
 - Enable TLS for secure communication
 - Set up monitoring with the TUI dashboard: `stn lattice dashboard`
+- Scale NATS with clustering for high availability
 
 ---
 

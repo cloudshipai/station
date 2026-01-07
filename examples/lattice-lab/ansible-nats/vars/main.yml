@@ -1,0 +1,36 @@
+---
+# NATS Server Configuration
+nats_image: "nats:2.10-alpine"
+nats_install_dir: "/opt/nats"
+nats_config_dir: "/opt/nats/config"
+nats_data_dir: "/opt/nats/data"
+
+# Ports
+nats_client_port: 4222
+nats_http_port: 8222
+nats_cluster_port: 6222
+
+# Authentication (set to true for production)
+nats_auth_enabled: false
+
+# Token auth (simplest - use this OR users, not both)
+nats_auth_token: ""
+
+# User/password auth (alternative to token)
+nats_users: []
+# Example:
+# nats_users:
+#   - user: "station-orchestrator"
+#     password: "orchestrator-secret"
+#   - user: "station-member1"
+#     password: "member1-secret"
+
+# JetStream (required for lattice)
+nats_jetstream_enabled: true
+nats_jetstream_store_dir: "/data/jetstream"
+nats_jetstream_max_memory: "256M"
+nats_jetstream_max_file: "1G"
+
+# Server settings
+nats_server_name: "lattice-nats"
+nats_max_payload: "8MB"
