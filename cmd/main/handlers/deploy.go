@@ -17,6 +17,9 @@ import (
 	"station/internal/config"
 	"station/internal/deployment"
 	"station/internal/services"
+
+	_ "station/internal/deployment/secrets"
+	_ "station/internal/deployment/targets"
 )
 
 // DeploymentAIConfig holds AI configuration for deployment
@@ -55,10 +58,7 @@ type EnvironmentConfig struct {
 	Agents    []string
 }
 
-func HandleDeploy(ctx context.Context, envName, target, region, sleepAfter, instanceType string, destroy, autoStop, withOpenCode, withSandbox bool) error {
-	if envName == "" {
-		return fmt.Errorf("environment name is required")
-	}
+func HandleDeploy(ctx context.Context, envName, target, region, sleepAfter, instanceType string, destroy, autoStop, withOpenCode, withSandbox bool, secretsFrom, namespace, k8sContext, outputDir string, dryRun bool, bundleID, appName string) error {
 	if target == "" {
 		target = "fly"
 	}
@@ -72,13 +72,22 @@ func HandleDeploy(ctx context.Context, envName, target, region, sleepAfter, inst
 		instanceType = "basic"
 	}
 
+	isBundleDeploy := bundleID != ""
+
 	if destroy {
+		if isBundleDeploy {
+			return fmt.Errorf("--destroy requires an environment name, not --bundle-id")
+		}
 		return handleDeployDestroy(ctx, envName, target)
+	}
+
+	if isBundleDeploy {
+		fmt.Printf("🚀 Deploying bundle '%s' to %s (region: %s)\n\n", bundleID, target, region)
+		return handleBundleDeploy(ctx, bundleID, appName, target, region, sleepAfter, instanceType, autoStop, withOpenCode, withSandbox, secretsFrom, namespace, k8sContext, outputDir, dryRun)
 	}
 
 	fmt.Printf("🚀 Deploying environment '%s' to %s (region: %s)\n\n", envName, target, region)
 
-	// Step 1: Load AI configuration using Station's existing logic
 	aiConfig, err := detectAIConfigForDeployment()
 	if err != nil {
 		return fmt.Errorf("AI configuration error: %w\n\nPlease set the appropriate environment variable for your provider", err)
@@ -114,7 +123,6 @@ func HandleDeploy(ctx context.Context, envName, target, region, sleepAfter, inst
 		}
 	}
 
-	// Step 2: Load environment configuration
 	envConfig, err := loadEnvironmentConfig(envName)
 	if err != nil {
 		return err
@@ -125,7 +133,33 @@ func HandleDeploy(ctx context.Context, envName, target, region, sleepAfter, inst
 	fmt.Printf("   ✓ Variables: %d entries\n", len(envConfig.Variables))
 	fmt.Printf("   ✓ Agents: %d agents\n\n", len(envConfig.Agents))
 
-	// Step 3: Deploy to target
+	externalSecrets := make(map[string]string)
+	if secretsFrom != "" {
+		fmt.Printf("🔐 Fetching secrets from external provider...\n")
+		providerConfig, err := deployment.ParseSecretProviderURI(secretsFrom)
+		if err != nil {
+			return fmt.Errorf("invalid secrets-from URI: %w", err)
+		}
+
+		provider, ok := deployment.GetSecretProvider(providerConfig.Provider)
+		if !ok {
+			return fmt.Errorf("unknown secret provider: %s (supported: aws-secretsmanager, aws-ssm, vault, gcp-secretmanager, sops)", providerConfig.Provider)
+		}
+
+		if err := provider.Validate(ctx); err != nil {
+			return fmt.Errorf("secret provider validation failed: %w", err)
+		}
+
+		externalSecrets, err = provider.GetSecrets(ctx, providerConfig.Path)
+		if err != nil {
+			return fmt.Errorf("failed to fetch secrets: %w", err)
+		}
+
+		fmt.Printf("   ✓ Provider: %s\n", providerConfig.Provider)
+		fmt.Printf("   ✓ Path: %s\n", providerConfig.Path)
+		fmt.Printf("   ✓ Secrets: %d entries\n\n", len(externalSecrets))
+	}
+
 	switch strings.ToLower(target) {
 	case "fly", "flyio", "fly.io":
 		imageName, err := buildDeploymentImage(ctx, envName, envConfig, aiConfig)
@@ -133,22 +167,129 @@ func HandleDeploy(ctx context.Context, envName, target, region, sleepAfter, inst
 			return err
 		}
 		return deployToFly(ctx, envName, aiConfig, cloudShipConfig, envConfig, imageName, region, autoStop, withOpenCode, withSandbox)
+
 	case "cloudflare", "cf", "cloudflare-containers":
 		if withOpenCode || withSandbox {
 			return fmt.Errorf("--with-opencode and --with-sandbox are only supported for Fly.io deployments")
 		}
 		return deployToCloudflare(ctx, envName, aiConfig, envConfig, sleepAfter, instanceType)
+
+	case "kubernetes", "k8s":
+		return deployToKubernetes(ctx, envName, aiConfig, cloudShipConfig, envConfig, externalSecrets, namespace, k8sContext, outputDir, dryRun)
+
+	case "nomad":
+		return deployToNomad(ctx, envName, aiConfig, cloudShipConfig, envConfig, externalSecrets, namespace, outputDir, dryRun)
+
+	case "ansible":
+		return deployToAnsible(ctx, envName, aiConfig, cloudShipConfig, envConfig, externalSecrets, outputDir, dryRun)
+
 	default:
-		return fmt.Errorf("unsupported deployment target: %s (supported: fly, cloudflare)", target)
+		return fmt.Errorf("unsupported deployment target: %s (supported: fly, kubernetes, nomad, ansible, cloudflare)", target)
 	}
 }
 
-func getAppName(envName string) string {
+const baseStationImage = "ghcr.io/cloudshipai/station:latest"
+
+func handleBundleDeploy(ctx context.Context, bundleID, appName, target, region, sleepAfter, instanceType string, autoStop, withOpenCode, withSandbox bool, secretsFrom, namespace, k8sContext, outputDir string, dryRun bool) error {
+	aiConfig, err := detectAIConfigForDeployment()
+	if err != nil {
+		return fmt.Errorf("AI configuration error: %w\n\nPlease set the appropriate environment variable for your provider", err)
+	}
+
+	fmt.Printf("🔍 AI Configuration:\n")
+	fmt.Printf("   ✓ Provider: %s\n", aiConfig.Provider)
+	fmt.Printf("   ✓ Model: %s\n", aiConfig.Model)
+	fmt.Printf("   ✓ API Key: %s***\n\n", maskAPIKey(aiConfig.APIKey))
+
+	cloudShipConfig := detectCloudShipConfigForDeployment()
+	if cloudShipConfig != nil {
+		fmt.Printf("☁️  CloudShip Configuration:\n")
+		fmt.Printf("   ✓ Enabled: %v\n", cloudShipConfig.Enabled)
+		fmt.Printf("   ✓ Name: %s\n", cloudShipConfig.Name)
+		fmt.Printf("   ✓ Endpoint: %s\n", cloudShipConfig.Endpoint)
+		fmt.Printf("   ✓ Registration Key: %s***\n\n", maskAPIKey(cloudShipConfig.RegistrationKey))
+	}
+
+	resolvedAppName := resolveAppName(appName, bundleID, "")
+	fmt.Printf("📦 Bundle Deployment:\n")
+	fmt.Printf("   ✓ Bundle ID: %s\n", bundleID)
+	fmt.Printf("   ✓ App Name: %s\n", resolvedAppName)
+	fmt.Printf("   ✓ Image: %s\n\n", baseStationImage)
+
+	bundleEnvConfig := &EnvironmentConfig{
+		Name:      bundleID,
+		Path:      "",
+		Variables: map[string]string{"STN_BUNDLE_ID": bundleID},
+		Agents:    []string{},
+	}
+
+	externalSecrets := make(map[string]string)
+	if secretsFrom != "" {
+		fmt.Printf("🔐 Fetching secrets from external provider...\n")
+		providerConfig, err := deployment.ParseSecretProviderURI(secretsFrom)
+		if err != nil {
+			return fmt.Errorf("invalid secrets-from URI: %w", err)
+		}
+
+		provider, ok := deployment.GetSecretProvider(providerConfig.Provider)
+		if !ok {
+			return fmt.Errorf("unknown secret provider: %s (supported: aws-secretsmanager, aws-ssm, vault, gcp-secretmanager, sops)", providerConfig.Provider)
+		}
+
+		if err := provider.Validate(ctx); err != nil {
+			return fmt.Errorf("secret provider validation failed: %w", err)
+		}
+
+		externalSecrets, err = provider.GetSecrets(ctx, providerConfig.Path)
+		if err != nil {
+			return fmt.Errorf("failed to fetch secrets: %w", err)
+		}
+
+		fmt.Printf("   ✓ Provider: %s\n", providerConfig.Provider)
+		fmt.Printf("   ✓ Path: %s\n", providerConfig.Path)
+		fmt.Printf("   ✓ Secrets: %d entries\n\n", len(externalSecrets))
+	}
+
+	switch strings.ToLower(target) {
+	case "fly", "flyio", "fly.io":
+		return deployBundleToFly(ctx, bundleID, resolvedAppName, aiConfig, cloudShipConfig, bundleEnvConfig, region, autoStop, withOpenCode, withSandbox)
+
+	case "kubernetes", "k8s":
+		return deployBundleToKubernetes(ctx, bundleID, resolvedAppName, aiConfig, cloudShipConfig, bundleEnvConfig, externalSecrets, namespace, k8sContext, outputDir, dryRun)
+
+	case "nomad":
+		return deployBundleToNomad(ctx, bundleID, resolvedAppName, aiConfig, cloudShipConfig, bundleEnvConfig, externalSecrets, namespace, outputDir, dryRun)
+
+	case "ansible":
+		return deployBundleToAnsible(ctx, bundleID, resolvedAppName, aiConfig, cloudShipConfig, bundleEnvConfig, externalSecrets, outputDir, dryRun)
+
+	case "cloudflare", "cf", "cloudflare-containers":
+		return fmt.Errorf("cloudflare target does not support --bundle-id (bundles are already built into the workflow)")
+
+	default:
+		return fmt.Errorf("unsupported deployment target: %s (supported: fly, kubernetes, nomad, ansible)", target)
+	}
+}
+
+func resolveAppName(customName, bundleID, envName string) string {
+	if customName != "" {
+		return customName
+	}
 	cfg, err := config.Load()
 	if err == nil && cfg.CloudShip.Name != "" {
 		return cfg.CloudShip.Name
 	}
-	return fmt.Sprintf("station-%s", envName)
+	if envName != "" {
+		return fmt.Sprintf("station-%s", envName)
+	}
+	if len(bundleID) >= 8 {
+		return fmt.Sprintf("station-%s", bundleID[:8])
+	}
+	return fmt.Sprintf("station-%s", bundleID)
+}
+
+func getAppName(envName string) string {
+	return resolveAppName("", "", envName)
 }
 
 func handleDeployDestroy(ctx context.Context, envName, target string) error {
@@ -1021,4 +1162,507 @@ primary_region = "%s"
   source = "opencode_data"
   destination = "/workspaces"
 `, appName, region)
+}
+
+func deployToKubernetes(ctx context.Context, envName string, aiConfig *DeploymentAIConfig, cloudShipConfig *DeploymentCloudShipConfig, envConfig *EnvironmentConfig, externalSecrets map[string]string, namespace, k8sContext, outputDir string, dryRun bool) error {
+	fmt.Printf("☸️  Deploying to Kubernetes...\n\n")
+
+	target, ok := deployment.GetDeploymentTarget("kubernetes")
+	if !ok {
+		return fmt.Errorf("kubernetes deployment target not registered")
+	}
+
+	// Skip CLI validation in dry-run mode - only generate configs
+	if !dryRun {
+		if err := target.Validate(ctx); err != nil {
+			return fmt.Errorf("kubernetes validation failed: %w", err)
+		}
+	}
+
+	imageName, err := buildDeploymentImage(ctx, envName, envConfig, aiConfig)
+	if err != nil {
+		return err
+	}
+
+	deployConfig := &deployment.DeploymentConfig{
+		EnvironmentName:      envName,
+		DockerImage:          imageName,
+		AIProvider:           aiConfig.Provider,
+		AIModel:              aiConfig.Model,
+		EnvironmentVariables: envConfig.Variables,
+		Namespace:            namespace,
+	}
+
+	secrets := buildAllSecrets(aiConfig, cloudShipConfig, envConfig, externalSecrets)
+
+	options := deployment.DeployOptions{
+		DryRun:    dryRun,
+		OutputDir: outputDir,
+		Namespace: namespace,
+		Context:   k8sContext,
+	}
+
+	return target.Deploy(ctx, deployConfig, secrets, options)
+}
+
+func deployToNomad(ctx context.Context, envName string, aiConfig *DeploymentAIConfig, cloudShipConfig *DeploymentCloudShipConfig, envConfig *EnvironmentConfig, externalSecrets map[string]string, namespace, outputDir string, dryRun bool) error {
+	fmt.Printf("📦 Deploying to Nomad...\n\n")
+
+	target, ok := deployment.GetDeploymentTarget("nomad")
+	if !ok {
+		return fmt.Errorf("nomad deployment target not registered")
+	}
+
+	// Skip CLI validation in dry-run mode - only generate configs
+	if !dryRun {
+		if err := target.Validate(ctx); err != nil {
+			return fmt.Errorf("nomad validation failed: %w", err)
+		}
+	}
+
+	imageName, err := buildDeploymentImage(ctx, envName, envConfig, aiConfig)
+	if err != nil {
+		return err
+	}
+
+	deployConfig := &deployment.DeploymentConfig{
+		EnvironmentName:      envName,
+		DockerImage:          imageName,
+		AIProvider:           aiConfig.Provider,
+		AIModel:              aiConfig.Model,
+		EnvironmentVariables: envConfig.Variables,
+		Namespace:            namespace,
+	}
+
+	secrets := buildAllSecrets(aiConfig, cloudShipConfig, envConfig, externalSecrets)
+
+	options := deployment.DeployOptions{
+		DryRun:    dryRun,
+		OutputDir: outputDir,
+		Namespace: namespace,
+	}
+
+	return target.Deploy(ctx, deployConfig, secrets, options)
+}
+
+func deployToAnsible(ctx context.Context, envName string, aiConfig *DeploymentAIConfig, cloudShipConfig *DeploymentCloudShipConfig, envConfig *EnvironmentConfig, externalSecrets map[string]string, outputDir string, dryRun bool) error {
+	fmt.Printf("🔧 Deploying with Ansible...\n\n")
+
+	target, ok := deployment.GetDeploymentTarget("ansible")
+	if !ok {
+		return fmt.Errorf("ansible deployment target not registered")
+	}
+
+	// Skip CLI validation in dry-run mode - only generate configs
+	if !dryRun {
+		if err := target.Validate(ctx); err != nil {
+			return fmt.Errorf("ansible validation failed: %w", err)
+		}
+	}
+
+	imageName, err := buildDeploymentImage(ctx, envName, envConfig, aiConfig)
+	if err != nil {
+		return err
+	}
+
+	deployConfig := &deployment.DeploymentConfig{
+		EnvironmentName:      envName,
+		DockerImage:          imageName,
+		AIProvider:           aiConfig.Provider,
+		AIModel:              aiConfig.Model,
+		EnvironmentVariables: envConfig.Variables,
+	}
+
+	secrets := buildAllSecrets(aiConfig, cloudShipConfig, envConfig, externalSecrets)
+
+	options := deployment.DeployOptions{
+		DryRun:    dryRun,
+		OutputDir: outputDir,
+	}
+
+	return target.Deploy(ctx, deployConfig, secrets, options)
+}
+
+func buildAllSecrets(aiConfig *DeploymentAIConfig, cloudShipConfig *DeploymentCloudShipConfig, envConfig *EnvironmentConfig, externalSecrets map[string]string) map[string]string {
+	secrets := make(map[string]string)
+
+	secrets["STN_AI_PROVIDER"] = aiConfig.Provider
+	secrets["STN_AI_MODEL"] = aiConfig.Model
+
+	if aiConfig.AuthType == "oauth" {
+		secrets["STN_AI_AUTH_TYPE"] = "oauth"
+		secrets["STN_AI_OAUTH_TOKEN"] = aiConfig.OAuthToken
+		secrets["STN_AI_OAUTH_REFRESH_TOKEN"] = aiConfig.OAuthRefreshToken
+		secrets["STN_AI_OAUTH_EXPIRES_AT"] = fmt.Sprintf("%d", aiConfig.OAuthExpiresAt)
+	} else {
+		secrets["STN_AI_API_KEY"] = aiConfig.APIKey
+		switch strings.ToLower(aiConfig.Provider) {
+		case "openai":
+			secrets["OPENAI_API_KEY"] = aiConfig.APIKey
+		case "anthropic":
+			secrets["ANTHROPIC_API_KEY"] = aiConfig.APIKey
+		case "google", "gemini":
+			secrets["GOOGLE_API_KEY"] = aiConfig.APIKey
+		}
+	}
+
+	if cloudShipConfig != nil && cloudShipConfig.Enabled {
+		secrets["STN_CLOUDSHIP_ENABLED"] = "true"
+		secrets["STN_CLOUDSHIP_KEY"] = cloudShipConfig.RegistrationKey
+		if cloudShipConfig.Name != "" {
+			secrets["STN_CLOUDSHIP_NAME"] = cloudShipConfig.Name
+		}
+		if cloudShipConfig.Endpoint != "" {
+			secrets["STN_CLOUDSHIP_ENDPOINT"] = cloudShipConfig.Endpoint
+		}
+		if cloudShipConfig.UseTLS {
+			secrets["STN_CLOUDSHIP_USE_TLS"] = "true"
+		}
+	}
+
+	for k, v := range envConfig.Variables {
+		secrets[k] = v
+	}
+
+	for k, v := range externalSecrets {
+		secrets[k] = v
+	}
+
+	return secrets
+}
+
+func deployBundleToFly(ctx context.Context, bundleID, appName string, aiConfig *DeploymentAIConfig, cloudShipConfig *DeploymentCloudShipConfig, envConfig *EnvironmentConfig, region string, autoStop, withOpenCode, withSandbox bool) error {
+	if autoStop {
+		fmt.Printf("🚢 Deploying bundle to Fly.io (auto-stop enabled)...\n\n")
+	} else {
+		fmt.Printf("🚢 Deploying bundle to Fly.io (always-on mode)...\n\n")
+	}
+
+	if _, err := exec.LookPath("fly"); err != nil {
+		return fmt.Errorf("fly CLI not found. Install from https://fly.io/docs/hands-on/install-flyctl/")
+	}
+
+	deployConfig := deployment.DeploymentConfig{
+		EnvironmentName:      bundleID[:8],
+		DockerImage:          baseStationImage,
+		APIPort:              "8585",
+		MCPPort:              "8586",
+		AIProvider:           aiConfig.Provider,
+		AIModel:              aiConfig.Model,
+		FlyRegion:            region,
+		FlyAlwaysOn:          !autoStop,
+		EnvironmentVariables: envConfig.Variables,
+	}
+
+	flyConfig, err := deployment.GenerateDeploymentTemplate("fly", deployConfig)
+	if err != nil {
+		return fmt.Errorf("failed to generate fly.toml: %w", err)
+	}
+
+	flyConfigPath := fmt.Sprintf("fly-bundle-%s.toml", bundleID[:8])
+	if err := os.WriteFile(flyConfigPath, []byte(flyConfig), 0644); err != nil {
+		return fmt.Errorf("failed to write fly.toml: %w", err)
+	}
+	defer os.Remove(flyConfigPath)
+
+	fmt.Printf("   ✓ Generated fly.toml\n")
+
+	checkCmd := exec.CommandContext(ctx, "fly", "status", "--app", appName)
+	if err := checkCmd.Run(); err != nil {
+		fmt.Printf("📦 Creating Fly.io app '%s'...\n", appName)
+		createCmd := exec.CommandContext(ctx, "fly", "apps", "create", appName, "--org", "personal")
+		createCmd.Stdout = os.Stdout
+		createCmd.Stderr = os.Stderr
+		if err := createCmd.Run(); err != nil {
+			return fmt.Errorf("failed to create Fly app: %w", err)
+		}
+		fmt.Printf("   ✓ App created\n\n")
+	}
+
+	secrets, err := buildBundleFlySecrets(bundleID, aiConfig, cloudShipConfig, envConfig)
+	if err != nil {
+		return fmt.Errorf("failed to build secrets: %w", err)
+	}
+	if err := setFlySecrets(ctx, appName, secrets); err != nil {
+		return fmt.Errorf("failed to set Fly secrets: %w", err)
+	}
+
+	fmt.Printf("🌐 Checking IP allocation...\n")
+	ipCheckCmd := exec.CommandContext(ctx, "fly", "ips", "list", "--app", appName)
+	ipOutput, _ := ipCheckCmd.Output()
+
+	if !strings.Contains(string(ipOutput), "v4") {
+		fmt.Printf("   Allocating public IPv4 address...\n")
+		ipCmd := exec.CommandContext(ctx, "fly", "ips", "allocate-v4", "--app", appName, "--yes")
+		ipCmd.Stdout = os.Stdout
+		ipCmd.Stderr = os.Stderr
+		if err := ipCmd.Run(); err != nil {
+			return fmt.Errorf("failed to allocate IPv4: %w", err)
+		}
+		fmt.Printf("   ✓ IPv4 allocated\n")
+	} else {
+		fmt.Printf("   ✓ IPv4 already allocated\n")
+	}
+	fmt.Println()
+
+	volumeName := "station_data"
+	volumeCheckCmd := exec.CommandContext(ctx, "fly", "volumes", "list", "--app", appName)
+	volumeOutput, _ := volumeCheckCmd.Output()
+
+	if !strings.Contains(string(volumeOutput), volumeName) {
+		fmt.Printf("💾 Creating persistent volume...\n")
+		volumeCmd := exec.CommandContext(ctx, "fly", "volumes", "create", volumeName,
+			"--region", region, "--size", "3", "--app", appName, "-y")
+		volumeCmd.Stdout = os.Stdout
+		volumeCmd.Stderr = os.Stderr
+		if err := volumeCmd.Run(); err != nil {
+			return fmt.Errorf("failed to create volume: %w", err)
+		}
+		fmt.Printf("   ✓ Volume created\n\n")
+	}
+
+	fmt.Printf("🚀 Deploying bundle to Fly.io (this may take a few minutes)...\n\n")
+	deployCmd := exec.CommandContext(ctx, "fly", "deploy",
+		"--config", flyConfigPath,
+		"--image", baseStationImage,
+		"--app", appName,
+		"--ha=false",
+	)
+	deployCmd.Stdout = os.Stdout
+	deployCmd.Stderr = os.Stderr
+
+	if err := deployCmd.Run(); err != nil {
+		return fmt.Errorf("fly deploy failed: %w", err)
+	}
+
+	if withOpenCode {
+		openCodeAppName := fmt.Sprintf("%s-opencode", appName)
+		openCodeURL := fmt.Sprintf("http://%s.internal:4096", openCodeAppName)
+		if err := deployOpenCode(ctx, openCodeAppName, aiConfig, region); err != nil {
+			return fmt.Errorf("failed to deploy OpenCode: %w", err)
+		}
+		if err := setFlySecrets(ctx, appName, map[string]string{
+			"STN_CODING_OPENCODE_URL": openCodeURL,
+			"STN_CODING_BACKEND":      "opencode",
+		}); err != nil {
+			return fmt.Errorf("failed to set OpenCode URL secret: %w", err)
+		}
+		fmt.Printf("   ✓ OpenCode configured via private network: %s\n\n", openCodeURL)
+	}
+
+	if withSandbox {
+		sandboxSecrets := map[string]string{
+			"STATION_SANDBOX_ENABLED":           "true",
+			"STATION_SANDBOX_CODE_MODE_ENABLED": "true",
+			"STN_SANDBOX_BACKEND":               "fly_machines",
+		}
+		if err := setFlySecrets(ctx, appName, sandboxSecrets); err != nil {
+			return fmt.Errorf("failed to set sandbox secrets: %w", err)
+		}
+		fmt.Printf("   ✓ Fly Machines sandbox backend enabled\n\n")
+	}
+
+	fmt.Printf("\n✅ Bundle Deployment Complete!\n\n")
+	fmt.Printf("🤖 Agent MCP Endpoint:\n")
+	fmt.Printf("   https://%s.fly.dev/mcp\n\n", appName)
+	fmt.Printf("📦 Bundle ID: %s\n", bundleID)
+	fmt.Printf("   Container will download and install bundle on startup\n\n")
+
+	fmt.Printf("💡 Add to Claude Desktop:\n")
+	fmt.Printf("{\n")
+	fmt.Printf("  \"mcpServers\": {\n")
+	fmt.Printf("    \"%s\": {\n", appName)
+	fmt.Printf("      \"url\": \"https://%s.fly.dev/mcp\"\n", appName)
+	fmt.Printf("    }\n")
+	fmt.Printf("  }\n")
+	fmt.Printf("}\n\n")
+
+	return nil
+}
+
+func buildBundleFlySecrets(bundleID string, aiConfig *DeploymentAIConfig, cloudShipConfig *DeploymentCloudShipConfig, envConfig *EnvironmentConfig) (map[string]string, error) {
+	secrets := make(map[string]string)
+
+	secrets["STN_BUNDLE_ID"] = bundleID
+
+	encryptionKey, err := generateEncryptionKey()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate encryption key: %w", err)
+	}
+	secrets["STATION_ENCRYPTION_KEY"] = encryptionKey
+
+	secrets["STN_AI_PROVIDER"] = aiConfig.Provider
+	secrets["STN_AI_MODEL"] = aiConfig.Model
+
+	if aiConfig.AuthType == "oauth" {
+		secrets["STN_AI_AUTH_TYPE"] = "oauth"
+		secrets["STN_AI_OAUTH_TOKEN"] = aiConfig.OAuthToken
+		secrets["STN_AI_OAUTH_REFRESH_TOKEN"] = aiConfig.OAuthRefreshToken
+		secrets["STN_AI_OAUTH_EXPIRES_AT"] = fmt.Sprintf("%d", aiConfig.OAuthExpiresAt)
+	} else {
+		secrets["STN_AI_API_KEY"] = aiConfig.APIKey
+		switch strings.ToLower(aiConfig.Provider) {
+		case "openai":
+			secrets["OPENAI_API_KEY"] = aiConfig.APIKey
+		case "anthropic":
+			secrets["ANTHROPIC_API_KEY"] = aiConfig.APIKey
+		case "google", "gemini":
+			secrets["GOOGLE_API_KEY"] = aiConfig.APIKey
+		}
+	}
+
+	if cloudShipConfig != nil && cloudShipConfig.Enabled {
+		secrets["STN_CLOUDSHIP_ENABLED"] = "true"
+		secrets["STN_CLOUDSHIP_KEY"] = cloudShipConfig.RegistrationKey
+		if cloudShipConfig.Name != "" {
+			secrets["STN_CLOUDSHIP_NAME"] = cloudShipConfig.Name
+		}
+		if cloudShipConfig.Endpoint != "" {
+			secrets["STN_CLOUDSHIP_ENDPOINT"] = cloudShipConfig.Endpoint
+		}
+		if cloudShipConfig.UseTLS {
+			secrets["STN_CLOUDSHIP_USE_TLS"] = "true"
+		}
+	}
+
+	for k, v := range envConfig.Variables {
+		secrets[k] = v
+	}
+
+	secrets["STATION_MCP_POOLING"] = "true"
+
+	return secrets, nil
+}
+
+func deployBundleToKubernetes(ctx context.Context, bundleID, appName string, aiConfig *DeploymentAIConfig, cloudShipConfig *DeploymentCloudShipConfig, envConfig *EnvironmentConfig, externalSecrets map[string]string, namespace, k8sContext, outputDir string, dryRun bool) error {
+	fmt.Printf("☸️  Deploying bundle to Kubernetes...\n\n")
+
+	target, ok := deployment.GetDeploymentTarget("kubernetes")
+	if !ok {
+		return fmt.Errorf("kubernetes deployment target not registered")
+	}
+
+	if !dryRun {
+		if err := target.Validate(ctx); err != nil {
+			return fmt.Errorf("kubernetes validation failed: %w", err)
+		}
+	}
+
+	deployConfig := &deployment.DeploymentConfig{
+		EnvironmentName:      appName,
+		DockerImage:          baseStationImage,
+		AIProvider:           aiConfig.Provider,
+		AIModel:              aiConfig.Model,
+		EnvironmentVariables: envConfig.Variables,
+		Namespace:            namespace,
+	}
+
+	secrets := buildAllSecrets(aiConfig, cloudShipConfig, envConfig, externalSecrets)
+	secrets["STN_BUNDLE_ID"] = bundleID
+
+	options := deployment.DeployOptions{
+		DryRun:    dryRun,
+		OutputDir: outputDir,
+		Namespace: namespace,
+		Context:   k8sContext,
+	}
+
+	return target.Deploy(ctx, deployConfig, secrets, options)
+}
+
+func deployBundleToNomad(ctx context.Context, bundleID, appName string, aiConfig *DeploymentAIConfig, cloudShipConfig *DeploymentCloudShipConfig, envConfig *EnvironmentConfig, externalSecrets map[string]string, namespace, outputDir string, dryRun bool) error {
+	fmt.Printf("📦 Deploying bundle to Nomad...\n\n")
+
+	target, ok := deployment.GetDeploymentTarget("nomad")
+	if !ok {
+		return fmt.Errorf("nomad deployment target not registered")
+	}
+
+	if !dryRun {
+		if err := target.Validate(ctx); err != nil {
+			return fmt.Errorf("nomad validation failed: %w", err)
+		}
+	}
+
+	deployConfig := &deployment.DeploymentConfig{
+		EnvironmentName:      appName,
+		DockerImage:          baseStationImage,
+		AIProvider:           aiConfig.Provider,
+		AIModel:              aiConfig.Model,
+		EnvironmentVariables: envConfig.Variables,
+		Namespace:            namespace,
+	}
+
+	secrets := buildAllSecrets(aiConfig, cloudShipConfig, envConfig, externalSecrets)
+	secrets["STN_BUNDLE_ID"] = bundleID
+
+	options := deployment.DeployOptions{
+		DryRun:    dryRun,
+		OutputDir: outputDir,
+		Namespace: namespace,
+	}
+
+	return target.Deploy(ctx, deployConfig, secrets, options)
+}
+
+func deployBundleToAnsible(ctx context.Context, bundleID, appName string, aiConfig *DeploymentAIConfig, cloudShipConfig *DeploymentCloudShipConfig, envConfig *EnvironmentConfig, externalSecrets map[string]string, outputDir string, dryRun bool) error {
+	fmt.Printf("🔧 Deploying bundle with Ansible...\n\n")
+
+	target, ok := deployment.GetDeploymentTarget("ansible")
+	if !ok {
+		return fmt.Errorf("ansible deployment target not registered")
+	}
+
+	if !dryRun {
+		if err := target.Validate(ctx); err != nil {
+			return fmt.Errorf("ansible validation failed: %w", err)
+		}
+	}
+
+	deployConfig := &deployment.DeploymentConfig{
+		EnvironmentName:      appName,
+		DockerImage:          baseStationImage,
+		AIProvider:           aiConfig.Provider,
+		AIModel:              aiConfig.Model,
+		EnvironmentVariables: envConfig.Variables,
+	}
+
+	secrets := buildAllSecrets(aiConfig, cloudShipConfig, envConfig, externalSecrets)
+	secrets["STN_BUNDLE_ID"] = bundleID
+
+	options := deployment.DeployOptions{
+		DryRun:    dryRun,
+		OutputDir: outputDir,
+	}
+
+	return target.Deploy(ctx, deployConfig, secrets, options)
+}
+
+func DetectAIConfigForExport() (*DeploymentAIConfig, error) {
+	cfg, err := config.Load()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load Station config: %w", err)
+	}
+
+	return &DeploymentAIConfig{
+		Provider:          cfg.AIProvider,
+		Model:             cfg.AIModel,
+		APIKey:            cfg.AIAPIKey,
+		AuthType:          cfg.AIAuthType,
+		OAuthToken:        cfg.AIOAuthToken,
+		OAuthRefreshToken: cfg.AIOAuthRefreshToken,
+		OAuthExpiresAt:    cfg.AIOAuthExpiresAt,
+	}, nil
+}
+
+func DetectCloudShipConfigForExport() *DeploymentCloudShipConfig {
+	return detectCloudShipConfigForDeployment()
+}
+
+func DetectTelemetryConfigForExport() *DeploymentTelemetryConfig {
+	return detectTelemetryConfigForDeployment()
+}
+
+func LoadEnvironmentConfigForExport(envName string) (*EnvironmentConfig, error) {
+	return loadEnvironmentConfig(envName)
 }

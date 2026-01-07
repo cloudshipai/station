@@ -51,6 +51,11 @@ type DeploymentConfig struct {
 	CloudflareInstanceType string
 	CloudflareSleepAfter   string
 	CloudflareMaxInstances int
+
+	Namespace    string
+	Replicas     int
+	ResourceSize string
+	AlwaysOn     bool
 }
 
 // GenerateDeploymentTemplate generates a deployment template for the specified provider

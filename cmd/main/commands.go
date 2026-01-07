@@ -412,24 +412,59 @@ and makes them available in the Genkit developer UI for interactive testing.`,
 	}
 
 	deployCmd = &cobra.Command{
-		Use:   "deploy <environment-name>",
+		Use:   "deploy [environment-name]",
 		Short: "Deploy Station environment to cloud platform",
 		Long: `Deploy a Station environment to a cloud platform with agents and MCP tools.
 
+Deploy using either:
+  1. Local environment: stn deploy <environment-name>
+  2. CloudShip bundle:  stn deploy --bundle-id <uuid>
+
 Supported targets:
   fly        - Fly.io (builds Docker image, persistent storage)
-  cloudflare - [EXPERIMENTAL] Cloudflare Containers (uses base image + CloudShip bundle)
+  kubernetes - Kubernetes (generates manifests with Kustomize)
+  nomad      - HashiCorp Nomad (generates job spec)
+  ansible    - Ansible (generates playbook for Docker + SSH deployment)
+  cloudflare - [EXPERIMENTAL] Cloudflare Containers
 
-The deployed instance exposes agents via MCP for public access.
-The management UI is disabled by default for security.`,
-		Example: `  stn deploy my-env --target fly                    # Deploy to Fly.io (always-on by default)
-  stn deploy my-env --target fly --auto-stop        # Enable auto-stop/suspend when idle
-  stn deploy my-env --target cloudflare             # Deploy to Cloudflare
-  stn deploy my-env --target cf --auto-stop         # Enable sleep when idle
-  stn deploy my-env --target cf --sleep-after 1h    # Sleep after 1 hour (implies --auto-stop)
-  stn deploy my-env --target fly --destroy          # Tear down Fly deployment
-  stn deploy my-env --target cf --destroy           # Tear down Cloudflare`,
-		Args: cobra.ExactArgs(1),
+Secret providers (--secrets-from):
+  aws-secretsmanager://secret-name           - AWS Secrets Manager
+  aws-ssm:///station/prod/                   - AWS SSM Parameter Store
+  vault://secret/data/station/prod           - HashiCorp Vault
+  gcp-secretmanager://projects/X/secrets/Y   - Google Secret Manager
+  sops://./secrets.enc.yaml                  - SOPS encrypted file
+
+The deployed instance exposes agents via MCP for public access.`,
+		Example: `  # Bundle-based deploy (no local environment needed)
+  stn deploy --bundle-id e26b414a-f076-4135-927f-810bc1dc892a --target k8s
+  stn deploy --bundle-id e26b414a-f076-4135-927f-810bc1dc892a --target fly
+  stn deploy --bundle-id e26b414a-f076-4135-927f-810bc1dc892a --name my-station --target nomad
+
+  # Fly.io
+  stn deploy my-env --target fly                    # Deploy to Fly.io (always-on)
+  stn deploy my-env --target fly --auto-stop        # Enable auto-stop when idle
+  stn deploy my-env --target fly --destroy          # Tear down deployment
+
+  # Kubernetes
+  stn deploy my-env --target kubernetes             # Generate K8s manifests
+  stn deploy my-env --target k8s --namespace prod   # Deploy to namespace
+  stn deploy my-env --target k8s --dry-run          # Preview only
+  stn deploy my-env --target k8s --context my-ctx   # Use specific context
+
+  # Nomad
+  stn deploy my-env --target nomad                  # Deploy to Nomad
+  stn deploy my-env --target nomad --namespace prod # Specify namespace
+
+  # Ansible (SSH + Docker)
+  stn deploy my-env --target ansible --dry-run      # Generate playbook
+  stn deploy my-env --target ansible                # Run playbook
+
+  # With secrets from external store
+  stn deploy my-env --target k8s --secrets-from aws-secretsmanager://station-prod
+  stn deploy my-env --target fly --secrets-from vault://secret/data/station/prod
+  stn deploy my-env --target nomad --secrets-from aws-ssm:///station/prod/
+  stn deploy my-env --target ansible --secrets-from sops://./secrets.enc.yaml`,
+		Args: cobra.MaximumNArgs(1),
 		RunE: runDeploy,
 	}
 )
@@ -1627,7 +1662,11 @@ func runSettingsSet(cmd *cobra.Command, args []string) error {
 }
 
 func runDeploy(cmd *cobra.Command, args []string) error {
-	envName := args[0]
+	var envName string
+	if len(args) > 0 {
+		envName = args[0]
+	}
+
 	target, _ := cmd.Flags().GetString("target")
 	region, _ := cmd.Flags().GetString("region")
 	sleepAfter, _ := cmd.Flags().GetString("sleep-after")
@@ -1636,13 +1675,28 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	destroy, _ := cmd.Flags().GetBool("destroy")
 	withOpenCode, _ := cmd.Flags().GetBool("with-opencode")
 	withSandbox, _ := cmd.Flags().GetBool("with-sandbox")
+	secretsFrom, _ := cmd.Flags().GetString("secrets-from")
+	namespace, _ := cmd.Flags().GetString("namespace")
+	k8sContext, _ := cmd.Flags().GetString("context")
+	outputDir, _ := cmd.Flags().GetString("output-dir")
+	dryRun, _ := cmd.Flags().GetBool("dry-run")
+	bundleID, _ := cmd.Flags().GetString("bundle-id")
+	appName, _ := cmd.Flags().GetString("name")
+
+	if envName == "" && bundleID == "" {
+		return fmt.Errorf("either environment name or --bundle-id is required\n\nUsage:\n  stn deploy <environment>          Deploy local environment\n  stn deploy --bundle-id <uuid>     Deploy CloudShip bundle")
+	}
+
+	if envName != "" && bundleID != "" {
+		return fmt.Errorf("cannot specify both environment name and --bundle-id")
+	}
 
 	if !autoStop {
 		sleepAfter = "168h"
 	}
 
 	ctx := context.Background()
-	return handlers.HandleDeploy(ctx, envName, target, region, sleepAfter, instanceType, destroy, autoStop, withOpenCode, withSandbox)
+	return handlers.HandleDeploy(ctx, envName, target, region, sleepAfter, instanceType, destroy, autoStop, withOpenCode, withSandbox, secretsFrom, namespace, k8sContext, outputDir, dryRun, bundleID, appName)
 }
 
 // bootstrapGitHubWorkflows creates GitHub Actions workflow files in .github/workflows/
