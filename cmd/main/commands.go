@@ -419,6 +419,7 @@ and makes them available in the Genkit developer UI for interactive testing.`,
 Deploy using either:
   1. Local environment: stn deploy <environment-name>
   2. CloudShip bundle:  stn deploy --bundle-id <uuid>
+  3. Local bundle file: stn deploy --bundle ./my-bundle.tar.gz
 
 Supported targets:
   fly        - Fly.io (builds Docker image, persistent storage)
@@ -439,6 +440,10 @@ The deployed instance exposes agents via MCP for public access.`,
   stn deploy --bundle-id e26b414a-f076-4135-927f-810bc1dc892a --target k8s
   stn deploy --bundle-id e26b414a-f076-4135-927f-810bc1dc892a --target fly
   stn deploy --bundle-id e26b414a-f076-4135-927f-810bc1dc892a --name my-station --target nomad
+
+  # Local bundle file deploy
+  stn deploy --bundle ./my-bundle.tar.gz --target fly
+  stn deploy --bundle ./my-bundle.tar.gz --target k8s --name my-station
 
   # Fly.io
   stn deploy my-env --target fly                    # Deploy to Fly.io (always-on)
@@ -1681,14 +1686,29 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	outputDir, _ := cmd.Flags().GetString("output-dir")
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
 	bundleID, _ := cmd.Flags().GetString("bundle-id")
+	bundlePath, _ := cmd.Flags().GetString("bundle")
 	appName, _ := cmd.Flags().GetString("name")
 
-	if envName == "" && bundleID == "" {
-		return fmt.Errorf("either environment name or --bundle-id is required\n\nUsage:\n  stn deploy <environment>          Deploy local environment\n  stn deploy --bundle-id <uuid>     Deploy CloudShip bundle")
+	if envName == "" && bundleID == "" && bundlePath == "" {
+		return fmt.Errorf("either environment name, --bundle-id, or --bundle is required\n\nUsage:\n  stn deploy <environment>          Deploy local environment\n  stn deploy --bundle-id <uuid>     Deploy CloudShip bundle\n  stn deploy --bundle ./file.tar.gz Deploy local bundle file")
 	}
 
-	if envName != "" && bundleID != "" {
-		return fmt.Errorf("cannot specify both environment name and --bundle-id")
+	exclusiveCount := 0
+	if envName != "" {
+		exclusiveCount++
+	}
+	if bundleID != "" {
+		exclusiveCount++
+	}
+	if bundlePath != "" {
+		exclusiveCount++
+	}
+	if exclusiveCount > 1 {
+		return fmt.Errorf("cannot specify multiple of: environment name, --bundle-id, --bundle")
+	}
+
+	if bundlePath != "" {
+		return deployLocalBundle(cmd, bundlePath, target, region, sleepAfter, instanceType, destroy, autoStop, withOpenCode, withSandbox, secretsFrom, namespace, k8sContext, outputDir, dryRun, appName)
 	}
 
 	if !autoStop {
@@ -1697,6 +1717,47 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 
 	ctx := context.Background()
 	return handlers.HandleDeploy(ctx, envName, target, region, sleepAfter, instanceType, destroy, autoStop, withOpenCode, withSandbox, secretsFrom, namespace, k8sContext, outputDir, dryRun, bundleID, appName)
+}
+
+func deployLocalBundle(cmd *cobra.Command, bundlePath, target, region, sleepAfter, instanceType string, destroy, autoStop, withOpenCode, withSandbox bool, secretsFrom, namespace, k8sContext, outputDir string, dryRun bool, appName string) error {
+	if _, err := os.Stat(bundlePath); os.IsNotExist(err) {
+		return fmt.Errorf("bundle file not found: %s", bundlePath)
+	}
+
+	tempEnvName := fmt.Sprintf("deploy-%d", time.Now().Unix())
+	fmt.Printf("📦 Installing bundle to temporary environment: %s\n", tempEnvName)
+
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load Station config: %w", err)
+	}
+
+	database, err := db.New(cfg.DatabaseURL)
+	if err != nil {
+		return fmt.Errorf("failed to connect to database: %w", err)
+	}
+	defer func() { _ = database.Close() }()
+
+	repos := repositories.New(database)
+	bundleService := services.NewBundleServiceWithRepos(repos)
+
+	result, err := bundleService.InstallBundleWithOptions(bundlePath, tempEnvName, false)
+	if err != nil || !result.Success {
+		errorMsg := result.Error
+		if errorMsg == "" && err != nil {
+			errorMsg = err.Error()
+		}
+		return fmt.Errorf("bundle installation failed: %s", errorMsg)
+	}
+
+	fmt.Printf("✅ Bundle installed: %d agents, %d MCP configs\n", result.InstalledAgents, result.InstalledMCPs)
+
+	if !autoStop {
+		sleepAfter = "168h"
+	}
+
+	ctx := context.Background()
+	return handlers.HandleDeploy(ctx, tempEnvName, target, region, sleepAfter, instanceType, destroy, autoStop, withOpenCode, withSandbox, secretsFrom, namespace, k8sContext, outputDir, dryRun, "", appName)
 }
 
 // bootstrapGitHubWorkflows creates GitHub Actions workflow files in .github/workflows/

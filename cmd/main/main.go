@@ -216,6 +216,7 @@ func init() {
 	deployCmd.Flags().String("output-dir", "", "Output directory for generated configs")
 	deployCmd.Flags().Bool("dry-run", false, "Generate configs only, don't deploy")
 	deployCmd.Flags().String("bundle-id", "", "CloudShip bundle ID to deploy (uses base image, no local environment needed)")
+	deployCmd.Flags().String("bundle", "", "Local bundle file (.tar.gz) to deploy - installs to temp environment then deploys")
 	deployCmd.Flags().String("name", "", "Custom name for the deployed app (default: station-<env> or cloudshipai.name from config)")
 
 	mcpStatusCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
