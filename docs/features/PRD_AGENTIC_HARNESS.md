@@ -1,6 +1,6 @@
 # PRD: Agentic Harness - Claude Agent SDK-like Execution Engine
 
-**Status**: In Progress (Phase 2: Workspace Isolation & Streaming)  
+**Status**: Phase 2 Complete, Phase 3 Planned (Sandbox Isolation)  
 **Author**: Claude/Human Collaboration  
 **Created**: 2025-01-06  
 **Last Updated**: 2025-01-06
@@ -590,15 +590,15 @@ RUN = Single agent execution
 
 | Phase | Description | Status |
 |-------|-------------|--------|
-| 2.1 | Add `ExecutionContext` to harness config | Done |
-| 2.2 | Implement `ResolveWorkspacePath()` | Done |
-| 2.3 | Add `git/cloner.go` for repo cloning | Done |
-| 2.4 | Add session lock manager for sequential mode | Done |
-| 2.5 | Wire into `executeWithAgenticHarness()` | Done |
-| 2.6 | Add real-time streaming with full identifiers | Done |
-| 2.7 | Add CLI flags (`--session`, `--repo`, `--collaboration`) | Pending |
-| 2.8 | Add workflow git/collaboration settings parsing | Pending |
-| 2.9 | Session management commands (`stn session list/delete/cleanup`) | Pending |
+| 2.1 | Add `ExecutionContext` to harness config | ✅ Done |
+| 2.2 | Implement `ResolveWorkspacePath()` | ✅ Done |
+| 2.3 | Add `git/cloner.go` for repo cloning | ✅ Done |
+| 2.4 | Add session lock manager for sequential mode | ✅ Done |
+| 2.5 | Wire into `executeWithAgenticHarness()` | ✅ Done |
+| 2.6 | Add real-time streaming with full identifiers | ✅ Done |
+| 2.7 | Session management commands (`stn session list/delete/cleanup/unlock/info`) | ✅ Done |
+| 2.8 | Add CLI flags (`--session`, `--repo`, `--collaboration`) | Pending |
+| 2.9 | Add workflow git/collaboration settings parsing | Pending |
 | 2.10 | E2E tests for sequential continuation | Pending |
 | 2.11 | E2E tests for parallel branches + merge | Pending |
 
@@ -775,6 +775,164 @@ result, err := executor.ExecuteWithOptions(ctx, agentID, task, tools, execOpts)
 - [ ] Extended thinking content streaming
 - [ ] WebSocket adapter for direct browser connections
 - [ ] Stream replay from NATS JetStream
+
+## Phase 3: Sandbox Isolation Strategies (PLANNED)
+
+### Problem Statement
+
+The current harness executes code directly on the host system. This presents security risks:
+
+1. **Untrusted code execution** - Agent-generated bash commands run with user privileges
+2. **File system access** - Agents can read/write anywhere the user has access
+3. **Network access** - Agents can make arbitrary network requests
+4. **Resource exhaustion** - No limits on CPU, memory, or disk usage
+5. **Persistence** - Changes persist on host even after errors
+
+### Sandbox Strategies
+
+| Strategy | Isolation Level | Startup Time | Use Case |
+|----------|-----------------|--------------|----------|
+| **Host** | None | Instant | Development, trusted agents |
+| **Docker** | Container | ~1-2s | Production, untrusted code |
+| **Firecracker** | microVM | ~200ms | High security, multi-tenant |
+| **gVisor** | Kernel sandbox | ~500ms | Balance of security/performance |
+| **WASM** | Process sandbox | ~50ms | Lightweight, fast iteration |
+
+### Proposed Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    SANDBOX CONFIGURATION                          │
+│  (per-agent or global config)                                    │
+├─────────────────────────────────────────────────────────────────┤
+│  sandbox:                                                        │
+│    mode: docker | firecracker | gvisor | wasm | host             │
+│    image: station-sandbox:latest                                 │
+│    resources:                                                    │
+│      cpu: 2                                                      │
+│      memory: 4Gi                                                 │
+│      disk: 10Gi                                                  │
+│    network:                                                      │
+│      enabled: false                                              │
+│      allowed_hosts: [github.com, api.openai.com]                 │
+│    filesystem:                                                   │
+│      read_only: [/etc, /usr]                                     │
+│      read_write: [/workspace]                                    │
+│      denied: [/etc/passwd, ~/.ssh]                               │
+│    timeout: 30m                                                  │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    SANDBOX MANAGER                                │
+│                                                                  │
+│  Interface:                                                       │
+│  - Create(config) → SandboxInstance                              │
+│  - Execute(instance, command) → Result                           │
+│  - ReadFile(instance, path) → Content                            │
+│  - WriteFile(instance, path, content) → Error                    │
+│  - Destroy(instance) → Error                                     │
+│                                                                  │
+│  Implementations:                                                 │
+│  - HostSandbox (passthrough, no isolation)                       │
+│  - DockerSandbox (container-based)                               │
+│  - FirecrackerSandbox (microVM-based)                            │
+│  - WASMSandbox (WebAssembly-based)                               │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Implementation Plan
+
+| Phase | Description | Priority |
+|-------|-------------|----------|
+| 3.1 | Define `Sandbox` interface and `SandboxConfig` | High |
+| 3.2 | Implement `HostSandbox` (current behavior, passthrough) | High |
+| 3.3 | Implement `DockerSandbox` with resource limits | High |
+| 3.4 | Add network filtering (allowed hosts list) | Medium |
+| 3.5 | Add filesystem ACLs (read-only, read-write, denied paths) | Medium |
+| 3.6 | Implement `FirecrackerSandbox` for high-security use cases | Low |
+| 3.7 | Implement `WASMSandbox` for lightweight isolation | Low |
+| 3.8 | Add sandbox metrics (CPU, memory, I/O usage) | Medium |
+| 3.9 | Add sandbox cleanup/garbage collection | Medium |
+| 3.10 | E2E tests for each sandbox mode | High |
+
+### Docker Sandbox Design
+
+```go
+type DockerSandbox struct {
+    containerID string
+    config      SandboxConfig
+    client      *docker.Client
+}
+
+// Creates container with:
+// - Read-only root filesystem
+// - Mounted workspace volume
+// - Resource limits (CPU, memory)
+// - No network (unless explicitly allowed)
+// - Dropped capabilities
+func (s *DockerSandbox) Create(ctx context.Context) error
+
+// Executes command via docker exec
+func (s *DockerSandbox) Execute(ctx context.Context, cmd string) (string, error)
+
+// Copies file from container
+func (s *DockerSandbox) ReadFile(ctx context.Context, path string) ([]byte, error)
+
+// Copies file into container
+func (s *DockerSandbox) WriteFile(ctx context.Context, path string, content []byte) error
+```
+
+### Configuration Examples
+
+**Development (no isolation):**
+```yaml
+harness:
+  sandbox:
+    mode: host
+```
+
+**Production (Docker isolation):**
+```yaml
+harness:
+  sandbox:
+    mode: docker
+    image: station-sandbox:latest
+    resources:
+      cpu: 2
+      memory: 4Gi
+    network:
+      enabled: false
+    timeout: 30m
+```
+
+**High-security (Firecracker microVM):**
+```yaml
+harness:
+  sandbox:
+    mode: firecracker
+    kernel: /var/lib/firecracker/vmlinux
+    rootfs: /var/lib/firecracker/rootfs.ext4
+    resources:
+      vcpu: 2
+      memory: 2048
+    network:
+      enabled: true
+      allowed_hosts:
+        - "*.github.com"
+        - "api.openai.com"
+```
+
+### Success Criteria (Phase 3)
+
+- [ ] **Host mode**: Current behavior preserved, zero overhead
+- [ ] **Docker mode**: Agents execute in isolated containers
+- [ ] **Resource limits**: CPU/memory/disk limits enforced
+- [ ] **Network filtering**: Only allowed hosts reachable
+- [ ] **Filesystem ACLs**: Denied paths inaccessible
+- [ ] **Cleanup**: Sandbox destroyed on completion/timeout
+- [ ] **Metrics**: Resource usage tracked per execution
+- [ ] **E2E tests**: Each sandbox mode has integration tests
 
 ## References
 
