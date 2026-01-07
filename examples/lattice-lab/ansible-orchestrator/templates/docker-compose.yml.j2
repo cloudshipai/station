@@ -1,0 +1,22 @@
+services:
+  station:
+    image: {{ station_image }}
+    container_name: {{ station_name }}
+    restart: unless-stopped
+    ports:
+      - "{{ station_mcp_port }}:8586"
+      - "{{ station_dynamic_mcp_port }}:8587"
+      - "{{ station_nats_port }}:4222"
+      - "{{ station_nats_http_port }}:8222"
+    environment:
+{% for key, value in station_env.items() %}
+      - {{ key }}={{ value }}
+{% endfor %}
+    volumes:
+      - {{ station_data_dir }}:/home/station/.config/station
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8587/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s

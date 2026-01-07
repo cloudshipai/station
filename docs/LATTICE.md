@@ -7,6 +7,7 @@ Station Lattice is a NATS-based mesh network that enables multiple Station insta
 - [Why Station Lattice?](#why-station-lattice)
 - [Quick Start](#quick-start)
 - [Demo Lab](#demo-lab)
+- [Lattice Lab Tutorial](#lattice-lab-tutorial) ← Real VM deployment guide
 - [Operating Modes](#operating-modes)
 - [Architecture](#architecture)
 - [Monitoring & Dashboards](#monitoring--dashboards)
@@ -161,6 +162,20 @@ stn lattice --nats nats://localhost:4222 dashboard
 ```bash
 ./docs/demos/cleanup.sh
 ```
+
+## Lattice Lab Tutorial
+
+For a complete hands-on tutorial deploying Station Lattice across real VMs using Vagrant and Ansible, 
+see **[LATTICE_LAB.md](./LATTICE_LAB.md)**.
+
+The tutorial covers:
+- Setting up VMs with Vagrant (libvirt provider)
+- Deploying orchestrator with embedded NATS
+- Deploying member stations with agent bundles
+- Testing agent discovery and remote execution
+- Configuration gotchas and troubleshooting
+
+Example files are available in `examples/lattice-lab/`.
 
 ### Demo Scripts Reference
 
@@ -648,19 +663,66 @@ lattice:
 
 ### Environment Variables
 
-```bash
-STN_LATTICE_STATION_ID=my-station-id
-STN_LATTICE_STATION_NAME="My Station"
-STN_LATTICE_NATS_URL=nats://orchestrator:4222
-STN_LATTICE_NATS_USER=myuser
-STN_LATTICE_NATS_PASSWORD=mypassword
-STN_LATTICE_NATS_TOKEN=mytoken
-STN_LATTICE_NATS_NKEY_SEED=SUAM...
-STN_LATTICE_NATS_CREDS_FILE=/path/to/creds
-STN_LATTICE_NATS_TLS_ENABLED=true
-STN_LATTICE_ORCHESTRATOR_PORT=4222
-STN_LATTICE_ORCHESTRATOR_HTTP_PORT=8222
+#### Core Lattice Mode Activation
+
+These env vars are used in Docker/container deployments and config files to activate lattice mode:
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `STN_LATTICE_NATS_URL` | NATS URL to connect as member | `nats://192.168.56.10:4222` |
+| `STN_LATTICE_STATION_NAME` | Station name in the lattice | `posthog-member` |
+| `STN_LATTICE_STATION_ID` | Custom station ID (auto-generated if empty) | `my-station-id` |
+
+> **Note**: To activate lattice mode via config file, set `lattice_url` at the root level (not nested).
+> The env var `STN_LATTICE_NATS_URL` maps to `lattice.nats.url` in config, but the serve command 
+> checks `lattice_url` directly. For container deployments, set `lattice_url` in your config.yaml.
+
+#### Orchestrator Mode (Embedded NATS)
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `STN_LATTICE_NATS_PORT` | Embedded NATS client port | `4222` |
+| `STN_LATTICE_NATS_HTTP_PORT` | Embedded NATS monitoring port | `8222` |
+| `STN_LATTICE_NATS_STORE_DIR` | JetStream storage directory | `~/.local/share/station/lattice/nats` |
+| `STN_LATTICE_PRESENCE_TTL_SEC` | Station heartbeat TTL | `30` |
+| `STN_LATTICE_ROUTING_TIMEOUT_SEC` | Agent routing timeout | `60` |
+
+#### NATS Authentication
+
+| Variable | Description |
+|----------|-------------|
+| `STN_LATTICE_NATS_USER` | NATS username |
+| `STN_LATTICE_NATS_PASSWORD` | NATS password |
+| `STN_LATTICE_NATS_TOKEN` | NATS token auth |
+| `STN_LATTICE_NATS_NKEY_SEED` | NKey seed for auth |
+| `STN_LATTICE_NATS_NKEY_FILE` | Path to NKey file |
+| `STN_LATTICE_NATS_CREDS_FILE` | Path to credentials file |
+
+#### NATS TLS
+
+| Variable | Description |
+|----------|-------------|
+| `STN_LATTICE_NATS_TLS_ENABLED` | Enable TLS (`true`/`false`) |
+| `STN_LATTICE_NATS_TLS_CERT_FILE` | Client certificate path |
+| `STN_LATTICE_NATS_TLS_KEY_FILE` | Client key path |
+| `STN_LATTICE_NATS_TLS_CA_FILE` | CA certificate path |
+
+#### Example: Docker Compose Environment
+
+```yaml
+environment:
+  # Activate lattice member mode
+  - STN_LATTICE_NATS_URL=nats://192.168.56.10:4222
+  - STN_LATTICE_STATION_NAME=my-station
+  
+  # Or for orchestrator mode
+  - STN_LATTICE_NATS_PORT=4222
+  - STN_LATTICE_NATS_HTTP_PORT=8222
 ```
+
+> **Important**: For container deployments where you can't pass CLI flags, you must also set 
+> `lattice_url` in the config.yaml file. See [Lattice Lab Tutorial](./LATTICE_LAB.md) for a 
+> complete example.
 
 ## Remote Agent Invocation Flow
 

@@ -1,0 +1,44 @@
+---
+# Station Lattice Orchestrator Configuration
+# This station runs the embedded NATS server that other stations connect to.
+
+station_name: station-default
+station_image: ghcr.io/cloudshipai/station:latest
+station_install_dir: /opt/station/station-default
+station_data_dir: /opt/station/station-default/data
+station_state: present
+
+station_mcp_port: 8586
+station_dynamic_mcp_port: 8587
+
+# Lattice orchestrator ports (exposed to other stations)
+station_nats_port: 4222
+station_nats_http_port: 8222
+
+station_env:
+  # Lattice Configuration - Orchestrator Mode
+  STN_LATTICE_NATS_PORT: "4222"
+  STN_LATTICE_NATS_HTTP_PORT: "8222"
+  STN_LATTICE_STATION_NAME: "orchestrator"
+  
+  # AI Provider - Choose one:
+  # Option 1: API Key
+  STN_AI_PROVIDER: "anthropic"
+  STN_AI_MODEL: "claude-sonnet-4-20250514"
+  STN_AI_API_KEY: "your-api-key-here"
+  
+  # Option 2: OAuth (Anthropic Console)
+  # STN_AI_AUTH_TYPE: "oauth"
+  # STN_AI_OAUTH_TOKEN: "sk-ant-oat01-..."
+  # STN_AI_OAUTH_REFRESH_TOKEN: "sk-ant-ort01-..."
+  # STN_AI_OAUTH_EXPIRES_AT: "1767826881971"
+  
+  # CloudShip Integration (optional)
+  # STN_CLOUDSHIP_ENABLED: "true"
+  # STN_CLOUDSHIP_KEY: "your-cloudship-key"
+  # STN_CLOUDSHIP_NAME: "my-station"
+  # STN_CLOUDSHIP_ENDPOINT: "lighthouse.cloudshipai.com:443"
+  # STN_CLOUDSHIP_USE_TLS: "true"
+  
+  # Workspace
+  WORKSPACE_PATH: "/tmp/workspace"

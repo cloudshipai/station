@@ -329,8 +329,25 @@ export STN_AI_MODEL=gpt-4o-mini        # AI model
 ```bash
 export STN_CLOUDSHIP_ENABLED=true
 export STN_CLOUDSHIP_KEY=your-key-here
-export STN_CLOUDSHIP_ENDPOINT=lighthouse.cloudshipai.com:50051
+export STN_CLOUDSHIP_ENDPOINT=lighthouse.cloudshipai.com:443
 ```
+
+### Lattice (Distributed Agent Mesh)
+```bash
+# Member mode - connect to orchestrator
+export STN_LATTICE_NATS_URL=nats://orchestrator:4222
+export STN_LATTICE_STATION_NAME="my-station"
+
+# Orchestrator mode - run embedded NATS
+export STN_LATTICE_NATS_PORT=4222
+export STN_LATTICE_NATS_HTTP_PORT=8222
+
+# Authentication (optional)
+export STN_LATTICE_NATS_USER=myuser
+export STN_LATTICE_NATS_PASSWORD=mypassword
+```
+
+> **Note**: For full lattice documentation, see `docs/LATTICE.md`
 
 ## Troubleshooting
 
