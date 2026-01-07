@@ -58,7 +58,7 @@ type EnvironmentConfig struct {
 	Agents    []string
 }
 
-func HandleDeploy(ctx context.Context, envName, target, region, sleepAfter, instanceType string, destroy, autoStop, withOpenCode, withSandbox bool, secretsFrom, namespace, k8sContext, outputDir string, dryRun bool, bundleID, appName string, hosts []string, sshKey, sshUser, bundlePath string) error {
+func HandleDeploy(ctx context.Context, envName, target, region, sleepAfter, instanceType string, destroy, autoStop, withOpenCode, withSandbox bool, secretsFrom, namespace, k8sContext, outputDir string, dryRun bool, bundleID, appName string, hosts []string, sshKey, sshUser, bundlePath, envFile string) error {
 	if target == "" {
 		target = "fly"
 	}
@@ -83,7 +83,7 @@ func HandleDeploy(ctx context.Context, envName, target, region, sleepAfter, inst
 
 	if isBundleDeploy {
 		fmt.Printf("🚀 Deploying bundle '%s' to %s (region: %s)\n\n", bundleID, target, region)
-		return handleBundleDeploy(ctx, bundleID, appName, target, region, sleepAfter, instanceType, autoStop, withOpenCode, withSandbox, secretsFrom, namespace, k8sContext, outputDir, dryRun)
+		return handleBundleDeploy(ctx, bundleID, appName, target, region, sleepAfter, instanceType, autoStop, withOpenCode, withSandbox, secretsFrom, namespace, k8sContext, outputDir, dryRun, envFile)
 	}
 
 	fmt.Printf("🚀 Deploying environment '%s' to %s (region: %s)\n\n", envName, target, region)
@@ -160,6 +160,19 @@ func HandleDeploy(ctx context.Context, envName, target, region, sleepAfter, inst
 		fmt.Printf("   ✓ Secrets: %d entries\n\n", len(externalSecrets))
 	}
 
+	if envFile != "" {
+		fmt.Printf("🔐 Loading secrets from env file...\n")
+		envFileSecrets, err := parseEnvFile(envFile)
+		if err != nil {
+			return fmt.Errorf("failed to parse env file: %w", err)
+		}
+		for k, v := range envFileSecrets {
+			externalSecrets[k] = v
+		}
+		fmt.Printf("   ✓ File: %s\n", envFile)
+		fmt.Printf("   ✓ Secrets: %d entries\n\n", len(envFileSecrets))
+	}
+
 	switch strings.ToLower(target) {
 	case "fly", "flyio", "fly.io":
 		imageName, err := buildDeploymentImage(ctx, envName, envConfig, aiConfig)
@@ -187,7 +200,7 @@ func HandleDeploy(ctx context.Context, envName, target, region, sleepAfter, inst
 
 const baseStationImage = "ghcr.io/cloudshipai/station:latest"
 
-func handleBundleDeploy(ctx context.Context, bundleID, appName, target, region, sleepAfter, instanceType string, autoStop, withOpenCode, withSandbox bool, secretsFrom, namespace, k8sContext, outputDir string, dryRun bool) error {
+func handleBundleDeploy(ctx context.Context, bundleID, appName, target, region, sleepAfter, instanceType string, autoStop, withOpenCode, withSandbox bool, secretsFrom, namespace, k8sContext, outputDir string, dryRun bool, envFile string) error {
 	aiConfig, err := detectAIConfigForDeployment()
 	if err != nil {
 		return fmt.Errorf("AI configuration error: %w\n\nPlease set the appropriate environment variable for your provider", err)
@@ -245,6 +258,19 @@ func handleBundleDeploy(ctx context.Context, bundleID, appName, target, region, 
 		fmt.Printf("   ✓ Provider: %s\n", providerConfig.Provider)
 		fmt.Printf("   ✓ Path: %s\n", providerConfig.Path)
 		fmt.Printf("   ✓ Secrets: %d entries\n\n", len(externalSecrets))
+	}
+
+	if envFile != "" {
+		fmt.Printf("🔐 Loading secrets from env file...\n")
+		envFileSecrets, err := parseEnvFile(envFile)
+		if err != nil {
+			return fmt.Errorf("failed to parse env file: %w", err)
+		}
+		for k, v := range envFileSecrets {
+			externalSecrets[k] = v
+		}
+		fmt.Printf("   ✓ File: %s\n", envFile)
+		fmt.Printf("   ✓ Secrets: %d entries\n\n", len(envFileSecrets))
 	}
 
 	switch strings.ToLower(target) {
@@ -1024,6 +1050,47 @@ func maskAPIKey(key string) string {
 		return "***"
 	}
 	return key[:8] + "***"
+}
+
+func parseEnvFile(envFile string) (map[string]string, error) {
+	if envFile == "" {
+		return nil, nil
+	}
+
+	data, err := os.ReadFile(envFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read env file: %w", err)
+	}
+
+	secrets := make(map[string]string)
+	lines := strings.Split(string(data), "\n")
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+
+		key := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+
+		if strings.Contains(value, "***MASKED***") || strings.Contains(value, "***GENERATE_NEW***") {
+			continue
+		}
+
+		if len(value) >= 2 && ((value[0] == '"' && value[len(value)-1] == '"') || (value[0] == '\'' && value[len(value)-1] == '\'')) {
+			value = value[1 : len(value)-1]
+		}
+
+		secrets[key] = value
+	}
+
+	return secrets, nil
 }
 
 // generateEncryptionKey generates a secure encryption key for Station

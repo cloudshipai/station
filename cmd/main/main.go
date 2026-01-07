@@ -221,6 +221,7 @@ func init() {
 	deployCmd.Flags().StringSlice("hosts", nil, "Ansible: target hosts (user@host or host format, can specify multiple)")
 	deployCmd.Flags().String("ssh-key", "", "Ansible: SSH private key path")
 	deployCmd.Flags().String("ssh-user", "root", "Ansible: SSH user (default: root)")
+	deployCmd.Flags().String("env-file", "", "Load secrets from .env file (use with 'stn deploy export-vars' to generate template)")
 
 	mcpStatusCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
 	mcpStatusCmd.Flags().String("environment", "default", "Environment to check status for (default shows all)")
