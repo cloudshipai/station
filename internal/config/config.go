@@ -58,6 +58,8 @@ type Config struct {
 	Secrets SecretsConfig
 	// Faker Templates (for local development)
 	FakerTemplates map[string]FakerTemplate
+	// Harness Configuration (agentic execution harness)
+	Harness HarnessConfig
 	// Note: Station now uses official GenKit v1.0.1 plugins (custom plugin code preserved)
 
 	// Legacy fields (deprecated, use Telemetry struct instead)
@@ -72,6 +74,46 @@ type FakerTemplate struct {
 	Description string `yaml:"description"`
 	Instruction string `yaml:"instruction"`
 	Model       string `yaml:"model"`
+}
+
+type HarnessConfig struct {
+	Workspace   HarnessWorkspaceConfig   `yaml:"workspace"`
+	Compaction  HarnessCompactionConfig  `yaml:"compaction"`
+	Git         HarnessGitConfig         `yaml:"git"`
+	NATS        HarnessNATSConfig        `yaml:"nats"`
+	Permissions HarnessPermissionsConfig `yaml:"permissions"`
+}
+
+type HarnessWorkspaceConfig struct {
+	Path string `yaml:"path"`
+	Mode string `yaml:"mode"`
+}
+
+type HarnessCompactionConfig struct {
+	Enabled       bool    `yaml:"enabled"`
+	Threshold     float64 `yaml:"threshold"`
+	ProtectTokens int     `yaml:"protect_tokens"`
+}
+
+type HarnessGitConfig struct {
+	AutoBranch             bool   `yaml:"auto_branch"`
+	BranchPrefix           string `yaml:"branch_prefix"`
+	AutoCommit             bool   `yaml:"auto_commit"`
+	RequireApproval        bool   `yaml:"require_approval"`
+	WorkflowBranchStrategy string `yaml:"workflow_branch_strategy"`
+}
+
+type HarnessNATSConfig struct {
+	Enabled      bool   `yaml:"enabled"`
+	KVBucket     string `yaml:"kv_bucket"`
+	ObjectBucket string `yaml:"object_bucket"`
+	MaxFileSize  string `yaml:"max_file_size"`
+	TTL          string `yaml:"ttl"`
+}
+
+type HarnessPermissionsConfig struct {
+	ExternalDirectory string            `yaml:"external_directory"`
+	Bash              map[string]string `yaml:"bash"`
 }
 
 // CloudShipConfig holds CloudShip Lighthouse integration settings
@@ -633,6 +675,21 @@ func bindEnvVars() {
 	viper.BindEnv("telemetry.sample_rate", "STN_TELEMETRY_SAMPLE_RATE")
 	viper.BindEnv("otel_endpoint", "OTEL_EXPORTER_OTLP_ENDPOINT", "STN_OTEL_ENDPOINT")
 	viper.BindEnv("jaeger_query_url", "STN_JAEGER_QUERY_URL", "JAEGER_QUERY_URL")
+
+	// Harness config
+	viper.BindEnv("harness.workspace.path", "STN_HARNESS_WORKSPACE_PATH")
+	viper.BindEnv("harness.workspace.mode", "STN_HARNESS_WORKSPACE_MODE")
+	viper.BindEnv("harness.compaction.enabled", "STN_HARNESS_COMPACTION_ENABLED")
+	viper.BindEnv("harness.compaction.threshold", "STN_HARNESS_COMPACTION_THRESHOLD")
+	viper.BindEnv("harness.compaction.protect_tokens", "STN_HARNESS_COMPACTION_PROTECT_TOKENS")
+	viper.BindEnv("harness.git.auto_branch", "STN_HARNESS_GIT_AUTO_BRANCH")
+	viper.BindEnv("harness.git.branch_prefix", "STN_HARNESS_GIT_BRANCH_PREFIX")
+	viper.BindEnv("harness.git.auto_commit", "STN_HARNESS_GIT_AUTO_COMMIT")
+	viper.BindEnv("harness.git.require_approval", "STN_HARNESS_GIT_REQUIRE_APPROVAL")
+	viper.BindEnv("harness.nats.enabled", "STN_HARNESS_NATS_ENABLED")
+	viper.BindEnv("harness.nats.kv_bucket", "STN_HARNESS_NATS_KV_BUCKET")
+	viper.BindEnv("harness.nats.object_bucket", "STN_HARNESS_NATS_OBJECT_BUCKET")
+	viper.BindEnv("harness.permissions.external_directory", "STN_HARNESS_EXTERNAL_DIRECTORY")
 }
 
 func Load() (*Config, error) {
@@ -752,6 +809,43 @@ func Load() (*Config, error) {
 				Routing: LatticeRoutingConfig{
 					TimeoutSec: 60,
 					RetryCount: 3,
+				},
+			},
+		},
+		Harness: HarnessConfig{
+			Workspace: HarnessWorkspaceConfig{
+				Path: "./workspace",
+				Mode: "host",
+			},
+			Compaction: HarnessCompactionConfig{
+				Enabled:       true,
+				Threshold:     0.85,
+				ProtectTokens: 40000,
+			},
+			Git: HarnessGitConfig{
+				AutoBranch:             true,
+				BranchPrefix:           "agent/",
+				AutoCommit:             false,
+				RequireApproval:        true,
+				WorkflowBranchStrategy: "shared",
+			},
+			NATS: HarnessNATSConfig{
+				Enabled:      true,
+				KVBucket:     "harness-state",
+				ObjectBucket: "harness-files",
+				MaxFileSize:  "100MB",
+				TTL:          "24h",
+			},
+			Permissions: HarnessPermissionsConfig{
+				ExternalDirectory: "deny",
+				Bash: map[string]string{
+					"*":                 "allow",
+					"rm -rf *":          "deny",
+					"rm -r *":           "deny",
+					"git push --force*": "deny",
+					"git reset --hard*": "deny",
+					"git push *":        "ask",
+					"git commit *":      "ask",
 				},
 			},
 		},
@@ -1120,6 +1214,58 @@ func Load() (*Config, error) {
 	}
 	if viper.IsSet("coding.nats.object_store") {
 		cfg.Coding.NATS.ObjectStore = viper.GetString("coding.nats.object_store")
+	}
+
+	if viper.IsSet("harness.workspace.path") {
+		cfg.Harness.Workspace.Path = viper.GetString("harness.workspace.path")
+	}
+	if viper.IsSet("harness.workspace.mode") {
+		cfg.Harness.Workspace.Mode = viper.GetString("harness.workspace.mode")
+	}
+	if viper.IsSet("harness.compaction.enabled") {
+		cfg.Harness.Compaction.Enabled = viper.GetBool("harness.compaction.enabled")
+	}
+	if viper.IsSet("harness.compaction.threshold") {
+		cfg.Harness.Compaction.Threshold = viper.GetFloat64("harness.compaction.threshold")
+	}
+	if viper.IsSet("harness.compaction.protect_tokens") {
+		cfg.Harness.Compaction.ProtectTokens = viper.GetInt("harness.compaction.protect_tokens")
+	}
+	if viper.IsSet("harness.git.auto_branch") {
+		cfg.Harness.Git.AutoBranch = viper.GetBool("harness.git.auto_branch")
+	}
+	if viper.IsSet("harness.git.branch_prefix") {
+		cfg.Harness.Git.BranchPrefix = viper.GetString("harness.git.branch_prefix")
+	}
+	if viper.IsSet("harness.git.auto_commit") {
+		cfg.Harness.Git.AutoCommit = viper.GetBool("harness.git.auto_commit")
+	}
+	if viper.IsSet("harness.git.require_approval") {
+		cfg.Harness.Git.RequireApproval = viper.GetBool("harness.git.require_approval")
+	}
+	if viper.IsSet("harness.git.workflow_branch_strategy") {
+		cfg.Harness.Git.WorkflowBranchStrategy = viper.GetString("harness.git.workflow_branch_strategy")
+	}
+	if viper.IsSet("harness.nats.enabled") {
+		cfg.Harness.NATS.Enabled = viper.GetBool("harness.nats.enabled")
+	}
+	if viper.IsSet("harness.nats.kv_bucket") {
+		cfg.Harness.NATS.KVBucket = viper.GetString("harness.nats.kv_bucket")
+	}
+	if viper.IsSet("harness.nats.object_bucket") {
+		cfg.Harness.NATS.ObjectBucket = viper.GetString("harness.nats.object_bucket")
+	}
+	if viper.IsSet("harness.nats.max_file_size") {
+		cfg.Harness.NATS.MaxFileSize = viper.GetString("harness.nats.max_file_size")
+	}
+	if viper.IsSet("harness.nats.ttl") {
+		cfg.Harness.NATS.TTL = viper.GetString("harness.nats.ttl")
+	}
+	if viper.IsSet("harness.permissions.external_directory") {
+		cfg.Harness.Permissions.ExternalDirectory = viper.GetString("harness.permissions.external_directory")
+	}
+	if viper.IsSet("harness.permissions.bash") {
+		cfg.Harness.Permissions.Bash = viper.GetStringMapString("harness.permissions.bash")
 	}
 
 	// Load faker templates from config file

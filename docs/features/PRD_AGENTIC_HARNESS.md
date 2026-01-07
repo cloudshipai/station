@@ -1,6 +1,6 @@
 # PRD: Agentic Harness - Claude Agent SDK-like Execution Engine
 
-**Status**: In Progress (Phase 2: Workspace Isolation)  
+**Status**: In Progress (Phase 2: Workspace Isolation & Streaming)  
 **Author**: Claude/Human Collaboration  
 **Created**: 2025-01-06  
 **Last Updated**: 2025-01-06
@@ -593,13 +593,14 @@ RUN = Single agent execution
 | 2.1 | Add `ExecutionContext` to harness config | Done |
 | 2.2 | Implement `ResolveWorkspacePath()` | Done |
 | 2.3 | Add `git/cloner.go` for repo cloning | Done |
-| 2.4 | Add session lock manager for sequential mode | Pending |
-| 2.5 | Wire into `executeWithAgenticHarness()` | Pending |
-| 2.6 | Add CLI flags (`--session`, `--repo`, `--collaboration`) | Pending |
-| 2.7 | Add workflow git/collaboration settings parsing | Pending |
-| 2.8 | Session management commands (`stn session list/delete/cleanup`) | Pending |
-| 2.9 | E2E tests for sequential continuation | Pending |
-| 2.10 | E2E tests for parallel branches + merge | Pending |
+| 2.4 | Add session lock manager for sequential mode | Done |
+| 2.5 | Wire into `executeWithAgenticHarness()` | Done |
+| 2.6 | Add real-time streaming with full identifiers | Done |
+| 2.7 | Add CLI flags (`--session`, `--repo`, `--collaboration`) | Pending |
+| 2.8 | Add workflow git/collaboration settings parsing | Pending |
+| 2.9 | Session management commands (`stn session list/delete/cleanup`) | Pending |
+| 2.10 | E2E tests for sequential continuation | Pending |
+| 2.11 | E2E tests for parallel branches + merge | Pending |
 
 ### Success Criteria (Phase 2)
 
@@ -611,6 +612,169 @@ RUN = Single agent execution
 - [ ] **Workflow integration**: `git.collaboration` setting propagates to steps
 - [ ] **CLI commands**: `stn session list/delete/cleanup` work correctly
 - [ ] **Lock recovery**: Stale locks (crashed runs) auto-expire after timeout
+- [x] **Real-time streaming**: Events streamed with full ownership identifiers
+
+## Phase 2.6: Real-Time Streaming (COMPLETE)
+
+### Overview
+
+The streaming system enables real-time visibility into agent execution, similar to Claude Code/OpenCode. Events are published to NATS and can be consumed by Lighthouse for forwarding to CloudShip platform.
+
+### Architecture
+
+```
+AgenticExecutor.runLoop()
+    │
+    ├─► run_start ──────────► StreamEvent
+    │
+    ├─► For each step:
+    │   ├─► tool_start ─────► StreamEvent
+    │   ├─► tool_result ────► StreamEvent
+    │   └─► step_complete ──► StreamEvent
+    │
+    └─► run_complete ───────► StreamEvent
+            │
+            ▼
+    NATS: station.{station_id}.run.{run_uuid}.stream
+            │
+            ▼
+    Lighthouse StreamConsumer (future)
+            │
+            ▼
+    CloudShip Platform → WebSocket → Browser UI
+```
+
+### Stream Event Structure
+
+Every event contains full ownership identifiers for correlation:
+
+```go
+type Event struct {
+    // Ownership identifiers - who does this stream belong to?
+    StationRunID  string    // Local DB ID (e.g., "123")
+    RunUUID       string    // CloudShip's unique run identifier
+    WorkflowRunID string    // Workflow run ID (when in workflow context)
+    SessionID     string    // Session ID for workspace persistence
+    AgentID       string    // Agent ID (e.g., "agent-1")
+    AgentName     string    // Human-readable agent name
+    StationID     string    // Station identifier
+    
+    // Event metadata
+    Seq           int64     // Sequence number within the stream
+    Timestamp     time.Time // Event timestamp
+    Type          EventType // Event type
+    Data          any       // Event payload
+}
+```
+
+### Event Types
+
+| Type | Data Structure | When Emitted |
+|------|----------------|--------------|
+| `run_start` | `RunStartData{AgentID, AgentName, Task, MaxSteps}` | Execution begins |
+| `tool_start` | `ToolStartData{ToolName, ToolID, Input}` | Before tool execution |
+| `tool_result` | `ToolResultData{ToolName, ToolID, Output, DurationMs, Error}` | After tool execution |
+| `step_complete` | `StepCompleteData{StepNumber, TotalTokens, InputTokens, OutputTokens, FinishReason}` | After each LLM step |
+| `run_complete` | `RunCompleteData{Success, TotalSteps, TotalTokens, DurationMs, FinishReason, Error}` | Execution ends |
+| `token` | `TokenData{Content, Done}` | Streaming tokens (future) |
+| `thinking` | `ThinkingData{Content}` | Extended thinking content (future) |
+| `error` | `{error: string}` | Error occurred |
+
+### Correlation Matrix
+
+Different systems use different identifiers to correlate streams:
+
+| System | Uses | Purpose |
+|--------|------|---------|
+| CloudShip Platform | `run_uuid` | Correlate with their runs table |
+| Station Local DB | `station_run_id` | Correlate with agent_runs table |
+| Workflows | `workflow_run_id` | Group steps in same workflow |
+| Sessions | `session_id` | Resume work in same workspace |
+| Lighthouse | `station_id` + `run_uuid` | Route to correct station |
+| NATS Subject | `station_id` + `run_uuid` | Message routing |
+
+### NATS Subject Pattern
+
+```
+station.{station_id}.run.{run_uuid}.stream
+```
+
+Subscription patterns:
+- All streams from a station: `station.my-station.run.*.stream`
+- Specific run: `station.my-station.run.abc-123.stream`
+- All stations: `station.*.run.*.stream`
+
+### Configuration
+
+```yaml
+harness:
+  streaming:
+    enabled: true
+```
+
+### Publisher Implementations
+
+| Publisher | Use Case |
+|-----------|----------|
+| `ChannelPublisher` | Local/testing - publishes to Go channel |
+| `NATSPublisher` | Production - publishes to NATS (with optional JetStream) |
+| `MultiPublisher` | Combine multiple publishers |
+| `NoOpPublisher` | Disabled streaming |
+
+### Component Structure
+
+```
+pkg/harness/stream/
+├── publisher.go       # Event types, StreamContext, Publisher interface
+└── nats_publisher.go  # NATS/JetStream publisher implementation
+```
+
+### Usage in Executor
+
+```go
+// ExecuteOptions includes all stream identifiers
+execOpts := harness.ExecuteOptions{
+    StationRunID:  fmt.Sprintf("%d", agent.ID),
+    RunUUID:       runUUID,
+    WorkflowRunID: workflowRunID,
+    SessionID:     workflowRunID,
+    AgentName:     agent.Name,
+    StationID:     stationID,
+}
+
+// Publisher is configured via option
+executor := harness.NewAgenticExecutor(
+    genkitApp,
+    harnessConfig,
+    agentHarnessConfig,
+    harness.WithStreamPublisher(natsPublisher),
+)
+
+// Execute with streaming
+result, err := executor.ExecuteWithOptions(ctx, agentID, task, tools, execOpts)
+```
+
+### Example Event Sequence
+
+```json
+{"station_run_id":"123","run_uuid":"abc-def","workflow_run_id":"wf-001","agent_id":"5","agent_name":"code-analyzer","station_id":"stn-xyz","seq":1,"type":"run_start","data":{"agent_id":"5","agent_name":"code-analyzer","task":"Analyze main.go","max_steps":50}}
+
+{"station_run_id":"123","run_uuid":"abc-def","workflow_run_id":"wf-001","agent_id":"5","agent_name":"code-analyzer","station_id":"stn-xyz","seq":2,"type":"tool_start","data":{"tool_name":"read","tool_id":"read-123","input":{"path":"main.go"}}}
+
+{"station_run_id":"123","run_uuid":"abc-def","workflow_run_id":"wf-001","agent_id":"5","agent_name":"code-analyzer","station_id":"stn-xyz","seq":3,"type":"tool_result","data":{"tool_name":"read","tool_id":"read-123","output":"package main...","duration_ms":5}}
+
+{"station_run_id":"123","run_uuid":"abc-def","workflow_run_id":"wf-001","agent_id":"5","agent_name":"code-analyzer","station_id":"stn-xyz","seq":4,"type":"step_complete","data":{"step_number":1,"total_tokens":1500,"input_tokens":1000,"output_tokens":500,"finish_reason":"tool_use"}}
+
+{"station_run_id":"123","run_uuid":"abc-def","workflow_run_id":"wf-001","agent_id":"5","agent_name":"code-analyzer","station_id":"stn-xyz","seq":5,"type":"run_complete","data":{"success":true,"total_steps":3,"total_tokens":4500,"duration_ms":12000,"finish_reason":"agent_done"}}
+```
+
+### Future Work
+
+- [ ] Lighthouse StreamConsumer to forward events to CloudShip
+- [ ] Token-by-token streaming for real-time UI updates
+- [ ] Extended thinking content streaming
+- [ ] WebSocket adapter for direct browser connections
+- [ ] Stream replay from NATS JetStream
 
 ## References
 

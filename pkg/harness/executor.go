@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	"station/pkg/harness/stream"
+
 	"github.com/firebase/genkit/go/ai"
 	"github.com/firebase/genkit/go/genkit"
 	"go.opentelemetry.io/otel"
@@ -37,6 +39,8 @@ type AgenticExecutor struct {
 	promptBuilder *PromptBuilder
 	modelName     string
 	systemPrompt  string
+	streamCtx     *stream.StreamContext
+	publisher     stream.Publisher
 }
 
 type ExecutorOption func(*AgenticExecutor)
@@ -77,6 +81,12 @@ func WithSystemPrompt(systemPrompt string) ExecutorOption {
 	}
 }
 
+func WithStreamPublisher(publisher stream.Publisher) ExecutorOption {
+	return func(e *AgenticExecutor) {
+		e.publisher = publisher
+	}
+}
+
 func NewAgenticExecutor(
 	genkitApp *genkit.Genkit,
 	config *HarnessConfig,
@@ -109,11 +119,30 @@ func NewAgenticExecutor(
 	return e
 }
 
+type ExecuteOptions struct {
+	StationRunID  string
+	RunUUID       string
+	WorkflowRunID string
+	SessionID     string
+	AgentName     string
+	StationID     string
+}
+
 func (e *AgenticExecutor) Execute(
 	ctx context.Context,
 	agentID string,
 	task string,
 	tools []ai.Tool,
+) (*ExecutionResult, error) {
+	return e.ExecuteWithOptions(ctx, agentID, task, tools, ExecuteOptions{})
+}
+
+func (e *AgenticExecutor) ExecuteWithOptions(
+	ctx context.Context,
+	agentID string,
+	task string,
+	tools []ai.Tool,
+	opts ExecuteOptions,
 ) (*ExecutionResult, error) {
 	ctx, span := tracer.Start(ctx, "agent_execution",
 		trace.WithAttributes(
@@ -126,16 +155,20 @@ func (e *AgenticExecutor) Execute(
 
 	startTime := time.Now()
 
+	e.initializeStreaming(ctx, agentID, task, opts, span)
+
 	setupCtx, setupSpan := tracer.Start(ctx, "harness_setup")
 	if err := e.setup(setupCtx, agentID, task); err != nil {
 		setupSpan.RecordError(err)
 		setupSpan.End()
-		return &ExecutionResult{
+		result := &ExecutionResult{
 			Success:      false,
 			Error:        fmt.Sprintf("setup failed: %v", err),
 			FinishReason: "setup_error",
 			Duration:     time.Since(startTime),
-		}, err
+		}
+		e.emitRunComplete(ctx, result, err)
+		return result, err
 	}
 	setupSpan.End()
 
@@ -163,7 +196,64 @@ func (e *AgenticExecutor) Execute(
 		attribute.Int64("duration_ms", result.Duration.Milliseconds()),
 	)
 
+	e.emitRunComplete(ctx, result, err)
+
 	return result, err
+}
+
+func (e *AgenticExecutor) initializeStreaming(ctx context.Context, agentID, task string, opts ExecuteOptions, span trace.Span) {
+	if e.publisher == nil {
+		return
+	}
+
+	runUUID := opts.RunUUID
+	if runUUID == "" {
+		runUUID = fmt.Sprintf("%s-%d", agentID, time.Now().UnixNano())
+	}
+
+	agentName := opts.AgentName
+	if agentName == "" {
+		agentName = agentID
+	}
+
+	ids := stream.StreamIdentifiers{
+		StationRunID:  opts.StationRunID,
+		RunUUID:       runUUID,
+		WorkflowRunID: opts.WorkflowRunID,
+		SessionID:     opts.SessionID,
+		AgentID:       agentID,
+		AgentName:     agentName,
+		StationID:     opts.StationID,
+	}
+
+	e.streamCtx = stream.NewStreamContext(ids, e.publisher)
+
+	if err := e.streamCtx.EmitRunStart(ctx, agentID, agentName, task, e.agentConfig.MaxSteps); err != nil {
+		span.RecordError(err)
+	}
+}
+
+func (e *AgenticExecutor) emitRunComplete(ctx context.Context, result *ExecutionResult, err error) {
+	if e.streamCtx != nil {
+		e.streamCtx.EmitRunComplete(ctx, result.Success, result.TotalSteps, result.TotalTokens, result.Duration.Milliseconds(), result.FinishReason, err)
+	}
+}
+
+func (e *AgenticExecutor) emitStepComplete(ctx context.Context, stepNum int, totalTokens int, resp *ai.ModelResponse) {
+	if e.streamCtx == nil {
+		return
+	}
+	inputTokens := 0
+	outputTokens := 0
+	if resp.Usage != nil {
+		inputTokens = resp.Usage.InputTokens
+		outputTokens = resp.Usage.OutputTokens
+	}
+	finishReason := "tool_use"
+	if len(resp.ToolRequests()) == 0 {
+		finishReason = "stop"
+	}
+	e.streamCtx.EmitStepComplete(ctx, stepNum, totalTokens, inputTokens, outputTokens, finishReason)
 }
 
 func (e *AgenticExecutor) setup(ctx context.Context, agentID string, task string) error {
@@ -311,12 +401,12 @@ func (e *AgenticExecutor) runLoop(
 
 		var toolParts []*ai.Part
 		for _, req := range toolReqs {
-			toolResult, err := e.executeTool(stepCtx, req, toolMap)
-			if err != nil {
+			toolResult, toolErr := e.executeTool(stepCtx, req, toolMap)
+			if toolErr != nil {
 				toolParts = append(toolParts, ai.NewToolResponsePart(&ai.ToolResponse{
 					Name:   req.Name,
 					Ref:    req.Ref,
-					Output: map[string]string{"error": err.Error()},
+					Output: map[string]string{"error": toolErr.Error()},
 				}))
 				continue
 			}
@@ -329,6 +419,8 @@ func (e *AgenticExecutor) runLoop(
 
 		history = append(history, resp.Message)
 		history = append(history, ai.NewMessage(ai.RoleTool, nil, toolParts...))
+
+		e.emitStepComplete(stepCtx, step, totalTokens, resp)
 
 		stepSpan.SetAttributes(attribute.Int("tool_count", len(toolReqs)))
 		stepSpan.End()
@@ -355,6 +447,13 @@ func (e *AgenticExecutor) executeTool(
 	)
 	defer span.End()
 
+	toolID := req.Ref
+	if toolID == "" {
+		toolID = fmt.Sprintf("%s-%d", req.Name, time.Now().UnixNano())
+	}
+
+	e.emitToolStart(ctx, req.Name, toolID, req.Input)
+
 	preCtx, preSpan := tracer.Start(ctx, "pre_tool_hook")
 	hookResult, hookMsg := e.hooks.RunPreHooks(preCtx, req)
 	preSpan.SetAttributes(
@@ -365,15 +464,21 @@ func (e *AgenticExecutor) executeTool(
 	switch hookResult {
 	case HookBlock:
 		span.SetAttributes(attribute.Bool("blocked", true))
-		return nil, fmt.Errorf("tool blocked: %s", hookMsg)
+		err := fmt.Errorf("tool blocked: %s", hookMsg)
+		e.emitToolResult(ctx, req.Name, toolID, nil, 0, err)
+		return nil, err
 	case HookInterrupt:
 		span.SetAttributes(attribute.Bool("interrupted", true))
-		return nil, fmt.Errorf("tool requires approval: %s", hookMsg)
+		err := fmt.Errorf("tool requires approval: %s", hookMsg)
+		e.emitToolResult(ctx, req.Name, toolID, nil, 0, err)
+		return nil, err
 	}
 
 	tool, exists := toolMap[req.Name]
 	if !exists {
-		return nil, fmt.Errorf("tool not found: %s", req.Name)
+		err := fmt.Errorf("tool not found: %s", req.Name)
+		e.emitToolResult(ctx, req.Name, toolID, nil, 0, err)
+		return nil, err
 	}
 
 	runCtx, runSpan := tracer.Start(ctx, "tool_run")
@@ -381,11 +486,14 @@ func (e *AgenticExecutor) executeTool(
 
 	output, err := tool.RunRaw(runCtx, req.Input)
 
+	durationMs := time.Since(startTime).Milliseconds()
 	runSpan.SetAttributes(
-		attribute.Int64("duration_ms", time.Since(startTime).Milliseconds()),
+		attribute.Int64("duration_ms", durationMs),
 		attribute.Bool("success", err == nil),
 	)
 	runSpan.End()
+
+	e.emitToolResult(ctx, req.Name, toolID, output, durationMs, err)
 
 	if err != nil {
 		span.RecordError(err)
@@ -399,6 +507,18 @@ func (e *AgenticExecutor) executeTool(
 	e.doomDetector.Record(req.Name, req.Input)
 
 	return output, nil
+}
+
+func (e *AgenticExecutor) emitToolStart(ctx context.Context, toolName, toolID string, input any) {
+	if e.streamCtx != nil {
+		e.streamCtx.EmitToolStart(ctx, toolName, toolID, input)
+	}
+}
+
+func (e *AgenticExecutor) emitToolResult(ctx context.Context, toolName, toolID string, output any, durationMs int64, err error) {
+	if e.streamCtx != nil {
+		e.streamCtx.EmitToolResult(ctx, toolName, toolID, output, durationMs, err)
+	}
 }
 
 type WorkspaceManager interface {
