@@ -15,6 +15,7 @@ type HarnessConfig struct {
 	Git         GitConfig         `yaml:"git" json:"git"`
 	NATS        NATSConfig        `yaml:"nats" json:"nats"`
 	Permissions PermissionsConfig `yaml:"permissions" json:"permissions"`
+	Streaming   StreamingConfig   `yaml:"streaming" json:"streaming"`
 }
 
 // WorkspaceConfig defines workspace settings.
@@ -166,6 +167,10 @@ type PermissionsConfig struct {
 	// Patterns support wildcards: "*" matches any sequence
 	// Example: {"*": "allow", "rm -rf *": "deny", "git push *": "ask"}
 	Bash map[string]string `yaml:"bash" json:"bash"`
+}
+
+type StreamingConfig struct {
+	Enabled bool `yaml:"enabled" json:"enabled"`
 }
 
 // AgentHarnessConfig is per-agent configuration that overrides global settings.

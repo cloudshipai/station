@@ -14,11 +14,17 @@ import (
 	"station/internal/logging"
 	"station/internal/storage"
 	dotprompt "station/pkg/dotprompt"
+	"station/pkg/harness"
+	"station/pkg/harness/git"
+	"station/pkg/harness/stream"
+	"station/pkg/harness/tools"
+	"station/pkg/harness/workspace"
 	"station/pkg/models"
 	"station/pkg/schema"
 	"station/pkg/types"
 
 	"github.com/firebase/genkit/go/ai"
+	"github.com/firebase/genkit/go/genkit"
 	"github.com/firebase/genkit/go/plugins/mcp"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/attribute"
@@ -496,6 +502,11 @@ func (aee *AgentExecutionEngine) ExecuteWithOptions(ctx context.Context, agent *
 		}
 	}
 
+	harnessMode := aee.parseHarnessFromAgent(agent, environment.Name)
+	if harnessMode == "agentic" {
+		logging.Info("Agent %s configured with agentic harness mode", agent.Name)
+	}
+
 	sandboxConfig := aee.parseSandboxConfigFromAgent(agent, environment.Name)
 	toolExecCtx := ExecutionContext{
 		WorkflowRunID:      workflowRunID,
@@ -594,14 +605,19 @@ func (aee *AgentExecutionEngine) ExecuteWithOptions(ctx context.Context, agent *
 		}
 	}
 
-	// Use clean, unified dotprompt.Execute() execution path with context for timeout protection
-	logging.Info("[TOOLS DEBUG] About to call ExecuteAgent with %d mcpTools for agent %s", len(mcpTools), agent.Name)
-	for i, t := range mcpTools {
-		if tool, ok := t.(interface{ Name() string }); ok {
-			logging.Info("[TOOLS DEBUG]   Tool[%d]: %s", i, tool.Name())
+	var response *dotprompt.ExecutionResponse
+
+	if harnessMode == "agentic" {
+		response, err = aee.executeWithAgenticHarness(ctx, agent, genkitApp, mcpTools, task, environment.Name, runUUID, workflowRunID)
+	} else {
+		logging.Info("[TOOLS DEBUG] About to call ExecuteAgent with %d mcpTools for agent %s", len(mcpTools), agent.Name)
+		for i, t := range mcpTools {
+			if tool, ok := t.(interface{ Name() string }); ok {
+				logging.Info("[TOOLS DEBUG]   Tool[%d]: %s", i, tool.Name())
+			}
 		}
+		response, err = executor.ExecuteAgent(ctx, *agent, agentTools, genkitApp, mcpTools, task, logCallback, environment.Name, userVariables)
 	}
-	response, err := executor.ExecuteAgent(ctx, *agent, agentTools, genkitApp, mcpTools, task, logCallback, environment.Name, userVariables)
 
 	// Clean up MCP connections after execution is complete
 	aee.mcpConnManager.CleanupConnections(aee.activeMCPClients)
@@ -1127,6 +1143,17 @@ type latticeFrontmatter struct {
 	Lattice bool `yaml:"lattice"`
 }
 
+type harnessFrontmatter struct {
+	Harness       string                   `yaml:"harness"`
+	HarnessConfig *agentHarnessFrontmatter `yaml:"harness_config"`
+}
+
+type agentHarnessFrontmatter struct {
+	MaxSteps          int    `yaml:"max_steps"`
+	DoomLoopThreshold int    `yaml:"doom_loop_threshold"`
+	Timeout           string `yaml:"timeout"`
+}
+
 func (aee *AgentExecutionEngine) parseLatticeEnabledFromAgent(agent *models.Agent) bool {
 	if agent == nil {
 		return false
@@ -1254,4 +1281,239 @@ func (aee *AgentExecutionEngine) parseCodingConfigFromAgent(agent *models.Agent,
 	}
 
 	return fm.Coding
+}
+
+func (aee *AgentExecutionEngine) parseHarnessFromAgent(agent *models.Agent, environmentName string) string {
+	fm := aee.parseFullHarnessFrontmatter(agent, environmentName)
+	if fm == nil {
+		return ""
+	}
+	return fm.Harness
+}
+
+func (aee *AgentExecutionEngine) parseFullHarnessFrontmatter(agent *models.Agent, environmentName string) *harnessFrontmatter {
+	promptPath := config.GetAgentPromptPath(environmentName, agent.Name)
+
+	content, err := os.ReadFile(promptPath)
+	if err != nil {
+		logging.Debug("Failed to read dotprompt file for harness config: %v", err)
+		return nil
+	}
+
+	parts := strings.Split(string(content), "---")
+	if len(parts) < 3 {
+		return nil
+	}
+
+	yamlContent := strings.TrimSpace(parts[1])
+	if yamlContent == "" {
+		return nil
+	}
+
+	var fm harnessFrontmatter
+	if err := yaml.Unmarshal([]byte(yamlContent), &fm); err != nil {
+		logging.Debug("Failed to parse harness config from dotprompt: %v", err)
+		return nil
+	}
+
+	return &fm
+}
+
+func (aee *AgentExecutionEngine) buildAgentHarnessConfig(fm *harnessFrontmatter) *harness.AgentHarnessConfig {
+	cfg := harness.DefaultAgentHarnessConfig()
+
+	if fm == nil || fm.HarnessConfig == nil {
+		return cfg
+	}
+
+	if fm.HarnessConfig.MaxSteps > 0 {
+		cfg.MaxSteps = fm.HarnessConfig.MaxSteps
+	}
+	if fm.HarnessConfig.DoomLoopThreshold > 0 {
+		cfg.DoomLoopThreshold = fm.HarnessConfig.DoomLoopThreshold
+	}
+	if fm.HarnessConfig.Timeout != "" {
+		if d, err := time.ParseDuration(fm.HarnessConfig.Timeout); err == nil {
+			cfg.Timeout = d
+		}
+	}
+
+	return cfg
+}
+
+// convertConfigToHarnessConfig converts internal config.HarnessConfig to harness.HarnessConfig
+func convertConfigToHarnessConfig(cfg config.HarnessConfig) *harness.HarnessConfig {
+	return &harness.HarnessConfig{
+		Workspace: harness.WorkspaceConfig{
+			Path: cfg.Workspace.Path,
+			Mode: cfg.Workspace.Mode,
+		},
+		Compaction: harness.CompactionConfig{
+			Enabled:       cfg.Compaction.Enabled,
+			Threshold:     cfg.Compaction.Threshold,
+			ProtectTokens: cfg.Compaction.ProtectTokens,
+		},
+		Git: harness.GitConfig{
+			AutoBranch:             cfg.Git.AutoBranch,
+			BranchPrefix:           cfg.Git.BranchPrefix,
+			AutoCommit:             cfg.Git.AutoCommit,
+			RequireApproval:        cfg.Git.RequireApproval,
+			WorkflowBranchStrategy: cfg.Git.WorkflowBranchStrategy,
+		},
+		NATS: harness.NATSConfig{
+			Enabled:      cfg.NATS.Enabled,
+			KVBucket:     cfg.NATS.KVBucket,
+			ObjectBucket: cfg.NATS.ObjectBucket,
+			MaxFileSize:  cfg.NATS.MaxFileSize,
+			TTL:          cfg.NATS.TTL,
+		},
+		Permissions: harness.PermissionsConfig{
+			ExternalDirectory: cfg.Permissions.ExternalDirectory,
+			Bash:              cfg.Permissions.Bash,
+		},
+	}
+}
+
+func convertHarnessResultToExecutionResponse(result *harness.ExecutionResult, modelName string) *dotprompt.ExecutionResponse {
+	return &dotprompt.ExecutionResponse{
+		Success:   result.Success,
+		Response:  result.Response,
+		Duration:  result.Duration,
+		ModelName: modelName,
+		StepsUsed: result.TotalSteps,
+		TokenUsage: map[string]interface{}{
+			"total_tokens": result.TotalTokens,
+		},
+		Error: result.Error,
+	}
+}
+
+func (aee *AgentExecutionEngine) executeWithAgenticHarness(
+	ctx context.Context,
+	agent *models.Agent,
+	genkitApp *genkit.Genkit,
+	mcpTools []ai.ToolRef,
+	task string,
+	environmentName string,
+	runUUID string,
+	workflowRunID string,
+) (*dotprompt.ExecutionResponse, error) {
+	startTime := time.Now()
+
+	loadedConfig := config.GetLoadedConfig()
+	harnessConfig := convertConfigToHarnessConfig(loadedConfig.Harness)
+
+	harnessFM := aee.parseFullHarnessFrontmatter(agent, environmentName)
+	agentHarnessConfig := aee.buildAgentHarnessConfig(harnessFM)
+
+	workspacePath := harnessConfig.Workspace.Path
+	if workspacePath == "" {
+		workspacePath = "./workspace"
+	}
+
+	ws := workspace.NewHostWorkspace(workspacePath)
+	if err := ws.Initialize(ctx); err != nil {
+		return &dotprompt.ExecutionResponse{
+			Success:  false,
+			Error:    fmt.Sprintf("workspace initialization failed: %v", err),
+			Duration: time.Since(startTime),
+		}, err
+	}
+
+	toolRegistry := tools.NewToolRegistry(genkitApp, workspacePath)
+	if err := toolRegistry.RegisterBuiltinTools(); err != nil {
+		return &dotprompt.ExecutionResponse{
+			Success:  false,
+			Error:    fmt.Sprintf("tool registration failed: %v", err),
+			Duration: time.Since(startTime),
+		}, err
+	}
+
+	allTools := toolRegistry.All()
+
+	for _, toolRef := range mcpTools {
+		if tool, ok := toolRef.(ai.Tool); ok {
+			allTools = append(allTools, tool)
+		}
+	}
+
+	modelName := loadedConfig.AIModel
+	if modelName == "" {
+		modelName = "openai/gpt-4o-mini"
+	}
+
+	executorOpts := []harness.ExecutorOption{
+		harness.WithWorkspace(ws),
+		harness.WithModelName(modelName),
+	}
+
+	if harnessConfig.Git.AutoBranch {
+		gitMgr := git.NewManager(workspacePath, git.WithBranchPrefix(harnessConfig.Git.BranchPrefix))
+		if gitMgr.IsGitRepo(ctx) {
+			executorOpts = append(executorOpts, harness.WithGitManager(gitMgr))
+			logging.Info("Git integration enabled for agent %s (auto_branch=%v, auto_commit=%v)",
+				agent.Name, harnessConfig.Git.AutoBranch, harnessConfig.Git.AutoCommit)
+		}
+	}
+
+	if harnessConfig.Compaction.Enabled {
+		contextWindow := 128000
+		compactor := harness.NewCompactor(genkitApp, modelName, harnessConfig.Compaction, contextWindow)
+		executorOpts = append(executorOpts, harness.WithCompactor(compactor))
+		logging.Info("Context compaction enabled for agent %s (threshold=%.0f%%, protect=%d tokens)",
+			agent.Name, harnessConfig.Compaction.Threshold*100, harnessConfig.Compaction.ProtectTokens)
+	}
+
+	streamPublisher := aee.getStreamPublisher(harnessConfig)
+	if streamPublisher != nil {
+		executorOpts = append(executorOpts, harness.WithStreamPublisher(streamPublisher))
+		logging.Info("Stream publisher enabled for agent %s", agent.Name)
+	}
+
+	agenticExecutor := harness.NewAgenticExecutor(
+		genkitApp,
+		harnessConfig,
+		agentHarnessConfig,
+		executorOpts...,
+	)
+
+	logging.Info("Executing agent %s with agentic harness (max_steps=%d, doom_threshold=%d, timeout=%v, tools=%d)",
+		agent.Name, agentHarnessConfig.MaxSteps, agentHarnessConfig.DoomLoopThreshold, agentHarnessConfig.Timeout, len(allTools))
+
+	stationID := ""
+	if loadedConfig.CloudShip.StationID != "" {
+		stationID = loadedConfig.CloudShip.StationID
+	} else if loadedConfig.Lattice.StationID != "" {
+		stationID = loadedConfig.Lattice.StationID
+	}
+
+	execOpts := harness.ExecuteOptions{
+		StationRunID:  fmt.Sprintf("%d", agent.ID),
+		RunUUID:       runUUID,
+		WorkflowRunID: workflowRunID,
+		SessionID:     workflowRunID,
+		AgentName:     agent.Name,
+		StationID:     stationID,
+	}
+	result, err := agenticExecutor.ExecuteWithOptions(ctx, fmt.Sprintf("%d", agent.ID), task, allTools, execOpts)
+	if err != nil {
+		logging.Error("Agentic harness execution failed: %v", err)
+		return &dotprompt.ExecutionResponse{
+			Success:  false,
+			Error:    err.Error(),
+			Duration: time.Since(startTime),
+		}, err
+	}
+
+	logging.Info("Agentic harness execution completed: success=%v, steps=%d, tokens=%d, finish=%s",
+		result.Success, result.TotalSteps, result.TotalTokens, result.FinishReason)
+
+	return convertHarnessResultToExecutionResponse(result, modelName), nil
+}
+
+func (aee *AgentExecutionEngine) getStreamPublisher(cfg *harness.HarnessConfig) stream.Publisher {
+	if cfg == nil || !cfg.Streaming.Enabled {
+		return nil
+	}
+	return stream.NewChannelPublisher(100)
 }
