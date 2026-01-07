@@ -424,7 +424,6 @@ Deploy using either:
 Supported targets:
   fly        - Fly.io (builds Docker image, persistent storage)
   kubernetes - Kubernetes (generates manifests with Kustomize)
-  nomad      - HashiCorp Nomad (generates job spec)
   ansible    - Ansible (generates playbook for Docker + SSH deployment)
   cloudflare - [EXPERIMENTAL] Cloudflare Containers
 
@@ -439,7 +438,7 @@ The deployed instance exposes agents via MCP for public access.`,
 		Example: `  # Bundle-based deploy (no local environment needed)
   stn deploy --bundle-id e26b414a-f076-4135-927f-810bc1dc892a --target k8s
   stn deploy --bundle-id e26b414a-f076-4135-927f-810bc1dc892a --target fly
-  stn deploy --bundle-id e26b414a-f076-4135-927f-810bc1dc892a --name my-station --target nomad
+  stn deploy --bundle-id e26b414a-f076-4135-927f-810bc1dc892a --name my-station --target ansible
 
   # Local bundle file deploy
   stn deploy --bundle ./my-bundle.tar.gz --target fly
@@ -456,10 +455,6 @@ The deployed instance exposes agents via MCP for public access.`,
   stn deploy my-env --target k8s --dry-run          # Preview only
   stn deploy my-env --target k8s --context my-ctx   # Use specific context
 
-  # Nomad
-  stn deploy my-env --target nomad                  # Deploy to Nomad
-  stn deploy my-env --target nomad --namespace prod # Specify namespace
-
   # Ansible (SSH + Docker)
   stn deploy my-env --target ansible --dry-run      # Generate playbook
   stn deploy my-env --target ansible                # Run playbook
@@ -467,7 +462,6 @@ The deployed instance exposes agents via MCP for public access.`,
   # With secrets from external store
   stn deploy my-env --target k8s --secrets-from aws-secretsmanager://station-prod
   stn deploy my-env --target fly --secrets-from vault://secret/data/station/prod
-  stn deploy my-env --target nomad --secrets-from aws-ssm:///station/prod/
   stn deploy my-env --target ansible --secrets-from sops://./secrets.enc.yaml`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: runDeploy,

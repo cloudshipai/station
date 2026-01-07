@@ -177,14 +177,11 @@ func HandleDeploy(ctx context.Context, envName, target, region, sleepAfter, inst
 	case "kubernetes", "k8s":
 		return deployToKubernetes(ctx, envName, aiConfig, cloudShipConfig, envConfig, externalSecrets, namespace, k8sContext, outputDir, dryRun)
 
-	case "nomad":
-		return deployToNomad(ctx, envName, aiConfig, cloudShipConfig, envConfig, externalSecrets, namespace, outputDir, dryRun)
-
 	case "ansible":
 		return deployToAnsible(ctx, envName, aiConfig, cloudShipConfig, envConfig, externalSecrets, outputDir, dryRun)
 
 	default:
-		return fmt.Errorf("unsupported deployment target: %s (supported: fly, kubernetes, nomad, ansible, cloudflare)", target)
+		return fmt.Errorf("unsupported deployment target: %s (supported: fly, kubernetes, ansible, cloudflare)", target)
 	}
 }
 
@@ -257,9 +254,6 @@ func handleBundleDeploy(ctx context.Context, bundleID, appName, target, region, 
 	case "kubernetes", "k8s":
 		return deployBundleToKubernetes(ctx, bundleID, resolvedAppName, aiConfig, cloudShipConfig, bundleEnvConfig, externalSecrets, namespace, k8sContext, outputDir, dryRun)
 
-	case "nomad":
-		return deployBundleToNomad(ctx, bundleID, resolvedAppName, aiConfig, cloudShipConfig, bundleEnvConfig, externalSecrets, namespace, outputDir, dryRun)
-
 	case "ansible":
 		return deployBundleToAnsible(ctx, bundleID, resolvedAppName, aiConfig, cloudShipConfig, bundleEnvConfig, externalSecrets, outputDir, dryRun)
 
@@ -267,7 +261,7 @@ func handleBundleDeploy(ctx context.Context, bundleID, appName, target, region, 
 		return fmt.Errorf("cloudflare target does not support --bundle-id (bundles are already built into the workflow)")
 
 	default:
-		return fmt.Errorf("unsupported deployment target: %s (supported: fly, kubernetes, nomad, ansible)", target)
+		return fmt.Errorf("unsupported deployment target: %s (supported: fly, kubernetes, ansible)", target)
 	}
 }
 
@@ -1205,46 +1199,6 @@ func deployToKubernetes(ctx context.Context, envName string, aiConfig *Deploymen
 	return target.Deploy(ctx, deployConfig, secrets, options)
 }
 
-func deployToNomad(ctx context.Context, envName string, aiConfig *DeploymentAIConfig, cloudShipConfig *DeploymentCloudShipConfig, envConfig *EnvironmentConfig, externalSecrets map[string]string, namespace, outputDir string, dryRun bool) error {
-	fmt.Printf("📦 Deploying to Nomad...\n\n")
-
-	target, ok := deployment.GetDeploymentTarget("nomad")
-	if !ok {
-		return fmt.Errorf("nomad deployment target not registered")
-	}
-
-	// Skip CLI validation in dry-run mode - only generate configs
-	if !dryRun {
-		if err := target.Validate(ctx); err != nil {
-			return fmt.Errorf("nomad validation failed: %w", err)
-		}
-	}
-
-	imageName, err := buildDeploymentImage(ctx, envName, envConfig, aiConfig)
-	if err != nil {
-		return err
-	}
-
-	deployConfig := &deployment.DeploymentConfig{
-		EnvironmentName:      envName,
-		DockerImage:          imageName,
-		AIProvider:           aiConfig.Provider,
-		AIModel:              aiConfig.Model,
-		EnvironmentVariables: envConfig.Variables,
-		Namespace:            namespace,
-	}
-
-	secrets := buildAllSecrets(aiConfig, cloudShipConfig, envConfig, externalSecrets)
-
-	options := deployment.DeployOptions{
-		DryRun:    dryRun,
-		OutputDir: outputDir,
-		Namespace: namespace,
-	}
-
-	return target.Deploy(ctx, deployConfig, secrets, options)
-}
-
 func deployToAnsible(ctx context.Context, envName string, aiConfig *DeploymentAIConfig, cloudShipConfig *DeploymentCloudShipConfig, envConfig *EnvironmentConfig, externalSecrets map[string]string, outputDir string, dryRun bool) error {
 	fmt.Printf("🔧 Deploying with Ansible...\n\n")
 
@@ -1565,41 +1519,6 @@ func deployBundleToKubernetes(ctx context.Context, bundleID, appName string, aiC
 		OutputDir: outputDir,
 		Namespace: namespace,
 		Context:   k8sContext,
-	}
-
-	return target.Deploy(ctx, deployConfig, secrets, options)
-}
-
-func deployBundleToNomad(ctx context.Context, bundleID, appName string, aiConfig *DeploymentAIConfig, cloudShipConfig *DeploymentCloudShipConfig, envConfig *EnvironmentConfig, externalSecrets map[string]string, namespace, outputDir string, dryRun bool) error {
-	fmt.Printf("📦 Deploying bundle to Nomad...\n\n")
-
-	target, ok := deployment.GetDeploymentTarget("nomad")
-	if !ok {
-		return fmt.Errorf("nomad deployment target not registered")
-	}
-
-	if !dryRun {
-		if err := target.Validate(ctx); err != nil {
-			return fmt.Errorf("nomad validation failed: %w", err)
-		}
-	}
-
-	deployConfig := &deployment.DeploymentConfig{
-		EnvironmentName:      appName,
-		DockerImage:          baseStationImage,
-		AIProvider:           aiConfig.Provider,
-		AIModel:              aiConfig.Model,
-		EnvironmentVariables: envConfig.Variables,
-		Namespace:            namespace,
-	}
-
-	secrets := buildAllSecrets(aiConfig, cloudShipConfig, envConfig, externalSecrets)
-	secrets["STN_BUNDLE_ID"] = bundleID
-
-	options := deployment.DeployOptions{
-		DryRun:    dryRun,
-		OutputDir: outputDir,
-		Namespace: namespace,
 	}
 
 	return target.Deploy(ctx, deployConfig, secrets, options)

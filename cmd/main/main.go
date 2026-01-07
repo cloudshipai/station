@@ -202,7 +202,7 @@ func init() {
 	syncCmd.Flags().BoolP("verbose", "v", false, "Verbose output showing all operations")
 
 	// Deploy command flags
-	deployCmd.Flags().String("target", "fly", "Deployment target (fly, kubernetes, nomad, ansible, cloudflare)")
+	deployCmd.Flags().String("target", "fly", "Deployment target (fly, kubernetes, ansible, cloudflare)")
 	deployCmd.Flags().String("region", "ord", "Deployment region (e.g., ord, syd, fra)")
 	deployCmd.Flags().String("sleep-after", "10m", "Cloudflare: sleep container after inactivity (e.g., 10m, 1h, 24h)")
 	deployCmd.Flags().Bool("auto-stop", false, "Enable auto-stop/suspend when idle (default: always-on for persistent Lighthouse connection)")
@@ -211,7 +211,7 @@ func init() {
 	deployCmd.Flags().Bool("with-opencode", false, "Deploy OpenCode coding backend alongside Station (Fly.io only)")
 	deployCmd.Flags().Bool("with-sandbox", false, "Enable Fly Machines sandbox backend for code execution (Fly.io only)")
 	deployCmd.Flags().String("secrets-from", "", "Secret provider URI (aws-secretsmanager://name, aws-ssm:///path/, vault://path, gcp-secretmanager://name, sops://file.enc.yaml)")
-	deployCmd.Flags().String("namespace", "", "Kubernetes/Nomad namespace (default: default)")
+	deployCmd.Flags().String("namespace", "", "Kubernetes namespace (default: default)")
 	deployCmd.Flags().String("context", "", "Kubernetes context to use")
 	deployCmd.Flags().String("output-dir", "", "Output directory for generated configs")
 	deployCmd.Flags().Bool("dry-run", false, "Generate configs only, don't deploy")
