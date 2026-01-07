@@ -26,7 +26,7 @@ func (s *Server) setupTools() {
 		mcp.WithString("memory_topic", mcp.Description("CloudShip memory topic key for context injection (e.g., 'customer-onboarding', 'incident-response'). Ask the user what topic key they want to use for storing and retrieving context. The agent's prompt should include {{cloudship_memory}} placeholder where context will be injected.")),
 		mcp.WithNumber("memory_max_tokens", mcp.Description("Maximum tokens for memory context injection (default: 2000). Prevents context window overflow by truncating memory content.")),
 		mcp.WithString("sandbox", mcp.Description("Sandbox configuration as JSON. Read 'station://docs/sandbox' for all options. Modes: 'compute' (single execution, default) or 'code' (persistent session). For code mode, use 'session': 'workflow' to share sandbox across workflow steps, or 'agent' (default) for per-agent sessions. Example: {\"mode\": \"code\", \"session\": \"workflow\", \"runtime\": \"python\", \"pip_packages\": [\"pandas\"]}. Full options: mode, session, runtime, image, timeout_seconds, allow_network, pip_packages, npm_packages, limits.")),
-		mcp.WithString("coding", mcp.Description("OpenCode AI coding backend configuration as JSON. Enables coding_open, code, coding_close, coding_commit, coding_push tools. Example: {\"enabled\": true, \"backend\": \"opencode\", \"workspace_path\": \"/tmp/my-project\"}. Options: enabled (bool), backend (\"opencode\"), workspace_path (optional default workspace).")),
+		mcp.WithString("coding", mcp.Description("AI coding backend configuration as JSON. Enables coding_open, code, coding_close, coding_commit, coding_push tools. Backends: 'claudecode' (Claude Code CLI), 'opencode-cli' (OpenCode CLI), 'opencode' (OpenCode HTTP), 'opencode-nats' (NATS). Example: {\"enabled\": true, \"backend\": \"claudecode\"}. Options: enabled (bool), backend (string), workspace_path (optional).")),
 		mcp.WithBoolean("notify", mcp.Description("Enable the notify tool for this agent to send webhook notifications (ntfy, Slack, Discord, etc.). Requires notify webhook to be configured in Station config. Default: false.")),
 	)
 	s.mcpServer.AddTool(createAgentTool, s.handleCreateAgent)
@@ -45,17 +45,17 @@ func (s *Server) setupTools() {
 		mcp.WithString("memory_topic", mcp.Description("CloudShip memory topic key for context injection (e.g., 'customer-onboarding', 'incident-response'). Ask the user what topic key they want to use for storing and retrieving context.")),
 		mcp.WithNumber("memory_max_tokens", mcp.Description("Maximum tokens for memory context injection (default: 2000). Prevents context window overflow.")),
 		mcp.WithString("sandbox", mcp.Description("Sandbox configuration as JSON. Read 'station://docs/sandbox' for all options. For code mode with workflow scoping: {\"mode\": \"code\", \"session\": \"workflow\", \"runtime\": \"python\"}. Set to \"{}\" to remove sandbox. Options: mode (compute/code), session (workflow/agent), runtime, pip_packages, npm_packages, timeout_seconds, allow_network, limits.")),
-		mcp.WithString("coding", mcp.Description("OpenCode AI coding backend configuration as JSON. Set to \"{}\" to remove. Example: {\"enabled\": true, \"backend\": \"opencode\"}.")),
+		mcp.WithString("coding", mcp.Description("AI coding backend configuration as JSON. Set to \"{}\" to remove. Backends: 'claudecode' (Claude Code CLI), 'opencode-cli', 'opencode', 'opencode-nats'. Example: {\"enabled\": true, \"backend\": \"claudecode\"}.")),
 		mcp.WithBoolean("notify", mcp.Description("Enable/disable the notify tool for this agent. Set to true to enable webhook notifications, false to disable.")),
 	)
 	s.mcpServer.AddTool(updateAgentTool, s.handleUpdateAgent)
 
 	// Agent execution tool with advanced options
 	callAgentTool := mcp.NewTool("call_agent",
-		mcp.WithDescription("Execute an AI agent with advanced options and monitoring"),
+		mcp.WithDescription("Execute an AI agent with advanced options and monitoring. RECOMMENDED: Use async=true to avoid timeouts on long-running tasks."),
 		mcp.WithString("agent_id", mcp.Required(), mcp.Description("ID of the agent to execute")),
 		mcp.WithString("task", mcp.Required(), mcp.Description("Task or input to provide to the agent")),
-		mcp.WithBoolean("async", mcp.Description("Execute asynchronously and return run ID (default: false)")),
+		mcp.WithBoolean("async", mcp.Description("RECOMMENDED: Execute asynchronously and return run ID immediately. Use this for most agent calls to avoid timeouts. (default: false)")),
 		mcp.WithNumber("timeout", mcp.Description("Execution timeout in seconds (default: 300)")),
 		mcp.WithBoolean("store_run", mcp.Description("Store execution results in runs history (default: true)")),
 		mcp.WithObject("context", mcp.Description("Additional context to provide to the agent")),
@@ -496,9 +496,9 @@ func (s *Server) setupTools() {
 	s.mcpServer.AddTool(rejectWorkflowStepTool, s.handleRejectWorkflowStep)
 
 	syncEnvironmentTool := mcp.NewTool("sync_environment",
-		mcp.WithDescription("Sync an environment to activate MCP servers and agents. Use browser=true for secure variable input via browser UI (recommended for LLM agents to avoid exposing secrets in prompts)."),
+		mcp.WithDescription("Sync an environment to activate MCP servers and agents. PREFERRED: Use browser=true to open browser UI for secure API key entry - this prevents secrets from appearing in LLM context and allows interactive setup of missing variables."),
 		mcp.WithString("environment_name", mcp.Required(), mcp.Description("Name of the environment to sync")),
-		mcp.WithBoolean("browser", mcp.Description("Open browser for secure variable input. User enters secrets directly in browser UI - secrets never appear in LLM context. (default: false)")),
+		mcp.WithBoolean("browser", mcp.Description("RECOMMENDED: Open browser for secure variable input. User enters API keys directly in browser UI - secrets never appear in chat. Set to true when MCP servers need new API keys configured.")),
 		mcp.WithBoolean("dry_run", mcp.Description("Show what would be synced without making changes (default: false)")),
 		mcp.WithBoolean("validate", mcp.Description("Validate configurations only, don't sync (default: false)")),
 	)
