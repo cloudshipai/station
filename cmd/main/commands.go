@@ -422,11 +422,11 @@ Supported targets:
 
 The deployed instance exposes agents via MCP for public access.
 The management UI is disabled by default for security.`,
-		Example: `  stn deploy my-env --target fly                    # Deploy to Fly.io
+		Example: `  stn deploy my-env --target fly                    # Deploy to Fly.io (always-on by default)
+  stn deploy my-env --target fly --auto-stop        # Enable auto-stop/suspend when idle
   stn deploy my-env --target cloudflare             # Deploy to Cloudflare
-  stn deploy my-env --target cf --always-on         # Cloudflare, no sleep
-  stn deploy my-env --target cf --sleep-after 1h    # Sleep after 1 hour
-  stn deploy my-env --target cf --instance-type standard-1  # Bigger container
+  stn deploy my-env --target cf --auto-stop         # Enable sleep when idle
+  stn deploy my-env --target cf --sleep-after 1h    # Sleep after 1 hour (implies --auto-stop)
   stn deploy my-env --target fly --destroy          # Tear down Fly deployment
   stn deploy my-env --target cf --destroy           # Tear down Cloudflare`,
 		Args: cobra.ExactArgs(1),
@@ -1631,18 +1631,18 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	target, _ := cmd.Flags().GetString("target")
 	region, _ := cmd.Flags().GetString("region")
 	sleepAfter, _ := cmd.Flags().GetString("sleep-after")
-	alwaysOn, _ := cmd.Flags().GetBool("always-on")
+	autoStop, _ := cmd.Flags().GetBool("auto-stop")
 	instanceType, _ := cmd.Flags().GetString("instance-type")
 	destroy, _ := cmd.Flags().GetBool("destroy")
 	withOpenCode, _ := cmd.Flags().GetBool("with-opencode")
 	withSandbox, _ := cmd.Flags().GetBool("with-sandbox")
 
-	if alwaysOn {
+	if !autoStop {
 		sleepAfter = "168h"
 	}
 
 	ctx := context.Background()
-	return handlers.HandleDeploy(ctx, envName, target, region, sleepAfter, instanceType, destroy, alwaysOn, withOpenCode, withSandbox)
+	return handlers.HandleDeploy(ctx, envName, target, region, sleepAfter, instanceType, destroy, autoStop, withOpenCode, withSandbox)
 }
 
 // bootstrapGitHubWorkflows creates GitHub Actions workflow files in .github/workflows/

@@ -30,6 +30,22 @@ type DeploymentAIConfig struct {
 	OAuthExpiresAt    int64
 }
 
+// DeploymentCloudShipConfig holds CloudShip configuration for deployment
+type DeploymentCloudShipConfig struct {
+	Enabled         bool
+	RegistrationKey string
+	Name            string
+	Endpoint        string
+	UseTLS          bool
+}
+
+// DeploymentTelemetryConfig holds telemetry configuration for deployment
+type DeploymentTelemetryConfig struct {
+	Enabled  bool
+	Provider string
+	Endpoint string
+}
+
 // EnvironmentConfig holds the loaded environment configuration
 type EnvironmentConfig struct {
 	Name      string
@@ -39,7 +55,7 @@ type EnvironmentConfig struct {
 	Agents    []string
 }
 
-func HandleDeploy(ctx context.Context, envName, target, region, sleepAfter, instanceType string, destroy, alwaysOn, withOpenCode, withSandbox bool) error {
+func HandleDeploy(ctx context.Context, envName, target, region, sleepAfter, instanceType string, destroy, autoStop, withOpenCode, withSandbox bool) error {
 	if envName == "" {
 		return fmt.Errorf("environment name is required")
 	}
@@ -73,6 +89,31 @@ func HandleDeploy(ctx context.Context, envName, target, region, sleepAfter, inst
 	fmt.Printf("   ✓ Model: %s\n", aiConfig.Model)
 	fmt.Printf("   ✓ API Key: %s***\n\n", maskAPIKey(aiConfig.APIKey))
 
+	cloudShipConfig := detectCloudShipConfigForDeployment()
+	if cloudShipConfig != nil {
+		fmt.Printf("☁️  CloudShip Configuration:\n")
+		fmt.Printf("   ✓ Enabled: %v\n", cloudShipConfig.Enabled)
+		fmt.Printf("   ✓ Name: %s\n", cloudShipConfig.Name)
+		fmt.Printf("   ✓ Endpoint: %s\n", cloudShipConfig.Endpoint)
+		fmt.Printf("   ✓ Registration Key: %s***\n\n", maskAPIKey(cloudShipConfig.RegistrationKey))
+	}
+
+	telemetryConfig := detectTelemetryConfigForDeployment()
+	if telemetryConfig != nil && telemetryConfig.Enabled {
+		isLocal := telemetryConfig.Endpoint == "" ||
+			strings.Contains(telemetryConfig.Endpoint, "localhost") ||
+			strings.Contains(telemetryConfig.Endpoint, "127.0.0.1")
+		fmt.Printf("📊 Telemetry Configuration:\n")
+		if isLocal {
+			fmt.Printf("   ✓ Provider: cloudship (auto-configured for deployment)\n")
+			fmt.Printf("   ✓ Endpoint: https://telemetry.cloudshipai.com/v1/traces\n")
+			fmt.Printf("   ℹ️  Local endpoint '%s' replaced for cloud deployment\n\n", telemetryConfig.Endpoint)
+		} else {
+			fmt.Printf("   ✓ Provider: %s\n", telemetryConfig.Provider)
+			fmt.Printf("   ✓ Endpoint: %s\n\n", telemetryConfig.Endpoint)
+		}
+	}
+
 	// Step 2: Load environment configuration
 	envConfig, err := loadEnvironmentConfig(envName)
 	if err != nil {
@@ -91,7 +132,7 @@ func HandleDeploy(ctx context.Context, envName, target, region, sleepAfter, inst
 		if err != nil {
 			return err
 		}
-		return deployToFly(ctx, envName, aiConfig, envConfig, imageName, region, alwaysOn, withOpenCode, withSandbox)
+		return deployToFly(ctx, envName, aiConfig, cloudShipConfig, envConfig, imageName, region, autoStop, withOpenCode, withSandbox)
 	case "cloudflare", "cf", "cloudflare-containers":
 		if withOpenCode || withSandbox {
 			return fmt.Errorf("--with-opencode and --with-sandbox are only supported for Fly.io deployments")
@@ -217,6 +258,42 @@ func currentTimeMs() int64 {
 	return time.Now().UnixMilli()
 }
 
+func detectCloudShipConfigForDeployment() *DeploymentCloudShipConfig {
+	cfg, err := config.Load()
+	if err != nil {
+		return nil
+	}
+
+	if !cfg.CloudShip.Enabled {
+		return nil
+	}
+
+	if cfg.CloudShip.RegistrationKey == "" {
+		return nil
+	}
+
+	return &DeploymentCloudShipConfig{
+		Enabled:         cfg.CloudShip.Enabled,
+		RegistrationKey: cfg.CloudShip.RegistrationKey,
+		Name:            cfg.CloudShip.Name,
+		Endpoint:        cfg.CloudShip.Endpoint,
+		UseTLS:          cfg.CloudShip.UseTLS,
+	}
+}
+
+func detectTelemetryConfigForDeployment() *DeploymentTelemetryConfig {
+	cfg, err := config.Load()
+	if err != nil {
+		return nil
+	}
+
+	return &DeploymentTelemetryConfig{
+		Enabled:  cfg.Telemetry.Enabled,
+		Provider: string(cfg.Telemetry.Provider),
+		Endpoint: cfg.Telemetry.Endpoint,
+	}
+}
+
 // loadEnvironmentConfig loads the environment directory and parses its contents
 func loadEnvironmentConfig(envName string) (*EnvironmentConfig, error) {
 	// Get Station config directory
@@ -304,12 +381,11 @@ func buildDeploymentImage(ctx context.Context, envName string, envConfig *Enviro
 	return imageName, nil
 }
 
-// deployToFly deploys the image to Fly.io
-func deployToFly(ctx context.Context, envName string, aiConfig *DeploymentAIConfig, envConfig *EnvironmentConfig, imageName, region string, alwaysOn, withOpenCode, withSandbox bool) error {
-	if alwaysOn {
-		fmt.Printf("🚢 Deploying to Fly.io (always-on mode)...\n\n")
-	} else {
+func deployToFly(ctx context.Context, envName string, aiConfig *DeploymentAIConfig, cloudShipConfig *DeploymentCloudShipConfig, envConfig *EnvironmentConfig, imageName, region string, autoStop, withOpenCode, withSandbox bool) error {
+	if autoStop {
 		fmt.Printf("🚢 Deploying to Fly.io (auto-stop enabled)...\n\n")
+	} else {
+		fmt.Printf("🚢 Deploying to Fly.io (always-on mode)...\n\n")
 	}
 
 	// Check if fly CLI is installed
@@ -322,11 +398,11 @@ func deployToFly(ctx context.Context, envName string, aiConfig *DeploymentAIConf
 		EnvironmentName:      envName,
 		DockerImage:          imageName,
 		APIPort:              "8585",
-		MCPPort:              "8586", // MCP server port (HTTP SSE transport)
+		MCPPort:              "8586",
 		AIProvider:           aiConfig.Provider,
 		AIModel:              aiConfig.Model,
 		FlyRegion:            region,
-		FlyAlwaysOn:          alwaysOn,
+		FlyAlwaysOn:          !autoStop,
 		EnvironmentVariables: envConfig.Variables,
 	}
 
@@ -359,7 +435,7 @@ func deployToFly(ctx context.Context, envName string, aiConfig *DeploymentAIConf
 	}
 
 	// Set Fly secrets (AFTER app creation)
-	secrets, err := buildFlySecrets(aiConfig, envConfig)
+	secrets, err := buildFlySecrets(aiConfig, cloudShipConfig, envConfig)
 	if err != nil {
 		return fmt.Errorf("failed to build secrets: %w", err)
 	}
@@ -676,15 +752,14 @@ func deployToCloudflare(ctx context.Context, envName string, aiConfig *Deploymen
 	fmt.Printf("   - Bundle downloaded on container wake (cached after first)\n")
 	fmt.Printf("   - Container sleeps after %s of inactivity\n", sleepAfter)
 	if sleepAfter == "168h" {
-		fmt.Printf("   - Always-on mode enabled (--always-on)\n")
+		fmt.Printf("   - Always-on mode (default, use --auto-stop to enable suspend)\n")
 	}
 	fmt.Printf("   - To change: wrangler deploy with updated wrangler.toml\n\n")
 
 	return nil
 }
 
-// buildFlySecrets creates the secrets map for Fly.io
-func buildFlySecrets(aiConfig *DeploymentAIConfig, envConfig *EnvironmentConfig) (map[string]string, error) {
+func buildFlySecrets(aiConfig *DeploymentAIConfig, cloudShipConfig *DeploymentCloudShipConfig, envConfig *EnvironmentConfig) (map[string]string, error) {
 	secrets := make(map[string]string)
 
 	encryptionKey, err := generateEncryptionKey()
@@ -703,8 +778,6 @@ func buildFlySecrets(aiConfig *DeploymentAIConfig, envConfig *EnvironmentConfig)
 		secrets["STN_AI_OAUTH_EXPIRES_AT"] = fmt.Sprintf("%d", aiConfig.OAuthExpiresAt)
 	} else {
 		secrets["STN_AI_API_KEY"] = aiConfig.APIKey
-		// Also set provider-specific env var for backwards compatibility with released images
-		// Released image (v0.23.x) only checks provider-specific env vars for auto-init
 		switch strings.ToLower(aiConfig.Provider) {
 		case "openai":
 			secrets["OPENAI_API_KEY"] = aiConfig.APIKey
@@ -722,6 +795,40 @@ func buildFlySecrets(aiConfig *DeploymentAIConfig, envConfig *EnvironmentConfig)
 			secrets["FIREWORKS_API_KEY"] = aiConfig.APIKey
 		case "ollama":
 			secrets["OLLAMA_BASE_URL"] = "http://localhost:11434"
+		}
+	}
+
+	if cloudShipConfig != nil && cloudShipConfig.Enabled {
+		secrets["STN_CLOUDSHIP_ENABLED"] = "true"
+		secrets["STN_CLOUDSHIP_KEY"] = cloudShipConfig.RegistrationKey
+		if cloudShipConfig.Name != "" {
+			secrets["STN_CLOUDSHIP_NAME"] = cloudShipConfig.Name
+		}
+		if cloudShipConfig.Endpoint != "" {
+			secrets["STN_CLOUDSHIP_ENDPOINT"] = cloudShipConfig.Endpoint
+		}
+		if cloudShipConfig.UseTLS {
+			secrets["STN_CLOUDSHIP_USE_TLS"] = "true"
+		} else {
+			secrets["STN_CLOUDSHIP_USE_TLS"] = "false"
+		}
+	}
+
+	telemetryConfig := detectTelemetryConfigForDeployment()
+	if telemetryConfig != nil {
+		isLocalEndpoint := telemetryConfig.Endpoint == "" ||
+			strings.Contains(telemetryConfig.Endpoint, "localhost") ||
+			strings.Contains(telemetryConfig.Endpoint, "127.0.0.1")
+
+		if isLocalEndpoint {
+			secrets["STN_TELEMETRY_PROVIDER"] = "cloudship"
+			secrets["STN_TELEMETRY_ENDPOINT"] = "https://telemetry.cloudshipai.com/v1/traces"
+		} else {
+			secrets["STN_TELEMETRY_PROVIDER"] = telemetryConfig.Provider
+			secrets["STN_TELEMETRY_ENDPOINT"] = telemetryConfig.Endpoint
+		}
+		if telemetryConfig.Enabled {
+			secrets["STN_TELEMETRY_ENABLED"] = "true"
 		}
 	}
 
