@@ -58,7 +58,7 @@ type EnvironmentConfig struct {
 	Agents    []string
 }
 
-func HandleDeploy(ctx context.Context, envName, target, region, sleepAfter, instanceType string, destroy, autoStop, withOpenCode, withSandbox bool, secretsFrom, namespace, k8sContext, outputDir string, dryRun bool, bundleID, appName string, hosts []string, sshKey, sshUser string) error {
+func HandleDeploy(ctx context.Context, envName, target, region, sleepAfter, instanceType string, destroy, autoStop, withOpenCode, withSandbox bool, secretsFrom, namespace, k8sContext, outputDir string, dryRun bool, bundleID, appName string, hosts []string, sshKey, sshUser, bundlePath string) error {
 	if target == "" {
 		target = "fly"
 	}
@@ -178,7 +178,7 @@ func HandleDeploy(ctx context.Context, envName, target, region, sleepAfter, inst
 		return deployToKubernetes(ctx, envName, aiConfig, cloudShipConfig, envConfig, externalSecrets, namespace, k8sContext, outputDir, dryRun)
 
 	case "ansible":
-		return deployToAnsible(ctx, envName, aiConfig, cloudShipConfig, envConfig, externalSecrets, outputDir, dryRun, hosts, sshKey, sshUser)
+		return deployToAnsible(ctx, envName, aiConfig, cloudShipConfig, envConfig, externalSecrets, outputDir, dryRun, hosts, sshKey, sshUser, bundlePath)
 
 	default:
 		return fmt.Errorf("unsupported deployment target: %s (supported: fly, kubernetes, ansible, cloudflare)", target)
@@ -1199,7 +1199,7 @@ func deployToKubernetes(ctx context.Context, envName string, aiConfig *Deploymen
 	return target.Deploy(ctx, deployConfig, secrets, options)
 }
 
-func deployToAnsible(ctx context.Context, envName string, aiConfig *DeploymentAIConfig, cloudShipConfig *DeploymentCloudShipConfig, envConfig *EnvironmentConfig, externalSecrets map[string]string, outputDir string, dryRun bool, hosts []string, sshKey, sshUser string) error {
+func deployToAnsible(ctx context.Context, envName string, aiConfig *DeploymentAIConfig, cloudShipConfig *DeploymentCloudShipConfig, envConfig *EnvironmentConfig, externalSecrets map[string]string, outputDir string, dryRun bool, hosts []string, sshKey, sshUser, bundlePath string) error {
 	fmt.Printf("🔧 Deploying with Ansible...\n\n")
 
 	target, ok := deployment.GetDeploymentTarget("ansible")
@@ -1224,11 +1224,12 @@ func deployToAnsible(ctx context.Context, envName string, aiConfig *DeploymentAI
 	secrets := buildAllSecrets(aiConfig, cloudShipConfig, envConfig, externalSecrets)
 
 	options := deployment.DeployOptions{
-		DryRun:    dryRun,
-		OutputDir: outputDir,
-		Hosts:     hosts,
-		SSHKey:    sshKey,
-		SSHUser:   sshUser,
+		DryRun:     dryRun,
+		OutputDir:  outputDir,
+		Hosts:      hosts,
+		SSHKey:     sshKey,
+		SSHUser:    sshUser,
+		BundlePath: bundlePath,
 	}
 
 	return target.Deploy(ctx, deployConfig, secrets, options)

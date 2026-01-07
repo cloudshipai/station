@@ -36,9 +36,9 @@ func (a *AnsibleTarget) GenerateConfigWithOptions(ctx context.Context, config *d
 	appName := fmt.Sprintf("station-%s", config.EnvironmentName)
 
 	files["inventory.ini"] = a.generateInventory(options)
-	files["playbook.yml"] = a.generatePlaybook(appName, config)
-	files["vars/main.yml"] = a.generateVars(appName, config, secrets)
-	files["templates/docker-compose.yml.j2"] = a.generateDockerComposeTemplate(appName, config)
+	files["playbook.yml"] = a.generatePlaybook(appName, config, options)
+	files["vars/main.yml"] = a.generateVars(appName, config, secrets, options)
+	files["templates/docker-compose.yml.j2"] = a.generateDockerComposeTemplate(appName, config, options)
 	files["templates/station.service.j2"] = a.generateSystemdTemplate(appName)
 
 	return files, nil
@@ -190,7 +190,28 @@ func (a *AnsibleTarget) generateInventory(options deployment.DeployOptions) stri
 	return sb.String()
 }
 
-func (a *AnsibleTarget) generatePlaybook(appName string, config *deployment.DeploymentConfig) string {
+func (a *AnsibleTarget) generatePlaybook(appName string, config *deployment.DeploymentConfig, options deployment.DeployOptions) string {
+	bundleCopyTask := ""
+	if options.BundlePath != "" {
+		bundleCopyTask = `
+    - name: Create Station bundle directory
+      file:
+        path: "{{ station_bundle_dir }}"
+        state: directory
+        mode: '0755'
+        owner: '1000'
+        group: '1000'
+
+    - name: Copy bundle file to remote host
+      copy:
+        src: "{{ station_bundle_src }}"
+        dest: "{{ station_bundle_dir }}/bundle.tar.gz"
+        mode: '0644'
+        owner: '1000'
+        group: '1000'
+`
+	}
+
 	return fmt.Sprintf(`---
 - name: Deploy Station %s
   hosts: station_servers
@@ -235,16 +256,7 @@ func (a *AnsibleTarget) generatePlaybook(appName string, config *deployment.Depl
         mode: '0755'
         owner: '1000'
         group: '1000'
-
-    - name: Create Station bundle directory
-      file:
-        path: "{{ station_bundle_dir }}"
-        state: directory
-        mode: '0755'
-        owner: '1000'
-        group: '1000'
-      when: station_bundle_dir is defined
-
+%s
     - name: Copy docker-compose file
       template:
         src: templates/docker-compose.yml.j2
@@ -302,13 +314,20 @@ func (a *AnsibleTarget) generatePlaybook(appName string, config *deployment.Depl
         name: station-{{ station_name }}
         state: restarted
       when: station_state != "absent"
-`, appName)
+`, appName, bundleCopyTask)
 }
 
-func (a *AnsibleTarget) generateVars(appName string, config *deployment.DeploymentConfig, secrets map[string]string) string {
+func (a *AnsibleTarget) generateVars(appName string, config *deployment.DeploymentConfig, secrets map[string]string, options deployment.DeployOptions) string {
 	var secretVars strings.Builder
 	for key, value := range secrets {
 		secretVars.WriteString(fmt.Sprintf("  %s: %q\n", key, value))
+	}
+
+	bundleVars := ""
+	if options.BundlePath != "" {
+		bundleVars = fmt.Sprintf(`station_bundle_dir: /opt/station/%s/bundle
+station_bundle_src: %s
+`, appName, options.BundlePath)
 	}
 
 	return fmt.Sprintf(`---
@@ -317,16 +336,32 @@ station_image: %s
 station_install_dir: /opt/station/%s
 station_data_dir: /opt/station/%s/data
 station_state: present
-
+%s
 station_mcp_port: 8586
 station_dynamic_mcp_port: 8587
 
 station_env:
 %s
-`, appName, config.DockerImage, appName, appName, secretVars.String())
+`, appName, config.DockerImage, appName, appName, bundleVars, secretVars.String())
 }
 
-func (a *AnsibleTarget) generateDockerComposeTemplate(appName string, config *deployment.DeploymentConfig) string {
+func (a *AnsibleTarget) generateDockerComposeTemplate(appName string, config *deployment.DeploymentConfig, options deployment.DeployOptions) string {
+	bundleVolume := ""
+	bundleCommand := ""
+	if options.BundlePath != "" {
+		bundleVolume = `
+      - {{ station_bundle_dir }}:/bundles:ro`
+		bundleCommand = `
+    command: >
+      sh -c "
+        if [ -f /bundles/bundle.tar.gz ]; then
+          echo 'Installing bundle from /bundles/bundle.tar.gz...' &&
+          stn bundle install /bundles/bundle.tar.gz default --force 2>/dev/null || true
+        fi &&
+        exec stn serve
+      "`
+	}
+
 	return fmt.Sprintf(`services:
   station:
     image: {{ station_image }}
@@ -340,17 +375,14 @@ func (a *AnsibleTarget) generateDockerComposeTemplate(appName string, config *de
       - {{ key }}={{ value }}
 {%% endfor %%}
     volumes:
-      - {{ station_data_dir }}:/home/station/.config/station
-{%% if station_bundle_dir is defined %%}
-      - {{ station_bundle_dir }}:/home/station/.config/station/environments/default
-{%% endif %%}
+      - {{ station_data_dir }}:/home/station/.config/station%s%s
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8587/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
-`, appName)
+`, appName, bundleVolume, bundleCommand)
 }
 
 func (a *AnsibleTarget) generateSystemdTemplate(appName string) string {

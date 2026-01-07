@@ -43,6 +43,7 @@ type DeployOptions struct {
 	Hosts        []string          // Target hosts for Ansible (user@host format)
 	SSHKey       string            // SSH private key path for Ansible
 	SSHUser      string            // SSH user for Ansible (default: root)
+	BundlePath   string            // Local bundle file to copy to remote host
 }
 
 // DeploymentStatus represents the current state of a deployment

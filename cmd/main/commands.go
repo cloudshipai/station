@@ -1713,7 +1713,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	}
 
 	ctx := context.Background()
-	return handlers.HandleDeploy(ctx, envName, target, region, sleepAfter, instanceType, destroy, autoStop, withOpenCode, withSandbox, secretsFrom, namespace, k8sContext, outputDir, dryRun, bundleID, appName, hosts, sshKey, sshUser)
+	return handlers.HandleDeploy(ctx, envName, target, region, sleepAfter, instanceType, destroy, autoStop, withOpenCode, withSandbox, secretsFrom, namespace, k8sContext, outputDir, dryRun, bundleID, appName, hosts, sshKey, sshUser, "")
 }
 
 func deployLocalBundle(cmd *cobra.Command, bundlePath, target, region, sleepAfter, instanceType string, destroy, autoStop, withOpenCode, withSandbox bool, secretsFrom, namespace, k8sContext, outputDir string, dryRun bool, appName string, hosts []string, sshKey, sshUser string) error {
@@ -1754,7 +1754,7 @@ func deployLocalBundle(cmd *cobra.Command, bundlePath, target, region, sleepAfte
 	}
 
 	ctx := context.Background()
-	return handlers.HandleDeploy(ctx, tempEnvName, target, region, sleepAfter, instanceType, destroy, autoStop, withOpenCode, withSandbox, secretsFrom, namespace, k8sContext, outputDir, dryRun, "", appName, hosts, sshKey, sshUser)
+	return handlers.HandleDeploy(ctx, tempEnvName, target, region, sleepAfter, instanceType, destroy, autoStop, withOpenCode, withSandbox, secretsFrom, namespace, k8sContext, outputDir, dryRun, "", appName, hosts, sshKey, sshUser, bundlePath)
 }
 
 // bootstrapGitHubWorkflows creates GitHub Actions workflow files in .github/workflows/
