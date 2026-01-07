@@ -45,11 +45,18 @@ Features:
 • Support for custom providers (Anthropic, Ollama, local models)
 • Optional database replication setup with Litestream
 • Ship CLI integration for instant filesystem MCP tools
+• Lattice mesh network for multi-station agent orchestration
 
 Use --provider and --model flags to skip interactive setup.
 Use --yes flag to use sensible defaults without any prompts.
 Use --replicate flag to also configure Litestream for database replication to cloud storage.
-Use --ship flag to bootstrap with ship CLI MCP integration for filesystem access.`,
+Use --ship flag to bootstrap with ship CLI MCP integration for filesystem access.
+
+Lattice Configuration:
+  --lattice-url         Join an existing lattice mesh (e.g., nats://orchestrator:4222)
+  --lattice-orchestrator  Run as orchestrator with embedded NATS server
+  --lattice-name        Station name in the mesh (default: hostname)
+  --lattice-token       Authentication token for NATS`,
 		RunE: runInit,
 	}
 
@@ -907,6 +914,58 @@ func runInit(cmd *cobra.Command, args []string) error {
 		viper.Set("otel_endpoint", otelEndpoint)
 		fmt.Printf("📊 OpenTelemetry integration enabled\n")
 		fmt.Printf("   OTLP Endpoint: %s\n", otelEndpoint)
+	}
+
+	// Set Lattice configuration
+	latticeURL, _ := cmd.Flags().GetString("lattice-url")
+	latticeName, _ := cmd.Flags().GetString("lattice-name")
+	latticeOrchestrator, _ := cmd.Flags().GetBool("lattice-orchestrator")
+	latticePort, _ := cmd.Flags().GetInt("lattice-port")
+	latticeToken, _ := cmd.Flags().GetString("lattice-token")
+
+	// Check environment variables as fallback
+	if latticeURL == "" {
+		latticeURL = os.Getenv("STN_LATTICE_NATS_URL")
+	}
+	if latticeName == "" {
+		latticeName = os.Getenv("STN_LATTICE_STATION_NAME")
+	}
+	if latticeToken == "" {
+		latticeToken = os.Getenv("STN_LATTICE_AUTH_TOKEN")
+	}
+
+	// Default station name to hostname
+	if latticeName == "" {
+		if hostname, err := os.Hostname(); err == nil {
+			latticeName = hostname
+		} else {
+			latticeName = "station"
+		}
+	}
+
+	if latticeOrchestrator || latticeURL != "" {
+		viper.Set("lattice.station_name", latticeName)
+
+		if latticeOrchestrator {
+			viper.Set("lattice_orchestration", true)
+			viper.Set("lattice.orchestrator.embedded_nats.port", latticePort)
+			viper.Set("lattice.orchestrator.embedded_nats.http_port", latticePort+4000)
+			if latticeToken != "" {
+				viper.Set("lattice.orchestrator.embedded_nats.auth.enabled", true)
+				viper.Set("lattice.orchestrator.embedded_nats.auth.token", latticeToken)
+			}
+			fmt.Printf("🔗 Lattice orchestrator mode enabled\n")
+			fmt.Printf("   NATS Port: %d\n", latticePort)
+			fmt.Printf("   Station Name: %s\n", latticeName)
+		} else if latticeURL != "" {
+			viper.Set("lattice.nats.url", latticeURL)
+			if latticeToken != "" {
+				viper.Set("lattice.nats.auth.token", latticeToken)
+			}
+			fmt.Printf("🔗 Lattice client mode enabled\n")
+			fmt.Printf("   NATS URL: %s\n", latticeURL)
+			fmt.Printf("   Station Name: %s\n", latticeName)
+		}
 	}
 
 	// Generate encryption key if not already present

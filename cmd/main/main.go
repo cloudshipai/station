@@ -145,6 +145,11 @@ func init() {
 	initCmd.Flags().String("cloudship-endpoint", "lighthouse.cloudship.ai:443", "CloudShip Lighthouse gRPC endpoint")
 	initCmd.Flags().String("otel-endpoint", "", "OpenTelemetry OTLP endpoint for telemetry export (e.g., http://localhost:4318)")
 	initCmd.Flags().Bool("telemetry", false, "Enable telemetry collection and export (default: false)")
+	initCmd.Flags().String("lattice-url", "", "NATS URL to join a lattice mesh (e.g., nats://orchestrator:4222)")
+	initCmd.Flags().String("lattice-name", "", "Station name in the lattice mesh (defaults to hostname)")
+	initCmd.Flags().Bool("lattice-orchestrator", false, "Run as lattice orchestrator with embedded NATS server")
+	initCmd.Flags().Int("lattice-port", 4222, "NATS port for embedded orchestrator (default: 4222)")
+	initCmd.Flags().String("lattice-token", "", "Authentication token for lattice NATS (for both client and embedded server)")
 
 	// Serve command flags
 	serveCmd.Flags().Int("ssh-port", 2222, "SSH server port")

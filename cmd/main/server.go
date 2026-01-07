@@ -325,6 +325,9 @@ func runMainServer() error {
 
 	latticeOrchestration := viper.GetBool("lattice_orchestration")
 	latticeURL := viper.GetString("lattice_url")
+	if latticeURL == "" {
+		latticeURL = cfg.Lattice.NATS.URL
+	}
 
 	if latticeOrchestration || latticeURL != "" {
 		log.Printf("🔗 Initializing Station Lattice mesh network...")
@@ -354,8 +357,15 @@ func runMainServer() error {
 		}
 
 		if natsURL != "" {
+			stationName := cfg.Lattice.StationName
+			if stationName == "" {
+				stationName = cfg.CloudShip.Name
+			}
+			if stationName == "" {
+				stationName = "station"
+			}
 			latticeCfg := config.LatticeConfig{
-				StationName: cfg.CloudShip.Name,
+				StationName: stationName,
 				NATS: config.LatticeNATSConfig{
 					URL: natsURL,
 				},

@@ -37,11 +37,12 @@ var ConfigSections = []ConfigSection{
 	{Name: "ai", Description: "AI Provider Settings", Order: 1},
 	{Name: "coding", Description: "Coding Backend Settings", Order: 2},
 	{Name: "cloudship", Description: "CloudShip Integration", Order: 3},
-	{Name: "telemetry", Description: "Telemetry & Observability", Order: 4},
-	{Name: "sandbox", Description: "Sandbox Execution", Order: 5},
-	{Name: "webhook", Description: "Webhook Settings", Order: 6},
-	{Name: "notifications", Description: "Notification Settings", Order: 7},
-	{Name: "server", Description: "Server & Port Settings", Order: 8},
+	{Name: "lattice", Description: "Lattice Mesh Network", Order: 4},
+	{Name: "telemetry", Description: "Telemetry & Observability", Order: 5},
+	{Name: "sandbox", Description: "Sandbox Execution", Order: 6},
+	{Name: "webhook", Description: "Webhook Settings", Order: 7},
+	{Name: "notifications", Description: "Notification Settings", Order: 8},
+	{Name: "server", Description: "Server & Port Settings", Order: 9},
 }
 
 var ConfigSchema = []ConfigField{
@@ -91,6 +92,18 @@ var ConfigSchema = []ConfigField{
 	{Key: "cloudship.use_tls", Type: FieldTypeBool, Description: "Use TLS for gRPC connection", Default: true, Section: "cloudship"},
 	{Key: "cloudship.name", Type: FieldTypeString, Description: "Station name (unique across org)", Section: "cloudship"},
 	{Key: "cloudship.tags", Type: FieldTypeStringSlice, Description: "Station tags for filtering", Section: "cloudship"},
+
+	// Lattice Mesh Settings
+	{Key: "lattice.station_name", Type: FieldTypeString, Description: "Station name in the lattice mesh", Section: "lattice"},
+	{Key: "lattice.nats.url", Type: FieldTypeString, Description: "NATS URL to join lattice (e.g., nats://orchestrator:4222)", Section: "lattice"},
+	{Key: "lattice.nats.auth.token", Type: FieldTypeString, Description: "NATS authentication token", Secret: true, Section: "lattice"},
+	{Key: "lattice.nats.auth.user", Type: FieldTypeString, Description: "NATS username", Section: "lattice"},
+	{Key: "lattice.nats.auth.password", Type: FieldTypeString, Description: "NATS password", Secret: true, Section: "lattice"},
+	{Key: "lattice_orchestration", Type: FieldTypeBool, Description: "Run as lattice orchestrator with embedded NATS", Default: false, Section: "lattice"},
+	{Key: "lattice.orchestrator.embedded_nats.port", Type: FieldTypeInt, Description: "Embedded NATS port", Default: 4222, Section: "lattice"},
+	{Key: "lattice.orchestrator.embedded_nats.http_port", Type: FieldTypeInt, Description: "Embedded NATS monitoring port", Default: 8222, Section: "lattice"},
+	{Key: "lattice.orchestrator.embedded_nats.auth.enabled", Type: FieldTypeBool, Description: "Enable auth for embedded NATS", Default: false, Section: "lattice"},
+	{Key: "lattice.orchestrator.embedded_nats.auth.token", Type: FieldTypeString, Description: "Auth token for embedded NATS", Secret: true, Section: "lattice"},
 
 	// Telemetry Settings
 	{Key: "telemetry.enabled", Type: FieldTypeBool, Description: "Enable telemetry/tracing", Default: true, Section: "telemetry"},

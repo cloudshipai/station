@@ -1,87 +1,151 @@
 # Lattice Lab Example
 
-Example files for deploying Station Lattice across VMs using Vagrant and Ansible.
+Example files for deploying Station Lattice across multiple environments.
 
-## Deployment Modes
-
-### Mode 1: Embedded NATS (Default)
-Orchestrator runs embedded NATS server. Simplest setup.
-
-### Mode 2: Centralized NATS
-Separate NATS server, all stations connect as clients. Better for production.
-
-## Prerequisites
-
-- Vagrant with libvirt or VirtualBox provider
-- Ansible
-- Station CLI (`stn`)
-
-## Quick Start (Embedded NATS)
+## Quick Start
 
 ```bash
-cd vagrant
-vagrant up orchestrator member1
-
-cd ../ansible-orchestrator
-ansible-playbook -i inventory.ini playbook.yml
-
-cd ../ansible-member
-ansible-playbook -i inventory.ini playbook.yml
-
-stn lattice --nats nats://192.168.56.10:4222 agents
+# Fastest way - local Docker E2E
+cd e2e-local
+cp .env.example .env  # Edit with your credentials
+docker compose up -d
+stn lattice --nats "nats://${NATS_AUTH_TOKEN}@localhost:14222" agents
 ```
 
-## Quick Start (Centralized NATS)
+## Full Tutorial
 
-```bash
-cd vagrant
-vagrant up nats orchestrator member1
+See **[docs/LATTICE_LAB.md](../../docs/LATTICE_LAB.md)** for the complete 9-lab tutorial.
 
-cd ../ansible-nats
-ansible-playbook -i inventory.ini playbook.yml
-
-cd ../ansible-orchestrator-centralized
-ansible-playbook -i inventory.ini playbook.yml
-
-cd ../ansible-member
-ansible-playbook -i inventory.ini playbook.yml
-
-stn lattice --nats nats://192.168.56.9:4222 agents
-```
-
-## Files
+## Directory Structure
 
 ```
 lattice-lab/
-├── vagrant/
-│   └── Vagrantfile                    # VM definitions (nats, orchestrator, member1, member2)
-├── ansible-nats/                      # Standalone NATS server
+├── README.md                           # This file
+├── agents/                             # Lab agent prompts
+│   ├── echo-agent.prompt               # Simple echo test
+│   ├── math-agent.prompt               # Calculations
+│   ├── time-agent.prompt               # Time queries  
+│   ├── joke-agent.prompt               # Programming humor
+│   └── sysinfo-agent.prompt            # Station info
+│
+├── e2e-local/                          # Lab 9: Docker E2E (easiest)
+│   ├── .env.example                    # Required variables template
+│   ├── .gitignore                      # Excludes .env (secrets)
+│   ├── docker-compose.yml              # NATS + Station containers
+│   └── README.md                       # Detailed instructions
+│
+├── vagrant/                            # VM definitions
+│   └── Vagrantfile                     # nats, orchestrator, member1, member2
+│
+├── ansible-nats/                       # Lab 8: Standalone NATS server
 │   ├── inventory.ini
 │   ├── playbook.yml
-│   ├── vars/main.yml
-│   ├── vars/main-with-auth.yml        # Auth enabled config
+│   ├── vars/main.yml                   # NATS config
+│   ├── vars/main-with-auth.yml         # Auth enabled config
 │   └── templates/
 │       ├── nats.conf.j2
 │       └── docker-compose.yml.j2
-├── ansible-orchestrator/              # Embedded NATS mode
+│
+├── ansible-orchestrator/               # Embedded NATS mode
 │   ├── inventory.ini
 │   ├── playbook.yml
 │   ├── vars/main.yml
 │   └── templates/docker-compose.yml.j2
-├── ansible-orchestrator-centralized/  # External NATS mode
+│
+├── ansible-orchestrator-centralized/   # External NATS mode
 │   ├── inventory.ini
 │   ├── playbook.yml
 │   ├── vars/main.yml
 │   ├── files/config.yaml
 │   └── templates/docker-compose.yml.j2
-└── ansible-member/
+│
+└── ansible-member/                     # Member station
     ├── inventory.ini
     ├── playbook.yml
     ├── vars/main.yml
     └── templates/docker-compose.yml.j2
 ```
 
-## IP Addresses
+## Deployment Modes
+
+### Mode 1: Embedded NATS (Simple)
+
+Orchestrator runs embedded NATS server. Best for small deployments.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                                                              │
+│  ┌───────────────────────────────┐     ┌─────────────────┐  │
+│  │ Orchestrator                  │     │ Member 1        │  │
+│  │ • Embedded NATS :4222         │◄────│ • Your agents   │  │
+│  │ • Station agents              │     └─────────────────┘  │
+│  └───────────────────────────────┘                          │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Mode 2: Centralized NATS (Production)
+
+Separate NATS server, all stations connect as clients.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                                                              │
+│               ┌─────────────────────┐                       │
+│               │ NATS Server         │                       │
+│               │ :4222 (JetStream)   │                       │
+│               └──────────┬──────────┘                       │
+│                          │                                   │
+│          ┌───────────────┼───────────────┐                  │
+│          │               │               │                  │
+│  ┌───────▼───────┐ ┌─────▼─────┐ ┌──────▼──────┐           │
+│  │ Orchestrator  │ │ Member 1  │ │ Member 2    │           │
+│  │ sysinfo, echo │ │ math      │ │ time, joke  │           │
+│  └───────────────┘ └───────────┘ └─────────────┘           │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## Lab Agents
+
+| Agent | Purpose | Station Assignment |
+|-------|---------|-------------------|
+| `echo-agent` | Echo test for connectivity | Orchestrator |
+| `sysinfo-agent` | Station/lattice status | Orchestrator |
+| `math-agent` | Mathematical calculations | Compute |
+| `time-agent` | Time queries | Utility |
+| `joke-agent` | Programming humor | Utility |
+
+## Configuration
+
+### Required Variables
+
+Run `stn deploy export-vars default --target ansible` to see all needed variables.
+
+Key variables:
+- `STN_AI_PROVIDER` / `STN_AI_API_KEY` - AI provider credentials
+- `STN_LATTICE_NATS_URL` - NATS connection URL (for members)
+- `STN_LATTICE_STATION_NAME` - Unique station name
+- `POSTHOG_API_KEY`, etc. - MCP server credentials (if using those agents)
+
+### NATS Authentication
+
+Edit `ansible-nats/vars/main.yml`:
+
+```yaml
+nats_auth_token: "your-secret-token"
+```
+
+Or for user/password:
+```yaml
+nats_users:
+  - user: admin
+    password: admin-secret
+  - user: member
+    password: member-secret
+```
+
+## VM IP Addresses
 
 | VM | IP | Purpose |
 |----|-------|---------|
@@ -90,20 +154,28 @@ lattice-lab/
 | member1 | 192.168.56.11 | Station with agents |
 | member2 | 192.168.56.12 | Additional station (optional) |
 
-## Configuration
+## Commands
 
-Update `vars/main.yml` in each ansible directory with:
+```bash
+# Start VMs
+cd vagrant && vagrant up orchestrator member1
 
-- `STN_AI_PROVIDER` and `STN_AI_API_KEY` or OAuth tokens
-- `STN_CLOUDSHIP_*` if using CloudShip
-- Any MCP server API keys (e.g., `POSTHOG_API_KEY`)
+# Deploy orchestrator
+cd ansible-orchestrator && ansible-playbook -i inventory.ini playbook.yml
 
-For NATS auth, edit `ansible-nats/vars/main.yml`:
-```yaml
-nats_auth_enabled: true
-nats_auth_token: "your-secret-token"
+# Deploy member
+cd ansible-member && ansible-playbook -i inventory.ini playbook.yml
+
+# Test lattice
+stn lattice --nats nats://192.168.56.10:4222 agents
+stn lattice --nats nats://192.168.56.10:4222 agent exec echo-agent "Hello!"
 ```
 
-## Documentation
+## Troubleshooting
 
-See [docs/LATTICE_LAB.md](../../docs/LATTICE_LAB.md) for the full tutorial.
+| Issue | Solution |
+|-------|----------|
+| NATS connection refused | Check port 4222 is open, NATS is running |
+| No agents appearing | Wait 30s for presence heartbeat, check station logs |
+| Auth failed | Verify token/credentials match in NATS and station config |
+| JetStream error | Ensure NATS started with `-js` flag |
