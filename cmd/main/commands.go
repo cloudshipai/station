@@ -1716,18 +1716,38 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	return handlers.HandleDeploy(ctx, envName, target, region, sleepAfter, instanceType, destroy, autoStop, withOpenCode, withSandbox, secretsFrom, namespace, k8sContext, outputDir, dryRun, bundleID, appName, hosts, sshKey, sshUser, "")
 }
 
+func resolveDeployEnvName(customName string, cfg *config.Config, bundlePath string) string {
+	if customName != "" {
+		return customName
+	}
+	if cfg != nil && cfg.CloudShip.Name != "" {
+		return cfg.CloudShip.Name
+	}
+	bundleBaseName := filepath.Base(bundlePath)
+	for _, ext := range []string{".tar.gz", ".tgz", ".tar", ".gz"} {
+		if len(bundleBaseName) > len(ext) && bundleBaseName[len(bundleBaseName)-len(ext):] == ext {
+			bundleBaseName = bundleBaseName[:len(bundleBaseName)-len(ext)]
+			break
+		}
+	}
+	if bundleBaseName == "" {
+		return fmt.Sprintf("deploy-%d", time.Now().Unix())
+	}
+	return bundleBaseName
+}
+
 func deployLocalBundle(cmd *cobra.Command, bundlePath, target, region, sleepAfter, instanceType string, destroy, autoStop, withOpenCode, withSandbox bool, secretsFrom, namespace, k8sContext, outputDir string, dryRun bool, appName string, hosts []string, sshKey, sshUser string) error {
 	if _, err := os.Stat(bundlePath); os.IsNotExist(err) {
 		return fmt.Errorf("bundle file not found: %s", bundlePath)
 	}
 
-	tempEnvName := fmt.Sprintf("deploy-%d", time.Now().Unix())
-	fmt.Printf("📦 Installing bundle to temporary environment: %s\n", tempEnvName)
-
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("failed to load Station config: %w", err)
 	}
+
+	envName := resolveDeployEnvName(appName, cfg, bundlePath)
+	fmt.Printf("📦 Installing bundle to environment: %s\n", envName)
 
 	database, err := db.New(cfg.DatabaseURL)
 	if err != nil {
@@ -1738,7 +1758,7 @@ func deployLocalBundle(cmd *cobra.Command, bundlePath, target, region, sleepAfte
 	repos := repositories.New(database)
 	bundleService := services.NewBundleServiceWithRepos(repos)
 
-	result, err := bundleService.InstallBundleWithOptions(bundlePath, tempEnvName, false)
+	result, err := bundleService.InstallBundleWithOptions(bundlePath, envName, false)
 	if err != nil || !result.Success {
 		errorMsg := result.Error
 		if errorMsg == "" && err != nil {
@@ -1754,7 +1774,7 @@ func deployLocalBundle(cmd *cobra.Command, bundlePath, target, region, sleepAfte
 	}
 
 	ctx := context.Background()
-	return handlers.HandleDeploy(ctx, tempEnvName, target, region, sleepAfter, instanceType, destroy, autoStop, withOpenCode, withSandbox, secretsFrom, namespace, k8sContext, outputDir, dryRun, "", appName, hosts, sshKey, sshUser, bundlePath)
+	return handlers.HandleDeploy(ctx, envName, target, region, sleepAfter, instanceType, destroy, autoStop, withOpenCode, withSandbox, secretsFrom, namespace, k8sContext, outputDir, dryRun, "", appName, hosts, sshKey, sshUser, bundlePath)
 }
 
 // bootstrapGitHubWorkflows creates GitHub Actions workflow files in .github/workflows/
