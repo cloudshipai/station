@@ -3,6 +3,7 @@ package config
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"time"
 
@@ -14,6 +15,8 @@ func (cfg *Config) LoadSecretsFromBackend() error {
 	if cfg.Secrets.Backend == "" {
 		return nil
 	}
+
+	log.Printf("🔐 Loading secrets from backend: %s (path: %s)", cfg.Secrets.Backend, cfg.Secrets.Path)
 
 	provider, ok := deployment.GetSecretProvider(cfg.Secrets.Backend)
 	if !ok {
@@ -56,34 +59,70 @@ func (cfg *Config) LoadSecretsFromBackend() error {
 
 	applySecretsToConfig(cfg, secrets)
 
+	log.Printf("✅ Loaded %d secrets from %s", len(secrets), cfg.Secrets.Backend)
+
 	return nil
 }
 
 func applySecretsToConfig(cfg *Config, secrets map[string]string) {
+	var injectedKeys []string
+
 	if v, ok := secrets["STN_AI_API_KEY"]; ok && v != "" {
 		cfg.AIAPIKey = v
+		injectedKeys = append(injectedKeys, "STN_AI_API_KEY→config")
 	}
 	if v, ok := secrets["OPENAI_API_KEY"]; ok && v != "" && cfg.AIAPIKey == "" {
 		cfg.AIAPIKey = v
+		injectedKeys = append(injectedKeys, "OPENAI_API_KEY→config")
 	}
 	if v, ok := secrets["ANTHROPIC_API_KEY"]; ok && v != "" && cfg.AIAPIKey == "" {
 		cfg.AIAPIKey = v
+		injectedKeys = append(injectedKeys, "ANTHROPIC_API_KEY→config")
 	}
 	if v, ok := secrets["GOOGLE_API_KEY"]; ok && v != "" && cfg.AIAPIKey == "" {
 		cfg.AIAPIKey = v
+		injectedKeys = append(injectedKeys, "GOOGLE_API_KEY→config")
+	}
+
+	if v, ok := secrets["STN_AI_PROVIDER"]; ok && v != "" && cfg.AIProvider == "" {
+		cfg.AIProvider = v
+		injectedKeys = append(injectedKeys, "STN_AI_PROVIDER→config")
+	}
+	if v, ok := secrets["STN_AI_MODEL"]; ok && v != "" && cfg.AIModel == "" {
+		cfg.AIModel = v
+		injectedKeys = append(injectedKeys, "STN_AI_MODEL→config")
+	}
+	if v, ok := secrets["STN_AI_BASE_URL"]; ok && v != "" && cfg.AIBaseURL == "" {
+		cfg.AIBaseURL = v
+		injectedKeys = append(injectedKeys, "STN_AI_BASE_URL→config")
 	}
 
 	if v, ok := secrets["STN_CLOUDSHIP_KEY"]; ok && v != "" {
 		cfg.CloudShip.RegistrationKey = v
+		injectedKeys = append(injectedKeys, "STN_CLOUDSHIP_KEY→config")
 	}
 	if v, ok := secrets["CLOUDSHIP_REGISTRATION_KEY"]; ok && v != "" && cfg.CloudShip.RegistrationKey == "" {
 		cfg.CloudShip.RegistrationKey = v
+		injectedKeys = append(injectedKeys, "CLOUDSHIP_REGISTRATION_KEY→config")
+	}
+	if v, ok := secrets["STN_CLOUDSHIP_ENDPOINT"]; ok && v != "" && cfg.CloudShip.Endpoint == "" {
+		cfg.CloudShip.Endpoint = v
+		injectedKeys = append(injectedKeys, "STN_CLOUDSHIP_ENDPOINT→config")
+	}
+	if v, ok := secrets["STN_CLOUDSHIP_NAME"]; ok && v != "" && cfg.CloudShip.Name == "" {
+		cfg.CloudShip.Name = v
+		injectedKeys = append(injectedKeys, "STN_CLOUDSHIP_NAME→config")
 	}
 
 	for k, v := range secrets {
 		if os.Getenv(k) == "" {
 			os.Setenv(k, v)
+			injectedKeys = append(injectedKeys, k+"→env")
 		}
+	}
+
+	if len(injectedKeys) > 0 {
+		log.Printf("   Injected: %v", injectedKeys)
 	}
 }
 

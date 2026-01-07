@@ -125,6 +125,12 @@ func runMainServer() error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
+	// Load secrets from backend (Vault, AWS SSM, etc.) if configured via STN_SECRETS_BACKEND
+	// This fetches secrets at runtime instead of baking them into K8s Secrets
+	if err := cfg.LoadSecretsFromBackend(); err != nil {
+		return fmt.Errorf("failed to load secrets from backend: %w", err)
+	}
+
 	// Apply smart telemetry defaults based on CloudShip connection status
 	// - With CloudShip registration key: use telemetry.cloudshipai.com
 	// - Without CloudShip: use local Jaeger (localhost:4318)

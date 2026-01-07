@@ -102,6 +102,16 @@ func NewAgentExecutionEngineWithLighthouse(repos *repositories.Repositories, age
 		if cfg.Sandbox.CleanupIntervalMinutes > 0 {
 			codeModeConfig.CleanupInterval = time.Duration(cfg.Sandbox.CleanupIntervalMinutes) * time.Minute
 		}
+		if cfg.Sandbox.DockerImage != "" {
+			codeModeConfig.DefaultImage = cfg.Sandbox.DockerImage
+		}
+		codeModeConfig.RegistryAuth = RegistryAuthConfig{
+			Username:         cfg.Sandbox.RegistryAuth.Username,
+			Password:         cfg.Sandbox.RegistryAuth.Password,
+			IdentityToken:    cfg.Sandbox.RegistryAuth.IdentityToken,
+			ServerAddress:    cfg.Sandbox.RegistryAuth.ServerAddress,
+			DockerConfigPath: cfg.Sandbox.RegistryAuth.DockerConfigPath,
+		}
 	}
 	sandboxService := NewSandboxService(sandboxCfg)
 	var sessionManager *SessionManager

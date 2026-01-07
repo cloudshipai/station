@@ -58,7 +58,7 @@ type EnvironmentConfig struct {
 	Agents    []string
 }
 
-func HandleDeploy(ctx context.Context, envName, target, region, sleepAfter, instanceType string, destroy, autoStop, withOpenCode, withSandbox bool, secretsFrom, namespace, k8sContext, outputDir string, dryRun bool, bundleID, appName string, hosts []string, sshKey, sshUser, bundlePath, envFile, secretsBackend, secretsPath string) error {
+func HandleDeploy(ctx context.Context, envName, target, region, sleepAfter, instanceType string, destroy, autoStop, withOpenCode, withSandbox bool, namespace, k8sContext, outputDir string, dryRun bool, bundleID, appName string, hosts []string, sshKey, sshUser, bundlePath, envFile, secretsBackend, secretsPath string) error {
 	if target == "" {
 		target = "fly"
 	}
@@ -95,7 +95,7 @@ func HandleDeploy(ctx context.Context, envName, target, region, sleepAfter, inst
 
 	if isBundleDeploy {
 		fmt.Printf("🚀 Deploying bundle '%s' to %s (region: %s)\n\n", bundleID, target, region)
-		return handleBundleDeploy(ctx, bundleID, appName, target, region, sleepAfter, instanceType, autoStop, withOpenCode, withSandbox, secretsFrom, namespace, k8sContext, outputDir, dryRun, envFile, runtimeSecrets)
+		return handleBundleDeploy(ctx, bundleID, appName, target, region, sleepAfter, instanceType, autoStop, withOpenCode, withSandbox, namespace, k8sContext, outputDir, dryRun, envFile, runtimeSecrets)
 	}
 
 	fmt.Printf("🚀 Deploying environment '%s' to %s (region: %s)\n\n", envName, target, region)
@@ -146,32 +146,6 @@ func HandleDeploy(ctx context.Context, envName, target, region, sleepAfter, inst
 	fmt.Printf("   ✓ Agents: %d agents\n\n", len(envConfig.Agents))
 
 	externalSecrets := make(map[string]string)
-	if secretsFrom != "" {
-		fmt.Printf("🔐 Fetching secrets from external provider...\n")
-		providerConfig, err := deployment.ParseSecretProviderURI(secretsFrom)
-		if err != nil {
-			return fmt.Errorf("invalid secrets-from URI: %w", err)
-		}
-
-		provider, ok := deployment.GetSecretProvider(providerConfig.Provider)
-		if !ok {
-			return fmt.Errorf("unknown secret provider: %s (supported: aws-secretsmanager, aws-ssm, vault, gcp-secretmanager, sops)", providerConfig.Provider)
-		}
-
-		if err := provider.Validate(ctx); err != nil {
-			return fmt.Errorf("secret provider validation failed: %w", err)
-		}
-
-		externalSecrets, err = provider.GetSecrets(ctx, providerConfig.Path)
-		if err != nil {
-			return fmt.Errorf("failed to fetch secrets: %w", err)
-		}
-
-		fmt.Printf("   ✓ Provider: %s\n", providerConfig.Provider)
-		fmt.Printf("   ✓ Path: %s\n", providerConfig.Path)
-		fmt.Printf("   ✓ Secrets: %d entries\n\n", len(externalSecrets))
-	}
-
 	if envFile != "" {
 		fmt.Printf("🔐 Loading secrets from env file...\n")
 		envFileSecrets, err := parseEnvFile(envFile)
@@ -212,7 +186,7 @@ func HandleDeploy(ctx context.Context, envName, target, region, sleepAfter, inst
 
 const baseStationImage = "ghcr.io/cloudshipai/station:latest"
 
-func handleBundleDeploy(ctx context.Context, bundleID, appName, target, region, sleepAfter, instanceType string, autoStop, withOpenCode, withSandbox bool, secretsFrom, namespace, k8sContext, outputDir string, dryRun bool, envFile string, runtimeSecrets *RuntimeSecretsConfig) error {
+func handleBundleDeploy(ctx context.Context, bundleID, appName, target, region, sleepAfter, instanceType string, autoStop, withOpenCode, withSandbox bool, namespace, k8sContext, outputDir string, dryRun bool, envFile string, runtimeSecrets *RuntimeSecretsConfig) error {
 	aiConfig, err := detectAIConfigForDeployment()
 	if err != nil {
 		return fmt.Errorf("AI configuration error: %w\n\nPlease set the appropriate environment variable for your provider", err)
@@ -246,32 +220,6 @@ func handleBundleDeploy(ctx context.Context, bundleID, appName, target, region, 
 	}
 
 	externalSecrets := make(map[string]string)
-	if secretsFrom != "" {
-		fmt.Printf("🔐 Fetching secrets from external provider...\n")
-		providerConfig, err := deployment.ParseSecretProviderURI(secretsFrom)
-		if err != nil {
-			return fmt.Errorf("invalid secrets-from URI: %w", err)
-		}
-
-		provider, ok := deployment.GetSecretProvider(providerConfig.Provider)
-		if !ok {
-			return fmt.Errorf("unknown secret provider: %s (supported: aws-secretsmanager, aws-ssm, vault, gcp-secretmanager, sops)", providerConfig.Provider)
-		}
-
-		if err := provider.Validate(ctx); err != nil {
-			return fmt.Errorf("secret provider validation failed: %w", err)
-		}
-
-		externalSecrets, err = provider.GetSecrets(ctx, providerConfig.Path)
-		if err != nil {
-			return fmt.Errorf("failed to fetch secrets: %w", err)
-		}
-
-		fmt.Printf("   ✓ Provider: %s\n", providerConfig.Provider)
-		fmt.Printf("   ✓ Path: %s\n", providerConfig.Path)
-		fmt.Printf("   ✓ Secrets: %d entries\n\n", len(externalSecrets))
-	}
-
 	if envFile != "" {
 		fmt.Printf("🔐 Loading secrets from env file...\n")
 		envFileSecrets, err := parseEnvFile(envFile)

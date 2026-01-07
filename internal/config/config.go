@@ -154,15 +154,26 @@ type SecretsConfig struct {
 	LoadedSecrets map[string]string `yaml:"-"`
 }
 
+// SandboxRegistryAuthConfig holds authentication settings for private container registries
+type SandboxRegistryAuthConfig struct {
+	Username         string `yaml:"username"`           // Basic auth username (Docker Hub, self-hosted)
+	Password         string `yaml:"password"`           // Password or access token
+	IdentityToken    string `yaml:"identity_token"`     // OAuth bearer token (ECR, GCR, ACR)
+	ServerAddress    string `yaml:"server_address"`     // Registry server URL (e.g., "ghcr.io", "123456789.dkr.ecr.us-east-1.amazonaws.com")
+	DockerConfigPath string `yaml:"docker_config_path"` // Path to ~/.docker/config.json for credential helpers
+}
+
 // SandboxConfig holds settings for sandbox code execution
 type SandboxConfig struct {
-	Enabled                bool   `yaml:"enabled"`
-	CodeModeEnabled        bool   `yaml:"code_mode_enabled"`
-	IdleTimeoutMinutes     int    `yaml:"idle_timeout_minutes"`
-	CleanupIntervalMinutes int    `yaml:"cleanup_interval_minutes"`
-	OpenCodeEnabled        bool   `yaml:"opencode_enabled"`
-	OpenCodeServerURL      string `yaml:"opencode_server_url"`
-	OpenCodeModel          string `yaml:"opencode_model"`
+	Enabled                bool                      `yaml:"enabled"`
+	CodeModeEnabled        bool                      `yaml:"code_mode_enabled"`
+	IdleTimeoutMinutes     int                       `yaml:"idle_timeout_minutes"`
+	CleanupIntervalMinutes int                       `yaml:"cleanup_interval_minutes"`
+	OpenCodeEnabled        bool                      `yaml:"opencode_enabled"`
+	OpenCodeServerURL      string                    `yaml:"opencode_server_url"`
+	OpenCodeModel          string                    `yaml:"opencode_model"`
+	DockerImage            string                    `yaml:"docker_image"`  // Custom Docker image for sandbox containers
+	RegistryAuth           SandboxRegistryAuthConfig `yaml:"registry_auth"` // Private registry authentication
 }
 
 type CodingConfig struct {
@@ -528,6 +539,12 @@ func bindEnvVars() {
 	viper.BindEnv("sandbox.code_mode_enabled", "STATION_SANDBOX_CODE_MODE_ENABLED", "STN_SANDBOX_CODE_MODE_ENABLED")
 	viper.BindEnv("sandbox.idle_timeout_minutes", "STN_SANDBOX_IDLE_TIMEOUT_MINUTES")
 	viper.BindEnv("sandbox.cleanup_interval_minutes", "STN_SANDBOX_CLEANUP_INTERVAL_MINUTES")
+	viper.BindEnv("sandbox.docker_image", "STN_SANDBOX_DOCKER_IMAGE")
+	viper.BindEnv("sandbox.registry_auth.username", "STN_SANDBOX_REGISTRY_USERNAME")
+	viper.BindEnv("sandbox.registry_auth.password", "STN_SANDBOX_REGISTRY_PASSWORD")
+	viper.BindEnv("sandbox.registry_auth.identity_token", "STN_SANDBOX_REGISTRY_TOKEN")
+	viper.BindEnv("sandbox.registry_auth.server_address", "STN_SANDBOX_REGISTRY_SERVER")
+	viper.BindEnv("sandbox.registry_auth.docker_config_path", "STN_SANDBOX_REGISTRY_CONFIG")
 
 	viper.BindEnv("coding.backend", "STN_CODING_BACKEND")
 	viper.BindEnv("coding.opencode.url", "STN_CODING_OPENCODE_URL")
@@ -870,6 +887,24 @@ func Load() (*Config, error) {
 	}
 	if viper.IsSet("sandbox.cleanup_interval_minutes") {
 		cfg.Sandbox.CleanupIntervalMinutes = viper.GetInt("sandbox.cleanup_interval_minutes")
+	}
+	if viper.IsSet("sandbox.docker_image") {
+		cfg.Sandbox.DockerImage = viper.GetString("sandbox.docker_image")
+	}
+	if viper.IsSet("sandbox.registry_auth.username") {
+		cfg.Sandbox.RegistryAuth.Username = viper.GetString("sandbox.registry_auth.username")
+	}
+	if viper.IsSet("sandbox.registry_auth.password") {
+		cfg.Sandbox.RegistryAuth.Password = viper.GetString("sandbox.registry_auth.password")
+	}
+	if viper.IsSet("sandbox.registry_auth.identity_token") {
+		cfg.Sandbox.RegistryAuth.IdentityToken = viper.GetString("sandbox.registry_auth.identity_token")
+	}
+	if viper.IsSet("sandbox.registry_auth.server_address") {
+		cfg.Sandbox.RegistryAuth.ServerAddress = viper.GetString("sandbox.registry_auth.server_address")
+	}
+	if viper.IsSet("sandbox.registry_auth.docker_config_path") {
+		cfg.Sandbox.RegistryAuth.DockerConfigPath = viper.GetString("sandbox.registry_auth.docker_config_path")
 	}
 
 	// Lattice configuration overrides from config file

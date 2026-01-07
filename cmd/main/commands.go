@@ -423,17 +423,20 @@ Deploy using either:
   3. Local bundle file: stn deploy --bundle ./my-bundle.tar.gz
 
 Supported targets:
-  fly        - Fly.io (builds Docker image, persistent storage)
-  kubernetes - Kubernetes (generates manifests with Kustomize)
+  fly        - Fly.io (uses fly secrets set, persistent storage)
+  kubernetes - Kubernetes (generates manifests, use --secrets-backend for runtime secrets)
   ansible    - Ansible (generates playbook for Docker + SSH deployment)
   cloudflare - [EXPERIMENTAL] Cloudflare Containers
 
-Secret providers (--secrets-from):
-  aws-secretsmanager://secret-name           - AWS Secrets Manager
-  aws-ssm:///station/prod/                   - AWS SSM Parameter Store
-  vault://secret/data/station/prod           - HashiCorp Vault
-  gcp-secretmanager://projects/X/secrets/Y   - Google Secret Manager
-  sops://./secrets.enc.yaml                  - SOPS encrypted file
+Runtime secrets (--secrets-backend):
+  Container fetches secrets at startup from:
+  - aws-secretsmanager  - AWS Secrets Manager
+  - aws-ssm             - AWS SSM Parameter Store
+  - vault               - HashiCorp Vault
+  - gcp-secretmanager   - Google Secret Manager
+  - sops                - SOPS encrypted file
+
+Use 'stn deploy export-vars' to see what secrets are needed for deployment.
 
 The deployed instance exposes agents via MCP for public access.`,
 		Example: `  # Bundle-based deploy (no local environment needed)
@@ -460,15 +463,16 @@ The deployed instance exposes agents via MCP for public access.`,
   stn deploy my-env --target ansible --dry-run      # Generate playbook
   stn deploy my-env --target ansible                # Run playbook
 
-  # With secrets from external store
-  stn deploy my-env --target k8s --secrets-from aws-secretsmanager://station-prod
-  stn deploy my-env --target fly --secrets-from vault://secret/data/station/prod
-  stn deploy my-env --target ansible --secrets-from sops://./secrets.enc.yaml
+  # Runtime secrets (container fetches from backend at startup)
+  stn deploy --bundle-id xxx --target k8s --secrets-backend vault --secrets-path secret/data/station/prod
+  stn deploy --bundle-id xxx --target k8s --secrets-backend aws-secretsmanager --secrets-path station/prod
 
-  # With secrets from .env file (use export-vars to generate template)
-  stn deploy export-vars default --format env > secrets.env  # Generate template
-  # Edit secrets.env to fill in values
-  stn deploy --bundle ./bundle.tar.gz --target k8s --env-file secrets.env`,
+  # See what secrets are needed
+  stn deploy export-vars default                           # For environment
+  stn deploy export-vars --bundle-id xxx                   # For bundle
+
+  # Generate secrets template for CI/CD
+  stn deploy export-vars default --format env > secrets.env`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: runDeploy,
 	}
@@ -1680,7 +1684,6 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	destroy, _ := cmd.Flags().GetBool("destroy")
 	withOpenCode, _ := cmd.Flags().GetBool("with-opencode")
 	withSandbox, _ := cmd.Flags().GetBool("with-sandbox")
-	secretsFrom, _ := cmd.Flags().GetString("secrets-from")
 	namespace, _ := cmd.Flags().GetString("namespace")
 	k8sContext, _ := cmd.Flags().GetString("context")
 	outputDir, _ := cmd.Flags().GetString("output-dir")
@@ -1714,7 +1717,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	}
 
 	if bundlePath != "" {
-		return deployLocalBundle(cmd, bundlePath, target, region, sleepAfter, instanceType, destroy, autoStop, withOpenCode, withSandbox, secretsFrom, namespace, k8sContext, outputDir, dryRun, appName, hosts, sshKey, sshUser, envFile, secretsBackend, secretsPath)
+		return deployLocalBundle(cmd, bundlePath, target, region, sleepAfter, instanceType, destroy, autoStop, withOpenCode, withSandbox, namespace, k8sContext, outputDir, dryRun, appName, hosts, sshKey, sshUser, envFile, secretsBackend, secretsPath)
 	}
 
 	if !autoStop {
@@ -1722,7 +1725,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	}
 
 	ctx := context.Background()
-	return handlers.HandleDeploy(ctx, envName, target, region, sleepAfter, instanceType, destroy, autoStop, withOpenCode, withSandbox, secretsFrom, namespace, k8sContext, outputDir, dryRun, bundleID, appName, hosts, sshKey, sshUser, "", envFile, secretsBackend, secretsPath)
+	return handlers.HandleDeploy(ctx, envName, target, region, sleepAfter, instanceType, destroy, autoStop, withOpenCode, withSandbox, namespace, k8sContext, outputDir, dryRun, bundleID, appName, hosts, sshKey, sshUser, "", envFile, secretsBackend, secretsPath)
 }
 
 func resolveDeployEnvName(customName string, cfg *config.Config, bundlePath string) string {
@@ -1745,7 +1748,7 @@ func resolveDeployEnvName(customName string, cfg *config.Config, bundlePath stri
 	return bundleBaseName
 }
 
-func deployLocalBundle(cmd *cobra.Command, bundlePath, target, region, sleepAfter, instanceType string, destroy, autoStop, withOpenCode, withSandbox bool, secretsFrom, namespace, k8sContext, outputDir string, dryRun bool, appName string, hosts []string, sshKey, sshUser, envFile, secretsBackend, secretsPath string) error {
+func deployLocalBundle(cmd *cobra.Command, bundlePath, target, region, sleepAfter, instanceType string, destroy, autoStop, withOpenCode, withSandbox bool, namespace, k8sContext, outputDir string, dryRun bool, appName string, hosts []string, sshKey, sshUser, envFile, secretsBackend, secretsPath string) error {
 	if _, err := os.Stat(bundlePath); os.IsNotExist(err) {
 		return fmt.Errorf("bundle file not found: %s", bundlePath)
 	}
@@ -1792,7 +1795,7 @@ func deployLocalBundle(cmd *cobra.Command, bundlePath, target, region, sleepAfte
 	}
 
 	ctx := context.Background()
-	return handlers.HandleDeploy(ctx, envName, target, region, sleepAfter, instanceType, destroy, autoStop, withOpenCode, withSandbox, secretsFrom, namespace, k8sContext, outputDir, dryRun, "", appName, hosts, sshKey, sshUser, bundlePath, envFile, secretsBackend, secretsPath)
+	return handlers.HandleDeploy(ctx, envName, target, region, sleepAfter, instanceType, destroy, autoStop, withOpenCode, withSandbox, namespace, k8sContext, outputDir, dryRun, "", appName, hosts, sshKey, sshUser, bundlePath, envFile, secretsBackend, secretsPath)
 }
 
 // bootstrapGitHubWorkflows creates GitHub Actions workflow files in .github/workflows/

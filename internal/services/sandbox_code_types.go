@@ -129,17 +129,27 @@ type FileEntry struct {
 // Backend Configuration
 // =============================================================================
 
+// RegistryAuthConfig holds authentication for private container registries
+type RegistryAuthConfig struct {
+	Username         string
+	Password         string
+	IdentityToken    string
+	ServerAddress    string
+	DockerConfigPath string
+}
+
 // CodeModeConfig holds configuration for the code mode sandbox backend
 type CodeModeConfig struct {
-	Enabled         bool          // Whether code mode is enabled
-	AllowedImages   []string      // Allowed container images
-	DefaultImage    string        // Default image if not specified
-	DefaultTimeout  time.Duration // Default execution timeout
-	MaxStdoutBytes  int           // Maximum stdout bytes to capture
-	MaxStderrBytes  int           // Maximum stderr bytes to capture
-	CleanupInterval time.Duration // How often to cleanup idle sessions
-	IdleTimeout     time.Duration // How long before idle session is cleaned up
-	DockerHost      string        // Docker host (empty = default)
+	Enabled         bool               // Whether code mode is enabled
+	AllowedImages   []string           // Allowed container images
+	DefaultImage    string             // Default image if not specified
+	DefaultTimeout  time.Duration      // Default execution timeout
+	MaxStdoutBytes  int                // Maximum stdout bytes to capture
+	MaxStderrBytes  int                // Maximum stderr bytes to capture
+	CleanupInterval time.Duration      // How often to cleanup idle sessions
+	IdleTimeout     time.Duration      // How long before idle session is cleaned up
+	DockerHost      string             // Docker host (empty = default)
+	RegistryAuth    RegistryAuthConfig // Private registry authentication
 }
 
 // DefaultCodeModeConfig returns sensible defaults

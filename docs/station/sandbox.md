@@ -426,6 +426,94 @@ sandbox:
   # image: golang:1.22  # any Docker image
 ```
 
+### Private Registry Authentication
+
+Station supports pulling images from private registries (ECR, GCR, ghcr.io, Docker Hub private repos, self-hosted registries).
+
+#### config.yaml (Recommended)
+
+```yaml
+sandbox:
+  enabled: true
+  code_mode_enabled: true
+  docker_image: "ghcr.io/myorg/custom-sandbox:latest"
+  registry_auth:
+    username: "myuser"
+    password: "${GITHUB_TOKEN}"  # supports env var expansion
+    server_address: "ghcr.io"
+```
+
+#### Environment Variables
+
+```bash
+# Custom Docker image
+export STN_SANDBOX_DOCKER_IMAGE="ghcr.io/myorg/custom-sandbox:latest"
+
+# Registry authentication (username/password)
+export STN_SANDBOX_REGISTRY_USERNAME="myuser"
+export STN_SANDBOX_REGISTRY_PASSWORD="my-access-token"
+export STN_SANDBOX_REGISTRY_SERVER="ghcr.io"
+
+# OR: OAuth identity token (ECR, GCR, ACR)
+export STN_SANDBOX_REGISTRY_TOKEN="eyJhbGciOiJS..."
+export STN_SANDBOX_REGISTRY_SERVER="123456789.dkr.ecr.us-east-1.amazonaws.com"
+
+# OR: Docker config file (credential helpers)
+export STN_SANDBOX_REGISTRY_CONFIG="/home/user/.docker/config.json"
+```
+
+#### Registry-Specific Examples
+
+**GitHub Container Registry (ghcr.io)**:
+```yaml
+sandbox:
+  docker_image: "ghcr.io/myorg/sandbox:latest"
+  registry_auth:
+    username: "USERNAME"
+    password: "${GITHUB_TOKEN}"
+    server_address: "ghcr.io"
+```
+
+**AWS ECR**:
+```yaml
+sandbox:
+  docker_image: "123456789.dkr.ecr.us-east-1.amazonaws.com/sandbox:latest"
+  registry_auth:
+    identity_token: "${AWS_ECR_TOKEN}"  # from: aws ecr get-login-password
+    server_address: "123456789.dkr.ecr.us-east-1.amazonaws.com"
+```
+
+**Google Container Registry (GCR)**:
+```yaml
+sandbox:
+  docker_image: "gcr.io/my-project/sandbox:latest"
+  registry_auth:
+    username: "_json_key"
+    password: "${GCP_SERVICE_ACCOUNT_KEY}"
+    server_address: "gcr.io"
+```
+
+**Docker Hub Private Repo**:
+```yaml
+sandbox:
+  docker_image: "myuser/private-sandbox:latest"
+  registry_auth:
+    username: "myuser"
+    password: "${DOCKER_HUB_TOKEN}"
+    server_address: "docker.io"
+```
+
+#### Configuration Reference
+
+| Setting | Config YAML | Environment Variable | Description |
+|---------|-------------|---------------------|-------------|
+| Docker Image | `sandbox.docker_image` | `STN_SANDBOX_DOCKER_IMAGE` | Custom image for sandbox containers |
+| Username | `sandbox.registry_auth.username` | `STN_SANDBOX_REGISTRY_USERNAME` | Registry username |
+| Password | `sandbox.registry_auth.password` | `STN_SANDBOX_REGISTRY_PASSWORD` | Password or access token |
+| Identity Token | `sandbox.registry_auth.identity_token` | `STN_SANDBOX_REGISTRY_TOKEN` | OAuth bearer token (ECR/GCR/ACR) |
+| Server Address | `sandbox.registry_auth.server_address` | `STN_SANDBOX_REGISTRY_SERVER` | Registry server URL |
+| Docker Config | `sandbox.registry_auth.docker_config_path` | `STN_SANDBOX_REGISTRY_CONFIG` | Path to Docker config.json |
+
 ### Code Mode Configuration
 
 | Field | Type | Default | Description |

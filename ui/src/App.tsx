@@ -3858,6 +3858,61 @@ const SettingsPage = () => {
                         </div>
                         
                         <div className="pt-2 border-t border-gray-200">
+                          <label className="block text-xs text-gray-600 mb-1">Docker Image</label>
+                          <input
+                            type="text"
+                            placeholder="ubuntu:22.04"
+                            value={configObj.sandbox?.docker_image || ''}
+                            onChange={(e) => updateSandboxConfig({ docker_image: e.target.value })}
+                            className="w-full px-2 py-1 border border-gray-300 rounded text-xs"
+                          />
+                          <p className="text-[10px] text-gray-400 mt-1">Custom image for sandbox containers (e.g., ghcr.io/myorg/sandbox:latest)</p>
+                        </div>
+
+                        <div className="pt-2 border-t border-gray-200">
+                          <label className="block text-xs text-gray-600 mb-2 font-medium">Private Registry Auth</label>
+                          <div className="space-y-2 pl-2">
+                            <div>
+                              <label className="block text-[10px] text-gray-500 mb-1">Server Address</label>
+                              <input
+                                type="text"
+                                placeholder="ghcr.io"
+                                value={configObj.sandbox?.registry_auth?.server_address || ''}
+                                onChange={(e) => updateSandboxConfig({ 
+                                  registry_auth: { ...configObj.sandbox?.registry_auth, server_address: e.target.value }
+                                })}
+                                className="w-full px-2 py-1 border border-gray-300 rounded text-xs"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] text-gray-500 mb-1">Username</label>
+                              <input
+                                type="text"
+                                placeholder="username"
+                                value={configObj.sandbox?.registry_auth?.username || ''}
+                                onChange={(e) => updateSandboxConfig({ 
+                                  registry_auth: { ...configObj.sandbox?.registry_auth, username: e.target.value }
+                                })}
+                                className="w-full px-2 py-1 border border-gray-300 rounded text-xs"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] text-gray-500 mb-1">Password / Token</label>
+                              <input
+                                type="password"
+                                placeholder="password or access token"
+                                value={configObj.sandbox?.registry_auth?.password || ''}
+                                onChange={(e) => updateSandboxConfig({ 
+                                  registry_auth: { ...configObj.sandbox?.registry_auth, password: e.target.value }
+                                })}
+                                className="w-full px-2 py-1 border border-gray-300 rounded text-xs"
+                              />
+                            </div>
+                          </div>
+                          <p className="text-[10px] text-gray-400 mt-2">For private registries (ECR, GCR, ghcr.io, Docker Hub private)</p>
+                        </div>
+                        
+                        <div className="pt-2 border-t border-gray-200">
                           <div className="bg-blue-50 border border-blue-200 rounded p-2">
                             <div className="text-[10px] text-blue-700">
                               <span className="font-semibold">Compute Mode:</span> Single-execution sandbox_run tool
