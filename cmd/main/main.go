@@ -74,6 +74,7 @@ func init() {
 	rootCmd.AddCommand(providerCmd)
 	rootCmd.AddCommand(filesCmd)
 	rootCmd.AddCommand(latticeCmd)
+	rootCmd.AddCommand(githubCmd)
 
 	filesCmd.AddCommand(filesUploadCmd)
 	filesCmd.AddCommand(filesDownloadCmd)
