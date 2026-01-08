@@ -340,6 +340,10 @@ func (h *AgentHandler) runAgentLocal(agentID int64, task string, tail bool, codi
 		return fmt.Errorf("failed to load Station config: %w", err)
 	}
 
+	if err := cfg.LoadSecretsFromBackend(); err != nil {
+		return fmt.Errorf("failed to load secrets from backend: %w", err)
+	}
+
 	database, err := db.New(cfg.DatabaseURL)
 	if err != nil {
 		return fmt.Errorf("failed to connect to database: %w", err)
