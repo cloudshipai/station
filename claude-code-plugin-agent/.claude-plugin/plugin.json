@@ -1,0 +1,22 @@
+{
+  "name": "station-agent",
+  "description": "Station AI agent orchestration with a pre-configured subagent - full MCP integration for power users",
+  "version": "1.0.0",
+  "author": {
+    "name": "CloudShip AI",
+    "email": "hello@cloudship.ai"
+  },
+  "homepage": "https://github.com/cloudshipai/station",
+  "repository": "https://github.com/cloudshipai/station",
+  "license": "MIT",
+  "keywords": ["station", "agents", "mcp", "orchestration", "ai", "cloudship", "subagent"],
+  "mcpServers": {
+    "station": {
+      "command": "stn",
+      "args": ["stdio"],
+      "env": {
+        "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4318"
+      }
+    }
+  }
+}
