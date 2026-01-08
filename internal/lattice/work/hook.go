@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go"
+
+	"station/internal/lattice/events"
 )
 
 type AgentExecutor interface {
@@ -21,10 +23,25 @@ type AgentExecutorWithContext interface {
 	ExecuteAgentByNameWithContext(ctx context.Context, agentName string, task string, orchCtx *OrchestratorContext) (string, int64, int, error)
 }
 
+type PropulsionConfig struct {
+	Enabled       bool
+	ResumeTimeout time.Duration
+}
+
+func DefaultPropulsionConfig() PropulsionConfig {
+	return PropulsionConfig{
+		Enabled:       true,
+		ResumeTimeout: 30 * time.Second,
+	}
+}
+
 type Hook struct {
-	client    NATSClient
-	executor  AgentExecutor
-	stationID string
+	client     NATSClient
+	executor   AgentExecutor
+	stationID  string
+	store      *WorkStore
+	propulsion PropulsionConfig
+	events     *events.Publisher
 
 	mu           sync.RWMutex
 	subscription *nats.Subscription
@@ -34,10 +51,26 @@ type Hook struct {
 
 func NewHook(client NATSClient, executor AgentExecutor, stationID string) *Hook {
 	return &Hook{
-		client:    client,
-		executor:  executor,
-		stationID: stationID,
+		client:     client,
+		executor:   executor,
+		stationID:  stationID,
+		propulsion: DefaultPropulsionConfig(),
 	}
+}
+
+func (h *Hook) WithStore(store *WorkStore) *Hook {
+	h.store = store
+	return h
+}
+
+func (h *Hook) WithPropulsion(config PropulsionConfig) *Hook {
+	h.propulsion = config
+	return h
+}
+
+func (h *Hook) WithEventPublisher(pub *events.Publisher) *Hook {
+	h.events = pub
+	return h
 }
 
 func (h *Hook) Start(ctx context.Context) error {
@@ -53,7 +86,53 @@ func (h *Hook) Start(ctx context.Context) error {
 	}
 
 	h.subscription = sub
+
+	if h.propulsion.Enabled && h.store != nil {
+		go h.resumePendingWork()
+	}
+
 	return nil
+}
+
+func (h *Hook) resumePendingWork() {
+	ctx, cancel := context.WithTimeout(h.ctx, h.propulsion.ResumeTimeout)
+	defer cancel()
+
+	pendingWork, err := h.store.GetStationActive(ctx, h.stationID)
+	if err != nil {
+		fmt.Printf("[hook] Failed to get pending work for propulsion: %v\n", err)
+		return
+	}
+
+	if len(pendingWork) == 0 {
+		return
+	}
+
+	fmt.Printf("[hook] Propulsion: found %d pending work items, resuming...\n", len(pendingWork))
+
+	for _, record := range pendingWork {
+		if record.Status != StatusAssigned && record.Status != StatusAccepted {
+			continue
+		}
+
+		fmt.Printf("[hook] Propulsion: resuming work %s (agent=%s)\n", record.WorkID, record.AgentName)
+
+		assignment := &WorkAssignment{
+			WorkID:            record.WorkID,
+			OrchestratorRunID: record.OrchestratorRunID,
+			ParentWorkID:      record.ParentWorkID,
+			TargetStation:     record.TargetStation,
+			AgentID:           record.AgentID,
+			AgentName:         record.AgentName,
+			Task:              record.Task,
+			Context:           record.Context,
+			AssignedAt:        record.AssignedAt,
+			TraceID:           record.TraceID,
+			SpanID:            record.SpanID,
+		}
+
+		go h.executeWork(assignment, SubjectWorkResponse(record.WorkID))
+	}
 }
 
 func (h *Hook) Stop() {
@@ -81,13 +160,24 @@ func (h *Hook) handleWorkAssignment(msg *nats.Msg) {
 }
 
 func (h *Hook) executeWork(assignment *WorkAssignment, replySubject string) {
+	now := time.Now()
 	h.sendResponse(replySubject, &WorkResponse{
 		WorkID:            assignment.WorkID,
 		OrchestratorRunID: assignment.OrchestratorRunID,
 		Type:              MsgWorkAccepted,
 		StationID:         h.stationID,
-		Timestamp:         time.Now(),
+		Timestamp:         now,
 	})
+
+	if h.events != nil {
+		h.events.PublishWorkAccepted(h.ctx, &events.WorkAcceptedData{
+			WorkID:     assignment.WorkID,
+			StationID:  h.stationID,
+			AgentID:    assignment.AgentID,
+			AgentName:  assignment.AgentName,
+			AcceptedAt: now,
+		})
+	}
 
 	startTime := time.Now()
 	var result string
