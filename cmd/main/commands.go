@@ -1325,6 +1325,10 @@ func runSyncWithBrowser(environment string) error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
+	if err := cfg.LoadSecretsFromBackend(); err != nil {
+		return fmt.Errorf("failed to load secrets from backend: %w", err)
+	}
+
 	browserSync := services.NewBrowserSyncService(cfg.APIPort)
 	_, err = browserSync.SyncWithBrowser(context.Background(), environment)
 	return err
@@ -1362,13 +1366,15 @@ func installShipCLI() error {
 
 // runSyncForEnvironment runs sync for a specific environment using DeclarativeSync service
 func runSyncForEnvironment(environment string) error {
-	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	// Initialize database
+	if err := cfg.LoadSecretsFromBackend(); err != nil {
+		return fmt.Errorf("failed to load secrets from backend: %w", err)
+	}
+
 	database, err := db.New(cfg.DatabaseURL)
 	if err != nil {
 		return fmt.Errorf("failed to initialize database: %w", err)
