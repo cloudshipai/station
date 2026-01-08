@@ -31,7 +31,9 @@ This command helps you set up the cloudshipai/station-action in your repository.
 It will guide you through selecting an agent and configuring the workflow trigger.
 
 The workflow automatically detects your AI provider from Station config and generates
-the correct environment variables (OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.).
+the correct environment variables. Supports:
+  - API key authentication (OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.)
+  - OAuth authentication (STN_AI_OAUTH_TOKEN for Anthropic OAuth)
 
 The workflow can run agents from:
   • CloudShip Bundle ID (recommended) - No Station files in your repo
@@ -42,22 +44,33 @@ Examples:
   stn github init                           # Interactive setup
   stn github init --bundle-id <id>          # Use specific bundle
   stn github init --agent "Code Reviewer"   # Pre-select agent
-  stn github init --trigger pr              # Trigger on pull requests`,
+  stn github init --trigger pr              # Trigger on pull requests
+  stn github init --provider anthropic      # Override detected provider`,
 	RunE: runGitHubInit,
 }
 
 // AIProviderConfig holds detected AI provider configuration
 type AIProviderConfig struct {
-	Provider   string
-	Model      string
-	EnvVarName string // e.g., OPENAI_API_KEY, ANTHROPIC_API_KEY
+	Provider     string
+	Model        string
+	AuthType     string            // "api_key" or "oauth"
+	EnvVarName   string            // Primary env var (e.g., OPENAI_API_KEY, ANTHROPIC_API_KEY)
+	EnvVars      []string          // All env vars needed for this auth type
+	EnvVarLabels map[string]string // Labels for each env var
+}
+
+type SecretsBackendConfig struct {
+	Backend string
+	Path    string
+	Region  string
 }
 
 // RequiredSecrets holds all secrets needed for the workflow
 type RequiredSecrets struct {
-	AIProvider   AIProviderConfig
-	CloudShipKey bool
-	MCPVariables []string // Additional env vars from MCP configs
+	AIProvider     AIProviderConfig
+	CloudShipKey   bool
+	MCPVariables   []string // Additional env vars from MCP configs
+	SecretsBackend *SecretsBackendConfig
 }
 
 func init() {
@@ -66,6 +79,7 @@ func init() {
 	githubInitCmd.Flags().String("agent", "", "Agent name to run")
 	githubInitCmd.Flags().String("trigger", "", "Workflow trigger: push, pr, schedule, manual")
 	githubInitCmd.Flags().String("task", "", "Default task for the agent")
+	githubInitCmd.Flags().String("provider", "", "Override detected AI provider (openai, anthropic, google)")
 	githubInitCmd.Flags().Bool("yes", false, "Use defaults without prompting")
 
 	// Add subcommands to github
@@ -77,6 +91,7 @@ func runGitHubInit(cmd *cobra.Command, args []string) error {
 	agentName, _ := cmd.Flags().GetString("agent")
 	trigger, _ := cmd.Flags().GetString("trigger")
 	task, _ := cmd.Flags().GetString("task")
+	providerOverride, _ := cmd.Flags().GetString("provider")
 	useDefaults, _ := cmd.Flags().GetBool("yes")
 
 	fmt.Println("🚀 Station GitHub Actions Setup")
@@ -84,11 +99,25 @@ func runGitHubInit(cmd *cobra.Command, args []string) error {
 	fmt.Println()
 
 	// Detect AI provider from config
-	secrets := detectRequiredSecrets(bundleID)
+	secrets := detectRequiredSecrets(bundleID, providerOverride)
 
 	fmt.Printf("🤖 Detected AI Provider: %s (%s)\n", secrets.AIProvider.Provider, secrets.AIProvider.Model)
-	fmt.Printf("🔑 API Key Variable: %s\n", secrets.AIProvider.EnvVarName)
-	if len(secrets.MCPVariables) > 0 {
+
+	if secrets.SecretsBackend != nil {
+		fmt.Printf("🔐 Secrets Backend: %s (%s)\n", secrets.SecretsBackend.Backend, secrets.SecretsBackend.Path)
+		fmt.Println("   ✨ No API keys needed - secrets fetched at runtime!")
+	} else if secrets.AIProvider.AuthType == "oauth" {
+		fmt.Printf("🔐 Auth Type: OAuth (Anthropic Console)\n")
+		fmt.Printf("🔑 Required Secrets:\n")
+		for _, envVar := range secrets.AIProvider.EnvVars {
+			label := secrets.AIProvider.EnvVarLabels[envVar]
+			fmt.Printf("   • %s - %s\n", envVar, label)
+		}
+	} else {
+		fmt.Printf("🔑 API Key Variable: %s\n", secrets.AIProvider.EnvVarName)
+	}
+
+	if len(secrets.MCPVariables) > 0 && secrets.SecretsBackend == nil {
 		fmt.Printf("🔧 MCP Variables: %s\n", strings.Join(secrets.MCPVariables, ", "))
 	}
 	fmt.Println()
@@ -213,24 +242,64 @@ func runGitHubInit(cmd *cobra.Command, args []string) error {
 	fmt.Println()
 	fmt.Printf("📄 File: %s\n", workflowPath)
 	fmt.Println()
-	fmt.Println("🔐 Required GitHub Secrets:")
-	fmt.Printf("   %-22s - Your %s API key\n", secrets.AIProvider.EnvVarName, secrets.AIProvider.Provider)
-	if secrets.CloudShipKey {
-		fmt.Println("   CLOUDSHIP_API_KEY       - Your CloudShip API key")
-	}
-	for _, mcpVar := range secrets.MCPVariables {
-		fmt.Printf("   %-22s - Required by MCP tools\n", mcpVar)
-	}
-	fmt.Println()
-	fmt.Println("Set secrets at: https://github.com/<owner>/<repo>/settings/secrets/actions")
-	fmt.Println()
-	fmt.Println("Or use GitHub CLI:")
-	fmt.Printf("   gh secret set %s\n", secrets.AIProvider.EnvVarName)
-	if secrets.CloudShipKey {
-		fmt.Println("   gh secret set CLOUDSHIP_API_KEY")
-	}
-	for _, mcpVar := range secrets.MCPVariables {
-		fmt.Printf("   gh secret set %s\n", mcpVar)
+
+	if secrets.SecretsBackend != nil {
+		fmt.Println("🔐 Secrets Backend Mode")
+		fmt.Printf("   Backend: %s\n", secrets.SecretsBackend.Backend)
+		fmt.Printf("   Path: %s\n", secrets.SecretsBackend.Path)
+		fmt.Println()
+		fmt.Println("Required GitHub Secrets:")
+		if secrets.SecretsBackend.Backend == "aws-secretsmanager" || secrets.SecretsBackend.Backend == "aws-ssm" {
+			fmt.Println("   AWS_ROLE_ARN                     - IAM role ARN for OIDC")
+		}
+		if secrets.CloudShipKey {
+			fmt.Println("   CLOUDSHIP_API_KEY                - Your CloudShip API key")
+		}
+		fmt.Println()
+		fmt.Println("Setup AWS OIDC (one-time):")
+		fmt.Println("   1. Create IAM OIDC provider for token.actions.githubusercontent.com")
+		fmt.Println("   2. Create IAM role with trust policy for your GitHub repo")
+		fmt.Println("   3. Grant role access to your secrets in " + secrets.SecretsBackend.Backend)
+		fmt.Println()
+		fmt.Println("Set the role ARN as a secret:")
+		fmt.Println("   gh secret set AWS_ROLE_ARN")
+	} else {
+		fmt.Println("🔐 Required GitHub Secrets:")
+
+		if secrets.AIProvider.AuthType == "oauth" {
+			for _, envVar := range secrets.AIProvider.EnvVars {
+				label := secrets.AIProvider.EnvVarLabels[envVar]
+				fmt.Printf("   %-30s - %s\n", envVar, label)
+			}
+		} else if secrets.AIProvider.EnvVarName != "" {
+			fmt.Printf("   %-30s - Your %s API key\n", secrets.AIProvider.EnvVarName, secrets.AIProvider.Provider)
+		}
+
+		if secrets.CloudShipKey {
+			fmt.Println("   CLOUDSHIP_API_KEY                - Your CloudShip API key")
+		}
+		for _, mcpVar := range secrets.MCPVariables {
+			fmt.Printf("   %-30s - Required by MCP tools\n", mcpVar)
+		}
+		fmt.Println()
+		fmt.Println("Set secrets at: https://github.com/<owner>/<repo>/settings/secrets/actions")
+		fmt.Println()
+		fmt.Println("Or use GitHub CLI:")
+
+		if secrets.AIProvider.AuthType == "oauth" {
+			for _, envVar := range secrets.AIProvider.EnvVars {
+				fmt.Printf("   gh secret set %s\n", envVar)
+			}
+		} else if secrets.AIProvider.EnvVarName != "" {
+			fmt.Printf("   gh secret set %s\n", secrets.AIProvider.EnvVarName)
+		}
+
+		if secrets.CloudShipKey {
+			fmt.Println("   gh secret set CLOUDSHIP_API_KEY")
+		}
+		for _, mcpVar := range secrets.MCPVariables {
+			fmt.Printf("   gh secret set %s\n", mcpVar)
+		}
 	}
 	fmt.Println()
 	fmt.Println("📚 Documentation: https://docs.cloudshipai.com/station/github-actions")
@@ -239,12 +308,15 @@ func runGitHubInit(cmd *cobra.Command, args []string) error {
 }
 
 // detectRequiredSecrets detects all required secrets from Station config
-func detectRequiredSecrets(bundleID string) RequiredSecrets {
+func detectRequiredSecrets(bundleID string, providerOverride string) RequiredSecrets {
 	secrets := RequiredSecrets{
 		AIProvider: AIProviderConfig{
-			Provider:   "OpenAI",
-			Model:      "gpt-4o",
-			EnvVarName: "OPENAI_API_KEY",
+			Provider:     "OpenAI",
+			Model:        "gpt-4o",
+			AuthType:     "api_key",
+			EnvVarName:   "OPENAI_API_KEY",
+			EnvVars:      []string{"OPENAI_API_KEY"},
+			EnvVarLabels: map[string]string{"OPENAI_API_KEY": "Your OpenAI API key"},
 		},
 		CloudShipKey: bundleID != "",
 		MCPVariables: []string{},
@@ -256,30 +328,74 @@ func detectRequiredSecrets(bundleID string) RequiredSecrets {
 		return secrets
 	}
 
-	// Detect AI provider
+	// Determine provider (override takes precedence)
 	provider := strings.ToLower(cfg.AIProvider)
+	if providerOverride != "" {
+		provider = strings.ToLower(providerOverride)
+	}
+
 	secrets.AIProvider.Model = cfg.AIModel
 
-	switch provider {
-	case "openai":
-		secrets.AIProvider.Provider = "OpenAI"
-		secrets.AIProvider.EnvVarName = "OPENAI_API_KEY"
-	case "anthropic":
+	authType := cfg.AIAuthType
+	if authType == "oauth" && provider == "anthropic" {
 		secrets.AIProvider.Provider = "Anthropic"
-		secrets.AIProvider.EnvVarName = "ANTHROPIC_API_KEY"
-	case "google", "gemini":
-		secrets.AIProvider.Provider = "Google"
-		secrets.AIProvider.EnvVarName = "GOOGLE_API_KEY"
-	case "ollama":
-		secrets.AIProvider.Provider = "Ollama"
-		secrets.AIProvider.EnvVarName = "" // Ollama doesn't need an API key
-	default:
-		// Keep defaults
+		secrets.AIProvider.AuthType = "oauth"
+		secrets.AIProvider.EnvVarName = "STN_AI_OAUTH_TOKEN" // Primary
+		secrets.AIProvider.EnvVars = []string{
+			"STN_AI_AUTH_TYPE",
+			"STN_AI_OAUTH_TOKEN",
+			"STN_AI_OAUTH_REFRESH_TOKEN",
+			"STN_AI_OAUTH_EXPIRES_AT",
+			"STN_AI_PROVIDER",
+			"STN_AI_MODEL",
+		}
+		secrets.AIProvider.EnvVarLabels = map[string]string{
+			"STN_AI_AUTH_TYPE":           "Set to 'oauth'",
+			"STN_AI_OAUTH_TOKEN":         "Anthropic OAuth access token",
+			"STN_AI_OAUTH_REFRESH_TOKEN": "Anthropic OAuth refresh token",
+			"STN_AI_OAUTH_EXPIRES_AT":    "Token expiry timestamp (milliseconds)",
+			"STN_AI_PROVIDER":            "Set to 'anthropic'",
+			"STN_AI_MODEL":               fmt.Sprintf("Set to '%s' or your preferred model", cfg.AIModel),
+		}
+	} else {
+		// API key authentication
+		switch provider {
+		case "openai":
+			secrets.AIProvider.Provider = "OpenAI"
+			secrets.AIProvider.EnvVarName = "OPENAI_API_KEY"
+			secrets.AIProvider.EnvVars = []string{"OPENAI_API_KEY"}
+			secrets.AIProvider.EnvVarLabels = map[string]string{"OPENAI_API_KEY": "Your OpenAI API key"}
+		case "anthropic":
+			secrets.AIProvider.Provider = "Anthropic"
+			secrets.AIProvider.EnvVarName = "ANTHROPIC_API_KEY"
+			secrets.AIProvider.EnvVars = []string{"ANTHROPIC_API_KEY"}
+			secrets.AIProvider.EnvVarLabels = map[string]string{"ANTHROPIC_API_KEY": "Your Anthropic API key"}
+		case "google", "gemini":
+			secrets.AIProvider.Provider = "Google"
+			secrets.AIProvider.EnvVarName = "GOOGLE_API_KEY"
+			secrets.AIProvider.EnvVars = []string{"GOOGLE_API_KEY"}
+			secrets.AIProvider.EnvVarLabels = map[string]string{"GOOGLE_API_KEY": "Your Google AI API key"}
+		case "ollama":
+			secrets.AIProvider.Provider = "Ollama"
+			secrets.AIProvider.EnvVarName = "" // Ollama doesn't need an API key
+			secrets.AIProvider.EnvVars = []string{}
+			secrets.AIProvider.EnvVarLabels = map[string]string{}
+		default:
+			// Keep defaults
+		}
 	}
 
 	// If not using bundle-id, scan local environment for MCP variables
 	if bundleID == "" {
 		secrets.MCPVariables = scanMCPEnvVariables(cfg)
+	}
+
+	if cfg.Secrets.Backend != "" {
+		secrets.SecretsBackend = &SecretsBackendConfig{
+			Backend: cfg.Secrets.Backend,
+			Path:    cfg.Secrets.Path,
+			Region:  cfg.Secrets.Region,
+		}
 	}
 
 	return secrets
@@ -335,17 +451,24 @@ func scanMCPEnvVariables(cfg *config.Config) []string {
 // isInternalVariable checks if a variable is an internal Station variable
 func isInternalVariable(varName string) bool {
 	internalVars := map[string]bool{
-		"HOME":                   true,
-		"PATH":                   true,
-		"USER":                   true,
-		"SHELL":                  true,
-		"TERM":                   true,
-		"PWD":                    true,
-		"STATION_CONFIG_DIR":     true,
-		"STATION_ENCRYPTION_KEY": true,
-		"STN_AI_API_KEY":         true,
-		"STN_AI_PROVIDER":        true,
-		"STN_AI_MODEL":           true,
+		"HOME":                       true,
+		"PATH":                       true,
+		"USER":                       true,
+		"SHELL":                      true,
+		"TERM":                       true,
+		"PWD":                        true,
+		"STATION_CONFIG_DIR":         true,
+		"STATION_ENCRYPTION_KEY":     true,
+		"STN_AI_API_KEY":             true,
+		"STN_AI_PROVIDER":            true,
+		"STN_AI_MODEL":               true,
+		"STN_AI_AUTH_TYPE":           true,
+		"STN_AI_OAUTH_TOKEN":         true,
+		"STN_AI_OAUTH_REFRESH_TOKEN": true,
+		"STN_AI_OAUTH_EXPIRES_AT":    true,
+		"OPENAI_API_KEY":             true,
+		"ANTHROPIC_API_KEY":          true,
+		"GOOGLE_API_KEY":             true,
 	}
 	return internalVars[varName]
 }
@@ -414,16 +537,33 @@ func generateWorkflowWithSecrets(bundleID, agentName, trigger, task string, secr
         default: '` + escapeYAML(task) + `'`
 	}
 
-	// Build env section with all required variables
+	if secrets.SecretsBackend != nil {
+		return generateWorkflowWithSecretsBackend(bundleID, agentName, trigger, task, secrets, triggerYAML)
+	}
+
 	var envLines []string
-	if secrets.AIProvider.EnvVarName != "" {
+
+	if secrets.AIProvider.AuthType == "oauth" {
+		for _, envVar := range secrets.AIProvider.EnvVars {
+			envLines = append(envLines, fmt.Sprintf("          %s: ${{ secrets.%s }}",
+				envVar, envVar))
+		}
+	} else if secrets.AIProvider.EnvVarName != "" {
 		envLines = append(envLines, fmt.Sprintf("          %s: ${{ secrets.%s }}",
 			secrets.AIProvider.EnvVarName, secrets.AIProvider.EnvVarName))
 	}
+
 	for _, mcpVar := range secrets.MCPVariables {
 		envLines = append(envLines, fmt.Sprintf("          %s: ${{ secrets.%s }}", mcpVar, mcpVar))
 	}
 	envSection := strings.Join(envLines, "\n")
+
+	providerInput := ""
+	if secrets.AIProvider.AuthType == "oauth" {
+		providerInput = fmt.Sprintf("\n          provider: 'anthropic'")
+	} else if secrets.AIProvider.Provider != "OpenAI" {
+		providerInput = fmt.Sprintf("\n          provider: '%s'", strings.ToLower(secrets.AIProvider.Provider))
+	}
 
 	var actionConfig string
 	if bundleID != "" {
@@ -432,12 +572,13 @@ func generateWorkflowWithSecrets(bundleID, agentName, trigger, task string, secr
           task: |
             ${{ github.event.inputs.task || '%s' }}
           bundle-id: '%s'
-          cloudship-api-key: ${{ secrets.CLOUDSHIP_API_KEY }}
+          cloudship-api-key: ${{ secrets.CLOUDSHIP_API_KEY }}%s
         env:
 %s`,
 			escapeYAML(agentName),
 			escapeYAML(task),
 			bundleID,
+			providerInput,
 			envSection,
 		)
 	} else {
@@ -445,11 +586,12 @@ func generateWorkflowWithSecrets(bundleID, agentName, trigger, task string, secr
           agent: '%s'
           task: |
             ${{ github.event.inputs.task || '%s' }}
-          environment: 'default'
+          environment: 'default'%s
         env:
 %s`,
 			escapeYAML(agentName),
 			escapeYAML(task),
+			providerInput,
 			envSection,
 		)
 	}
@@ -477,7 +619,92 @@ jobs:
 	return workflow
 }
 
+func generateWorkflowWithSecretsBackend(bundleID, agentName, trigger, task string, secrets RequiredSecrets, triggerYAML string) string {
+	sb := secrets.SecretsBackend
+
+	providerInput := ""
+	if secrets.AIProvider.Provider != "OpenAI" {
+		providerInput = fmt.Sprintf("\n          provider: '%s'", strings.ToLower(secrets.AIProvider.Provider))
+	}
+
+	secretsInputs := fmt.Sprintf(`
+          secrets-backend: '%s'
+          secrets-path: '%s'`, sb.Backend, sb.Path)
+	if sb.Region != "" {
+		secretsInputs += fmt.Sprintf("\n          secrets-region: '%s'", sb.Region)
+	}
+
+	var actionConfig string
+	if bundleID != "" {
+		actionConfig = fmt.Sprintf(`        with:
+          agent: '%s'
+          task: |
+            ${{ github.event.inputs.task || '%s' }}
+          bundle-id: '%s'
+          cloudship-api-key: ${{ secrets.CLOUDSHIP_API_KEY }}%s%s`,
+			escapeYAML(agentName),
+			escapeYAML(task),
+			bundleID,
+			providerInput,
+			secretsInputs,
+		)
+	} else {
+		actionConfig = fmt.Sprintf(`        with:
+          agent: '%s'
+          task: |
+            ${{ github.event.inputs.task || '%s' }}
+          environment: 'default'%s%s`,
+			escapeYAML(agentName),
+			escapeYAML(task),
+			providerInput,
+			secretsInputs,
+		)
+	}
+
+	var awsStep string
+	if sb.Backend == "aws-secretsmanager" || sb.Backend == "aws-ssm" {
+		region := sb.Region
+		if region == "" {
+			region = "us-east-1"
+		}
+		awsStep = fmt.Sprintf(`
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: %s
+`, region)
+	}
+
+	workflow := fmt.Sprintf(`# Station AI Agent Workflow
+# Generated by: stn github init
+# Documentation: https://docs.cloudshipai.com/station/github-actions
+#
+# This workflow uses a secrets backend to fetch secrets at runtime.
+# No API keys stored in GitHub Secrets!
+
+name: Run Station Agent
+
+%s
+
+jobs:
+  run-agent:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    
+    steps:
+      - uses: actions/checkout@v4
+%s
+      - name: Run Station Agent
+        uses: cloudshipai/station-action@main
+%s
+`, triggerYAML, awsStep, actionConfig)
+
+	return workflow
+}
+
 func escapeYAML(s string) string {
-	// Escape single quotes by doubling them
 	return strings.ReplaceAll(s, "'", "''")
 }
