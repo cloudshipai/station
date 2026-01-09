@@ -45,33 +45,23 @@ curl -fsSL https://raw.githubusercontent.com/cloudshipai/station/main/install.sh
 Choose your AI provider:
 
 <details>
-<summary><b>Claude Max/Pro Subscription (Recommended)</b></summary>
+<summary><b>Claude Max/Pro Subscription (⚠️ DEPRECATED)</b></summary>
 
-Use your existing Claude Max or Claude Pro subscription - no API billing required.
+> **⚠️ DEPRECATED: Anthropic OAuth is currently unavailable.**
+>
+> Anthropic has restricted third-party use of OAuth tokens. This authentication method is not working until further notice.
+>
+> **Please use one of the following alternatives:**
+> - **OpenAI API Key** (recommended)
+> - **Google Gemini API Key**
+> - **Anthropic API Key** (pay-per-token, not subscription-based)
+
+~~Use your existing Claude Max or Claude Pro subscription - no API billing required.~~
 
 ```bash
-# Initialize with Anthropic
-stn init --provider anthropic --ship
-
-# Authenticate with your Claude subscription
-stn auth anthropic login
-```
-
-This opens your browser to authorize Station. After authorizing, paste the code and select your model:
-
-```
-✅ Successfully authenticated with Anthropic!
-
-   You're using your Claude Max/Pro subscription.
-   Station will automatically refresh tokens as needed.
-
-Select a model for your Claude Max/Pro subscription:
-
-* [1] Claude Opus 4.5 - Most capable model
-  [2] Claude Opus 4
-  [3] Claude Sonnet 4.5 - Balanced performance
-  [4] Claude Sonnet 4 - Fast and efficient
-  [5] Claude Haiku 4.5 - Fastest model
+# ❌ NOT WORKING - Anthropic OAuth disabled
+# stn init --provider anthropic --ship
+# stn auth anthropic login
 ```
 
 </details>
@@ -418,62 +408,50 @@ export GEMINI_API_KEY="..."
 export ANTHROPIC_API_KEY="sk-ant-api03-..."
 ```
 
-### Anthropic OAuth (Claude Max/Pro Subscription)
+### Anthropic OAuth (Claude Max/Pro Subscription) - ⚠️ DEPRECATED
 
-Use your Claude Max or Claude Pro subscription instead of pay-per-token API billing. This is the same authentication method used by Claude Code CLI.
+> **⚠️ DEPRECATED: Anthropic OAuth is currently unavailable.**
+>
+> Anthropic has restricted third-party use of OAuth tokens. This authentication method is **not working until further notice**.
+>
+> **Use these alternatives instead:**
+> - `OPENAI_API_KEY` for OpenAI models (recommended)
+> - `GEMINI_API_KEY` for Google Gemini models
+> - `ANTHROPIC_API_KEY` for Anthropic API (pay-per-token billing)
 
-**Setup:**
+<details>
+<summary>Previous OAuth documentation (for reference only)</summary>
+
+~~Use your Claude Max or Claude Pro subscription instead of pay-per-token API billing.~~
+
+**Setup (NOT WORKING):**
 ```bash
-# Authenticate with your Claude subscription
-stn auth anthropic login
-
-# This will:
-# 1. Open your browser to claude.ai
-# 2. You authorize Station
-# 3. Paste the code back to the terminal
-# 4. Tokens are stored in your config.yaml
-```
-
-**Configure Station to use Anthropic:**
-```yaml
-# config.yaml
-ai_provider: anthropic
-ai_model: claude-sonnet-4-20250514
-```
-
-**Check status:**
-```bash
-stn auth anthropic status
-# ✅ Authenticated with Anthropic
-#    Token expires: 2025-01-15T10:30:00Z (23h remaining)
-```
-
-**Logout:**
-```bash
-stn auth anthropic logout
+# ❌ DEPRECATED - Anthropic OAuth disabled
+# stn auth anthropic login
 ```
 
 **Authentication Priority:**
 | Priority | Method | Description |
 |----------|--------|-------------|
 | 1 | `STN_AI_AUTH_TYPE=api_key` | Force API key mode (override) |
-| 2 | Station OAuth tokens | From `stn auth anthropic login` |
-| 3 | Claude Code credentials | From `~/.claude/.credentials.json` |
-| 4 | `ANTHROPIC_API_KEY` env var | Standard API key |
+| ~~2~~ | ~~Station OAuth tokens~~ | ~~From `stn auth anthropic login`~~ **DEPRECATED** |
+| ~~3~~ | ~~Claude Code credentials~~ | ~~From `~/.claude/.credentials.json`~~ **DEPRECATED** |
+| 4 | `ANTHROPIC_API_KEY` env var | Standard API key (**USE THIS**) |
 
-**Remote Deployment:**
+</details>
 
-For deployed Station instances (Docker, K8s, Fly.io), use API keys:
+**For Anthropic models, use API key authentication:**
 
 ```bash
-# In production, use API key authentication
+# Set Anthropic API key
+export ANTHROPIC_API_KEY="sk-ant-api03-..."
+
+# Or in Docker
 docker run \
   -e ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY \
   -e STN_AI_PROVIDER=anthropic \
   station:latest
 ```
-
-OAuth tokens are designed for local/interactive use. For production deployments, API keys provide simpler credential management.
 
 ---
 
