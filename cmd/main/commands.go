@@ -1828,6 +1828,11 @@ func deployLocalBundle(cmd *cobra.Command, bundlePath, target, region, sleepAfte
 	normalizedTarget := strings.ToLower(target)
 	skipLocalInstall := normalizedTarget == "kubernetes" || normalizedTarget == "k8s" || normalizedTarget == "ansible"
 
+	// Fly.io doesn't support local bundle file deployment - it needs environment with baked-in agents
+	if !skipLocalInstall && (normalizedTarget == "fly" || normalizedTarget == "flyio" || normalizedTarget == "fly.io") {
+		return fmt.Errorf("fly target does not support --bundle (local file).\n\nOptions:\n  1. Use --bundle-id for CloudShip bundles: stn deploy --bundle-id <uuid> --target fly\n  2. Install bundle locally first and deploy environment: stn bundle install %s my-env && stn deploy my-env --target fly\n  3. Use Kubernetes or Ansible which copy the bundle file: stn deploy --bundle %s --target k8s", bundlePath, bundlePath)
+	}
+
 	if skipLocalInstall {
 		fmt.Printf("📦 Using bundle file directly (no local installation): %s\n", bundlePath)
 		fmt.Printf("   Environment name: %s\n", envName)

@@ -72,11 +72,12 @@ func HandleDeploy(ctx context.Context, envName, target, region, sleepAfter, inst
 		instanceType = "basic"
 	}
 
-	isBundleDeploy := bundleID != ""
+	isBundleIDDeploy := bundleID != ""
+	isBundlePathDeploy := bundlePath != ""
 
 	if destroy {
-		if isBundleDeploy {
-			return fmt.Errorf("--destroy requires an environment name, not --bundle-id")
+		if isBundleIDDeploy || isBundlePathDeploy {
+			return fmt.Errorf("--destroy requires an environment name, not --bundle-id or --bundle")
 		}
 		return handleDeployDestroy(ctx, envName, target)
 	}
@@ -93,9 +94,15 @@ func HandleDeploy(ctx context.Context, envName, target, region, sleepAfter, inst
 		fmt.Printf("   ℹ️  Container will fetch secrets at startup\n\n")
 	}
 
-	if isBundleDeploy {
+	if isBundleIDDeploy {
 		fmt.Printf("🚀 Deploying bundle '%s' to %s (region: %s)\n\n", bundleID, target, region)
 		return handleBundleDeploy(ctx, bundleID, appName, target, region, sleepAfter, instanceType, autoStop, withOpenCode, withSandbox, namespace, k8sContext, outputDir, dryRun, envFile, runtimeSecrets)
+	}
+
+	// Handle local bundle file deployment (--bundle ./file.tar.gz)
+	if isBundlePathDeploy {
+		fmt.Printf("🚀 Deploying from bundle file '%s' to %s\n\n", bundlePath, target)
+		return handleBundlePathDeploy(ctx, bundlePath, appName, target, namespace, k8sContext, outputDir, dryRun, hosts, sshKey, sshUser, envFile, runtimeSecrets)
 	}
 
 	fmt.Printf("🚀 Deploying environment '%s' to %s (region: %s)\n\n", envName, target, region)
@@ -248,6 +255,78 @@ func handleBundleDeploy(ctx context.Context, bundleID, appName, target, region, 
 
 	default:
 		return fmt.Errorf("unsupported deployment target: %s (supported: fly, kubernetes, ansible)", target)
+	}
+}
+
+// handleBundlePathDeploy handles deployment from a local bundle file (--bundle ./file.tar.gz)
+func handleBundlePathDeploy(ctx context.Context, bundlePath, appName, target, namespace, k8sContext, outputDir string, dryRun bool, hosts []string, sshKey, sshUser, envFile string, runtimeSecrets *RuntimeSecretsConfig) error {
+	aiConfig, err := detectAIConfigForDeployment()
+	if err != nil {
+		return fmt.Errorf("AI configuration error: %w\n\nPlease set the appropriate environment variable for your provider", err)
+	}
+
+	fmt.Printf("🔍 AI Configuration:\n")
+	fmt.Printf("   ✓ Provider: %s\n", aiConfig.Provider)
+	fmt.Printf("   ✓ Model: %s\n", aiConfig.Model)
+	fmt.Printf("   ✓ API Key: %s***\n\n", maskAPIKey(aiConfig.APIKey))
+
+	cloudShipConfig := detectCloudShipConfigForDeployment()
+	if cloudShipConfig != nil {
+		fmt.Printf("☁️  CloudShip Configuration:\n")
+		fmt.Printf("   ✓ Enabled: %v\n", cloudShipConfig.Enabled)
+		fmt.Printf("   ✓ Name: %s\n", cloudShipConfig.Name)
+		fmt.Printf("   ✓ Endpoint: %s\n", cloudShipConfig.Endpoint)
+		fmt.Printf("   ✓ Registration Key: %s***\n\n", maskAPIKey(cloudShipConfig.RegistrationKey))
+	}
+
+	// Get bundle filename for app name
+	bundleFilename := filepath.Base(bundlePath)
+	bundleName := strings.TrimSuffix(bundleFilename, ".tar.gz")
+	bundleName = strings.TrimSuffix(bundleName, ".tgz")
+	resolvedAppName := resolveAppName(appName, "", bundleName)
+
+	fmt.Printf("📦 Bundle File Deployment:\n")
+	fmt.Printf("   ✓ Bundle Path: %s\n", bundlePath)
+	fmt.Printf("   ✓ App Name: %s\n", resolvedAppName)
+	fmt.Printf("   ✓ Image: %s\n\n", baseStationImage)
+
+	// Create minimal environment config for bundle path deployment
+	bundleEnvConfig := &EnvironmentConfig{
+		Name:      bundleName,
+		Path:      "",
+		Variables: map[string]string{},
+		Agents:    []string{},
+	}
+
+	externalSecrets := make(map[string]string)
+	if envFile != "" {
+		fmt.Printf("🔐 Loading secrets from env file...\n")
+		envFileSecrets, err := parseEnvFile(envFile)
+		if err != nil {
+			return fmt.Errorf("failed to parse env file: %w", err)
+		}
+		for k, v := range envFileSecrets {
+			externalSecrets[k] = v
+		}
+		fmt.Printf("   ✓ File: %s\n", envFile)
+		fmt.Printf("   ✓ Secrets: %d entries\n\n", len(envFileSecrets))
+	}
+
+	switch strings.ToLower(target) {
+	case "kubernetes", "k8s":
+		return deployToKubernetes(ctx, bundleName, aiConfig, cloudShipConfig, bundleEnvConfig, externalSecrets, namespace, k8sContext, outputDir, dryRun, bundlePath, runtimeSecrets)
+
+	case "ansible":
+		return deployToAnsible(ctx, bundleName, aiConfig, cloudShipConfig, bundleEnvConfig, externalSecrets, outputDir, dryRun, hosts, sshKey, sshUser, bundlePath, runtimeSecrets)
+
+	case "fly", "flyio", "fly.io":
+		return fmt.Errorf("fly target does not support --bundle (local file). Use --bundle-id for CloudShip bundles, or deploy an environment which builds the bundle into the image")
+
+	case "cloudflare", "cf", "cloudflare-containers":
+		return fmt.Errorf("cloudflare target does not support --bundle (local file)")
+
+	default:
+		return fmt.Errorf("unsupported deployment target for bundle path: %s (supported: kubernetes, ansible)", target)
 	}
 }
 
@@ -1253,6 +1332,53 @@ func deployToAnsible(ctx context.Context, envName string, aiConfig *DeploymentAI
 		if err := target.Validate(ctx); err != nil {
 			return fmt.Errorf("ansible validation failed: %w", err)
 		}
+	}
+
+	// If no bundle path provided but we have an environment, create a bundle from it
+	// This ensures the deployed Station has the same agents as the local environment
+	var tempBundleCleanup func()
+	if bundlePath == "" && envConfig.Path != "" {
+		fmt.Printf("📦 Creating bundle from environment '%s'...\n", envName)
+		bundleService := services.NewBundleService()
+		bundleData, err := bundleService.CreateBundle(envConfig.Path)
+		if err != nil {
+			return fmt.Errorf("failed to create bundle from environment: %w", err)
+		}
+
+		// Determine where to write the bundle
+		var bundleFilePath string
+		if dryRun && outputDir != "" {
+			// For dry-run, write bundle to output directory so it persists with the playbook
+			bundleFilePath = filepath.Join(outputDir, fmt.Sprintf("bundle-%s.tar.gz", envName))
+			if err := os.MkdirAll(outputDir, 0755); err != nil {
+				return fmt.Errorf("failed to create output directory: %w", err)
+			}
+			if err := os.WriteFile(bundleFilePath, bundleData, 0644); err != nil {
+				return fmt.Errorf("failed to write bundle file: %w", err)
+			}
+			tempBundleCleanup = func() {} // Don't clean up - user needs this file
+		} else {
+			// For actual deployment, write to temp file that will be cleaned up after ansible runs
+			tempBundle, err := os.CreateTemp("", fmt.Sprintf("station-bundle-%s-*.tar.gz", envName))
+			if err != nil {
+				return fmt.Errorf("failed to create temp bundle file: %w", err)
+			}
+			if _, err := tempBundle.Write(bundleData); err != nil {
+				tempBundle.Close()
+				os.Remove(tempBundle.Name())
+				return fmt.Errorf("failed to write bundle data: %w", err)
+			}
+			tempBundle.Close()
+			bundleFilePath = tempBundle.Name()
+			tempBundleCleanup = func() { os.Remove(tempBundle.Name()) }
+		}
+
+		bundlePath = bundleFilePath
+		fmt.Printf("   ✓ Bundle created: %s (%d bytes)\n", filepath.Base(bundlePath), len(bundleData))
+		fmt.Printf("   ✓ Agents: %d\n\n", len(envConfig.Agents))
+	}
+	if tempBundleCleanup != nil {
+		defer tempBundleCleanup()
 	}
 
 	deployConfig := &deployment.DeploymentConfig{

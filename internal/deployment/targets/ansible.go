@@ -351,12 +351,17 @@ func (a *AnsibleTarget) generateDockerComposeTemplate(appName string, config *de
 	if options.BundlePath != "" {
 		bundleVolume = `
       - {{ station_bundle_dir }}:/bundles:ro`
+		// Initialize database first with stn init --yes, then install bundle, then serve
+		// This ensures the database exists before bundle install tries to use it
 		bundleCommand = `
     command: >
       sh -c "
         if [ -f /bundles/bundle.tar.gz ]; then
+          echo 'Initializing Station...' &&
+          stn init --yes 2>/dev/null || true &&
           echo 'Installing bundle from /bundles/bundle.tar.gz...' &&
-          stn bundle install /bundles/bundle.tar.gz default --force 2>/dev/null || true
+          stn bundle install /bundles/bundle.tar.gz default --force &&
+          echo 'Bundle installed successfully'
         fi &&
         exec stn serve
       "`
