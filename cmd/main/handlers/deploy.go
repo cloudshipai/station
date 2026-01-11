@@ -1345,33 +1345,20 @@ func deployToAnsible(ctx context.Context, envName string, aiConfig *DeploymentAI
 			return fmt.Errorf("failed to create bundle from environment: %w", err)
 		}
 
-		// Determine where to write the bundle
-		var bundleFilePath string
-		if dryRun && outputDir != "" {
-			// For dry-run, write bundle to output directory so it persists with the playbook
-			bundleFilePath = filepath.Join(outputDir, fmt.Sprintf("bundle-%s.tar.gz", envName))
-			if err := os.MkdirAll(outputDir, 0755); err != nil {
-				return fmt.Errorf("failed to create output directory: %w", err)
-			}
-			if err := os.WriteFile(bundleFilePath, bundleData, 0644); err != nil {
-				return fmt.Errorf("failed to write bundle file: %w", err)
-			}
-			tempBundleCleanup = func() {} // Don't clean up - user needs this file
-		} else {
-			// For actual deployment, write to temp file that will be cleaned up after ansible runs
-			tempBundle, err := os.CreateTemp("", fmt.Sprintf("station-bundle-%s-*.tar.gz", envName))
-			if err != nil {
-				return fmt.Errorf("failed to create temp bundle file: %w", err)
-			}
-			if _, err := tempBundle.Write(bundleData); err != nil {
-				tempBundle.Close()
-				os.Remove(tempBundle.Name())
-				return fmt.Errorf("failed to write bundle data: %w", err)
-			}
-			tempBundle.Close()
-			bundleFilePath = tempBundle.Name()
-			tempBundleCleanup = func() { os.Remove(tempBundle.Name()) }
+		// Always write bundle to output directory so the playbook is self-contained
+		// This allows re-running ansible-playbook without the deploy command
+		effectiveOutputDir := outputDir
+		if effectiveOutputDir == "" {
+			effectiveOutputDir = fmt.Sprintf("ansible-%s", envName)
 		}
+		if err := os.MkdirAll(effectiveOutputDir, 0755); err != nil {
+			return fmt.Errorf("failed to create output directory: %w", err)
+		}
+		bundleFilePath := filepath.Join(effectiveOutputDir, fmt.Sprintf("bundle-%s.tar.gz", envName))
+		if err := os.WriteFile(bundleFilePath, bundleData, 0644); err != nil {
+			return fmt.Errorf("failed to write bundle file: %w", err)
+		}
+		tempBundleCleanup = func() {} // Don't clean up - user needs this file for ansible
 
 		bundlePath = bundleFilePath
 		fmt.Printf("   ✓ Bundle created: %s (%d bytes)\n", filepath.Base(bundlePath), len(bundleData))
