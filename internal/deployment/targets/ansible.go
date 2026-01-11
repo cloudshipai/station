@@ -399,8 +399,8 @@ After=docker.service
 [Service]
 Type=simple
 WorkingDirectory={{ station_install_dir }}
-ExecStart=/usr/bin/docker-compose up
-ExecStop=/usr/bin/docker-compose down
+ExecStart=/usr/bin/docker compose up
+ExecStop=/usr/bin/docker compose down
 Restart=always
 RestartSec=10
 
