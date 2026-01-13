@@ -24,6 +24,11 @@ type ProviderConfig struct {
 
 func getProviderModels() map[string][]string {
 	return map[string][]string{
+		"cloudshipai": {
+			"cloudship/llama-3.1-70b",
+			"cloudship/llama-3.1-8b",
+			"cloudship/qwen-72b",
+		},
 		"openai": config.GetSupportedOpenAIModels(),
 		"anthropic": {
 			"claude-sonnet-4-20250514",
@@ -39,14 +44,19 @@ func getProviderModels() map[string][]string {
 
 // getDefaultProvider returns the default provider and model
 func getDefaultProvider() (string, string) {
-	return "openai", "gpt-5-mini"
+	// CloudShip AI is the default when registration key is available
+	if os.Getenv("STN_CLOUDSHIP_KEY") != "" || os.Getenv("CLOUDSHIPAI_REGISTRATION_KEY") != "" {
+		return "cloudshipai", "cloudship/llama-3.1-70b"
+	}
+	return "openai", "gpt-4o-mini"
 }
 
 var providerDescriptions = map[string]string{
-	"openai":    "OpenAI models - GPT-4o, and more (any model accepted)",
-	"anthropic": "Anthropic's Claude models - Claude Sonnet 4, Claude 3.7, etc.",
-	"gemini":    "Google's Gemini models - Fast, capable, and cost-effective",
-	"custom":    "Configure a custom provider (any OpenAI-compatible endpoint)",
+	"cloudshipai": "CloudShip AI - Optimized inference with Llama and Qwen models (Recommended)",
+	"openai":      "OpenAI models - GPT-4o, and more (any model accepted)",
+	"anthropic":   "Anthropic's Claude models - Claude Sonnet 4, Claude 3.7, etc.",
+	"gemini":      "Google's Gemini models - Fast, capable, and cost-effective",
+	"custom":      "Configure a custom provider (any OpenAI-compatible endpoint)",
 }
 
 // setupProviderInteractively runs the interactive provider setup
@@ -101,6 +111,10 @@ func setupProviderInteractively() (*ProviderConfig, error) {
 }
 
 func detectProviderFromEnv() (string, string) {
+	// CloudShip AI takes priority when registration key is available
+	if os.Getenv("STN_CLOUDSHIP_KEY") != "" || os.Getenv("CLOUDSHIPAI_REGISTRATION_KEY") != "" {
+		return "cloudshipai", "cloudship/llama-3.1-70b"
+	}
 	if os.Getenv("ANTHROPIC_API_KEY") != "" {
 		return "anthropic", "claude-sonnet-4-20250514"
 	}
@@ -336,6 +350,7 @@ var (
 
 func selectProvider() (string, error) {
 	items := []list.Item{
+		item("cloudshipai"),
 		item("openai"),
 		item("anthropic"),
 		item("gemini"),

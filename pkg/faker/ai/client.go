@@ -10,6 +10,7 @@ import (
 
 	"station/internal/config"
 	"station/internal/genkit/anthropic_oauth"
+	"station/internal/genkit/cloudshipai"
 
 	"github.com/firebase/genkit/go/ai"
 	"github.com/firebase/genkit/go/genkit"
@@ -51,10 +52,7 @@ func NewClient(cfg *config.Config, debug bool) (Client, error) {
 	}
 
 	// Initialize GenKit based on provider
-	// NOTE: Faker only supports OpenAI and Gemini for AI generation.
-	// If Anthropic is configured, we fallback to OpenAI (using OPENAI_API_KEY from env).
-	// This is needed because the faker module runs as a subprocess (MCP server)
-	// and inherits the parent's AI provider config, but doesn't implement Anthropic.
+	// Supports: OpenAI, Gemini, Anthropic, and CloudShip AI
 	var app *genkit.Genkit
 	effectiveProvider := strings.ToLower(cfg.AIProvider)
 	switch effectiveProvider {
@@ -77,8 +75,10 @@ func NewClient(cfg *config.Config, debug bool) (Client, error) {
 			cfg.AIAPIKey = openaiKey
 			app = initializeOpenAI(ctx, cfg, debug)
 		}
+	case "cloudshipai":
+		app = initializeCloudShipAI(ctx, cfg, debug)
 	default:
-		return nil, fmt.Errorf("unsupported AI provider: %s (supported: openai, gemini)", cfg.AIProvider)
+		return nil, fmt.Errorf("unsupported AI provider: %s (supported: openai, gemini, anthropic, cloudshipai)", cfg.AIProvider)
 	}
 
 	if debug {
@@ -141,6 +141,31 @@ func initializeAnthropic(ctx context.Context, cfg *config.Config, debug bool) *g
 	return nil
 }
 
+// initializeCloudShipAI sets up GenKit with CloudShip AI plugin
+func initializeCloudShipAI(ctx context.Context, cfg *config.Config, debug bool) *genkit.Genkit {
+	// Get registration key - prefer CloudShip config, fall back to API key
+	registrationKey := cfg.CloudShip.RegistrationKey
+	if registrationKey == "" {
+		registrationKey = cfg.AIAPIKey
+	}
+
+	if registrationKey == "" {
+		if debug {
+			fmt.Printf("[FAKER AI] No CloudShip registration key found\n")
+		}
+		return nil
+	}
+
+	if debug {
+		fmt.Printf("[FAKER AI] Using CloudShip AI plugin with inference.cloudshipai.com\n")
+	}
+
+	plugin := &cloudshipai.CloudShipAI{
+		RegistrationKey: registrationKey,
+	}
+	return genkit.Init(ctx, genkit.WithPlugins(plugin))
+}
+
 // Generate generates a text response from a prompt
 func (c *client) Generate(ctx context.Context, prompt string) (string, error) {
 	modelName := c.GetModelName()
@@ -184,6 +209,9 @@ func (c *client) GetModelName() string {
 		return fmt.Sprintf("googleai/%s", baseModel)
 	case "openai":
 		return fmt.Sprintf("openai/%s", baseModel)
+	case "cloudshipai":
+		// CloudShip AI models are registered as cloudshipai/cloudship/model-name
+		return fmt.Sprintf("cloudshipai/%s", baseModel)
 	default:
 		return fmt.Sprintf("%s/%s", c.config.AIProvider, baseModel)
 	}

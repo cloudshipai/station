@@ -14,6 +14,7 @@ import (
 	"station/internal/config"
 	"station/internal/db"
 	"station/internal/genkit/anthropic_oauth"
+	"station/internal/genkit/cloudshipai"
 	"station/pkg/faker/session"
 	"station/pkg/faker/toolcache"
 
@@ -484,8 +485,28 @@ func NewStandaloneFaker(fakerID string, instruction string, toolCache interface{
 			stationConfig.AIAPIKey = openaiKey
 		}
 
+	case "cloudshipai":
+		// CloudShip AI inference endpoint - uses registration key for auth
+		registrationKey := stationConfig.CloudShip.RegistrationKey
+		if registrationKey == "" {
+			registrationKey = stationConfig.AIAPIKey
+		}
+
+		if registrationKey == "" {
+			return nil, fmt.Errorf("cloudshipai provider requires registration key (STN_CLOUDSHIP_KEY) or API key")
+		}
+
+		if debug {
+			fmt.Fprintf(os.Stderr, "[FAKER] Using CloudShip AI inference endpoint\n")
+		}
+
+		cloudshipPlugin := &cloudshipai.CloudShipAI{
+			RegistrationKey: registrationKey,
+		}
+		app = genkit.Init(ctx, genkit.WithPlugins(cloudshipPlugin))
+
 	default:
-		return nil, fmt.Errorf("unsupported AI provider: %s (use 'openai' or 'gemini')", stationConfig.AIProvider)
+		return nil, fmt.Errorf("unsupported AI provider: %s (use 'openai', 'gemini', 'anthropic', or 'cloudshipai')", stationConfig.AIProvider)
 	}
 
 	if app == nil {
