@@ -4,7 +4,10 @@ Get up and running with Station in under 5 minutes.
 
 ## Prerequisites
 
-- `OPENAI_API_KEY` environment variable set
+- **AI Provider** - Choose one:
+  - `CLOUDSHIPAI_REGISTRATION_KEY` or `STN_CLOUDSHIP_KEY` (Recommended)
+  - `OPENAI_API_KEY` environment variable
+  - `ANTHROPIC_API_KEY` or `GEMINI_API_KEY`
 - Linux, macOS, or Windows with WSL2
 
 ## 1. Install Station
@@ -13,17 +16,22 @@ Get up and running with Station in under 5 minutes.
 curl -fsSL https://raw.githubusercontent.com/cloudshipai/station/main/install.sh | bash
 ```
 
-## 2. Bootstrap with Examples
+## 2. Initialize Station
 
 ```bash
-stn bootstrap --openai
+# CloudShip AI (recommended - auto-detected when key is set)
+export CLOUDSHIPAI_REGISTRATION_KEY="csk-..."
+stn init --ship
+
+# Or for OpenAI:
+# export OPENAI_API_KEY="sk-..."
+# stn init --provider openai --ship
 ```
 
 This command automatically sets up:
-- **OpenAI integration** with gpt-4o model
+- **CloudShip AI** (or your chosen provider) integration
 - **Default environment** with filesystem tools
-- **Example agents** ready to use
-- **Web automation** tools via Playwright
+- **Ship CLI** for additional MCP tools
 
 ## 3. Configure in Your AI Editor
 

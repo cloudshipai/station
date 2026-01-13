@@ -30,9 +30,10 @@ Build multi-agent systems that coordinate like real teams. Test with realistic s
 
 - **Docker** - Required for Jaeger (traces and observability)
 - **AI Provider** - Choose one:
-  - Claude Max/Pro subscription (no API billing)
+  - **CloudShip AI** (Recommended) - `STN_CLOUDSHIP_KEY` or `CLOUDSHIPAI_REGISTRATION_KEY`
   - `OPENAI_API_KEY` - OpenAI (gpt-5-mini, gpt-5, etc.)
   - `GEMINI_API_KEY` - Google Gemini
+  - `ANTHROPIC_API_KEY` - Anthropic (claude-sonnet-4-20250514, etc.)
 
 ### 1. Install Station
 
@@ -43,6 +44,26 @@ curl -fsSL https://raw.githubusercontent.com/cloudshipai/station/main/install.sh
 ### 2. Initialize Station
 
 Choose your AI provider:
+
+<details open>
+<summary><b>CloudShip AI (Recommended)</b></summary>
+
+Use CloudShip AI for optimized inference with Llama and Qwen models. This is the default when a registration key is available.
+
+```bash
+# Set your CloudShip registration key
+export CLOUDSHIPAI_REGISTRATION_KEY="csk-..."
+# Or use: export STN_CLOUDSHIP_KEY="csk-..."
+
+stn init --provider cloudshipai --ship  # defaults to cloudship/llama-3.1-70b
+```
+
+**Available models:**
+- `cloudship/llama-3.1-70b` (default) - Best balance of performance and cost
+- `cloudship/llama-3.1-8b` - Faster, lower cost
+- `cloudship/qwen-72b` - Alternative large model
+
+</details>
 
 <details>
 <summary><b>Claude Max/Pro Subscription (⚠️ DEPRECATED)</b></summary>
@@ -398,6 +419,10 @@ Station supports multiple authentication methods for AI providers.
 The simplest way to authenticate - set your API key as an environment variable:
 
 ```bash
+# CloudShip AI (Recommended - auto-detected when registration key is set)
+export CLOUDSHIPAI_REGISTRATION_KEY="csk-..."
+# Or: export STN_CLOUDSHIP_KEY="csk-..."
+
 # OpenAI
 export OPENAI_API_KEY="sk-..."
 

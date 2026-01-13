@@ -15,10 +15,10 @@ Configuration values are loaded in the following order (later values override ea
 Create a `config.yaml` in your workspace:
 
 ```yaml
-# Minimal configuration
-ai_provider: openai
-ai_api_key: ${OPENAI_API_KEY}
-ai_model: gpt-4o
+# Minimal configuration (CloudShip AI - recommended)
+ai_provider: cloudshipai
+ai_api_key: ${CLOUDSHIPAI_REGISTRATION_KEY}
+ai_model: cloudship/llama-3.1-70b
 
 # Optional: Enable sandbox
 sandbox:
@@ -28,9 +28,13 @@ sandbox:
 Or use environment variables:
 
 ```bash
-export STN_AI_PROVIDER=openai
-export STN_AI_API_KEY=sk-...
-export STN_AI_MODEL=gpt-4o
+# CloudShip AI (recommended - auto-detected when key is set)
+export CLOUDSHIPAI_REGISTRATION_KEY=csk-...
+
+# Or for OpenAI:
+# export STN_AI_PROVIDER=openai
+# export STN_AI_API_KEY=sk-...
+# export STN_AI_MODEL=gpt-4o
 ```
 
 ---
@@ -41,21 +45,31 @@ Configure the AI provider for agent execution.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `ai_provider` | string | `openai` | AI provider: `openai`, `anthropic`, `ollama`, `gemini` |
-| `ai_model` | string | `gpt-4o` | Model name (e.g., `gpt-4o`, `claude-sonnet-4-20250514`) |
+| `ai_provider` | string | `cloudshipai` | AI provider: `cloudshipai` (recommended), `openai`, `anthropic`, `ollama`, `gemini` |
+| `ai_model` | string | `cloudship/llama-3.1-70b` | Model name (e.g., `cloudship/llama-3.1-70b`, `gpt-4o`, `claude-sonnet-4-20250514`) |
 | `ai_api_key` | string | - | API key for the AI provider |
 | `ai_base_url` | string | - | Base URL for OpenAI-compatible endpoints |
+
+> **Note:** When `STN_CLOUDSHIP_KEY` or `CLOUDSHIPAI_REGISTRATION_KEY` is set, Station automatically defaults to the CloudShip AI provider.
 
 ### Environment Variables
 
 | Variable | Maps To |
 |----------|---------|
-| `STN_AI_PROVIDER`, `OPENAI_API_KEY` | `ai_provider` |
+| `STN_AI_PROVIDER` | `ai_provider` |
 | `STN_AI_MODEL` | `ai_model` |
-| `STN_AI_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` | `ai_api_key` |
+| `STN_AI_API_KEY`, `CLOUDSHIPAI_REGISTRATION_KEY`, `STN_CLOUDSHIP_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` | `ai_api_key` |
 | `STN_AI_BASE_URL`, `OPENAI_BASE_URL` | `ai_base_url` |
 
-### Example
+### Example: CloudShip AI (Recommended)
+
+```yaml
+ai_provider: cloudshipai
+ai_api_key: ${CLOUDSHIPAI_REGISTRATION_KEY}
+ai_model: cloudship/llama-3.1-70b
+```
+
+### Example: Anthropic
 
 ```yaml
 ai_provider: anthropic
