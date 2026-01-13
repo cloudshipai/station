@@ -342,3 +342,82 @@ func GetCloudShipAPIURL() string {
 	}
 	return strings.TrimSuffix(apiURL, "/")
 }
+
+// CloudShipAuthResult contains the result of CloudShip authentication
+type CloudShipAuthResult struct {
+	APIKey       string
+	Email        string
+	Organization string
+}
+
+// HasCloudShipAuth checks if CloudShip authentication is already configured
+func HasCloudShipAuth() bool {
+	// Check environment variables
+	if os.Getenv("STN_CLOUDSHIP_KEY") != "" || os.Getenv("CLOUDSHIPAI_REGISTRATION_KEY") != "" {
+		return true
+	}
+	if os.Getenv("CLOUDSHIP_API_KEY") != "" {
+		return true
+	}
+	// Check viper config
+	if viper.GetString("cloudship.api_key") != "" {
+		return true
+	}
+	if viper.GetString("cloudship.registration_key") != "" {
+		return true
+	}
+	return false
+}
+
+// RunCloudShipAuthFlow runs the CloudShip authentication flow and returns the result
+// This is designed to be called from stn init when cloudshipai provider is selected
+func RunCloudShipAuthFlow() (*CloudShipAuthResult, error) {
+	fmt.Println()
+	fmt.Println("🌩️  CloudShip AI Authentication")
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Println()
+	fmt.Println("To use CloudShip AI, you need an API key.")
+	fmt.Println("Get your API key from: https://app.cloudshipai.com/webapp/settings/")
+	fmt.Println()
+
+	// Prompt for API key
+	fmt.Print("Enter your CloudShip API key: ")
+	reader := bufio.NewReader(os.Stdin)
+	input, err := reader.ReadString('\n')
+	if err != nil {
+		return nil, fmt.Errorf("failed to read input: %w", err)
+	}
+	apiKey := strings.TrimSpace(input)
+
+	if apiKey == "" {
+		return nil, fmt.Errorf("API key is required for CloudShip AI provider")
+	}
+
+	// Validate the API key
+	fmt.Println("Validating API key...")
+
+	userInfo, err := validateAPIKey(apiKey)
+	if err != nil {
+		return nil, fmt.Errorf("invalid API key: %w", err)
+	}
+
+	// Save to config
+	viper.Set("cloudship.api_key", apiKey)
+	viper.Set("cloudship.enabled", true)
+
+	fmt.Println()
+	fmt.Println("✅ Successfully authenticated with CloudShip!")
+	if userInfo.Email != "" && userInfo.Email != "authenticated" {
+		fmt.Printf("   Email: %s\n", userInfo.Email)
+	}
+	if userInfo.Organization.Name != "" {
+		fmt.Printf("   Organization: %s\n", userInfo.Organization.Name)
+	}
+	fmt.Println()
+
+	return &CloudShipAuthResult{
+		APIKey:       apiKey,
+		Email:        userInfo.Email,
+		Organization: userInfo.Organization.Name,
+	}, nil
+}

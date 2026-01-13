@@ -850,10 +850,20 @@ func runInit(cmd *cobra.Command, args []string) error {
 			if provider == "openai" {
 				recommended := config.GetRecommendedOpenAIModels()
 				model = recommended["cost_effective"]
+			} else if provider == "cloudshipai" {
+				model = "cloudship/llama-3.1-70b"
 			} else {
 				model = "gemini-2.5-flash"
 			}
 		}
+
+		// If cloudshipai is selected via flag, ensure we have authentication
+		if provider == "cloudshipai" && !configExists {
+			if err := ensureCloudShipAuth(); err != nil {
+				return fmt.Errorf("CloudShip AI authentication required: %w", err)
+			}
+		}
+
 		providerConfig = &ProviderConfig{Provider: provider, Model: model, BaseURL: baseURL}
 
 		if !configExists {

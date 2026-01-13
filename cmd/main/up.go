@@ -177,7 +177,7 @@ func init() {
 	upCmd.Flags().Bool("dev", false, "Development mode: expose UI (8585) and MCP (8586) ports. Default only exposes Dynamic Agent MCP (8587)")
 
 	// Init flags for first-time setup
-	upCmd.Flags().String("provider", "", "AI provider for initialization (openai, gemini, anthropic, custom). Defaults to openai")
+	upCmd.Flags().String("provider", "", "AI provider for initialization (cloudshipai, openai, anthropic, gemini, custom). Defaults to cloudshipai if key available")
 	upCmd.Flags().String("model", "", "AI model to use (e.g., gpt-5-mini, gemini-2.0-flash-exp). Defaults based on provider")
 	upCmd.Flags().String("api-key", "", "API key for AI provider (alternative to environment variables)")
 	upCmd.Flags().String("base-url", "", "Custom base URL for OpenAI-compatible endpoints")

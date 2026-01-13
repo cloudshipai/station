@@ -89,6 +89,13 @@ func setupProviderInteractively() (*ProviderConfig, error) {
 		}
 	}
 
+	// If cloudshipai is selected, ensure we have authentication
+	if provider == "cloudshipai" {
+		if err := ensureCloudShipAuth(); err != nil {
+			return nil, err
+		}
+	}
+
 	var model string
 	if provider == "custom" {
 		// Step 2a: Custom provider setup
@@ -108,6 +115,21 @@ func setupProviderInteractively() (*ProviderConfig, error) {
 	}
 
 	return &ProviderConfig{Provider: provider, Model: model, BaseURL: ""}, nil
+}
+
+// ensureCloudShipAuth checks if CloudShip auth exists, and runs the auth flow if not
+func ensureCloudShipAuth() error {
+	if HasCloudShipAuth() {
+		log.Printf("✓ CloudShip authentication already configured\n")
+		return nil
+	}
+
+	// Run the auth flow
+	_, err := RunCloudShipAuthFlow()
+	if err != nil {
+		return fmt.Errorf("CloudShip authentication failed: %w", err)
+	}
+	return nil
 }
 
 func detectProviderFromEnv() (string, string) {
