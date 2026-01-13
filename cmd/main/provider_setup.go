@@ -25,9 +25,14 @@ type ProviderConfig struct {
 func getProviderModels() map[string][]string {
 	return map[string][]string{
 		"cloudshipai": {
-			"cloudship/llama-3.1-70b",
-			"cloudship/llama-3.1-8b",
-			"cloudship/qwen-72b",
+			// Top-tier tool calling models (2025)
+			"cloudship/glm-4.7",          // #1 tool calling - interleaved thinking
+			"cloudship/deepseek-v3.1",    // Advanced reasoning + tools, 128K context
+			"cloudship/qwen3-235b",       // MoE 22B active, 262K context
+			// Cost-effective options
+			"cloudship/glm-4.5-air",      // Fast GLM with excellent tool support
+			"cloudship/llama-3.1-70b",    // Solid general purpose
+			"cloudship/llama-3.1-8b",     // Lightweight option
 		},
 		"openai": config.GetSupportedOpenAIModels(),
 		"anthropic": {
@@ -46,13 +51,13 @@ func getProviderModels() map[string][]string {
 func getDefaultProvider() (string, string) {
 	// CloudShip AI is the default when registration key is available
 	if os.Getenv("STN_CLOUDSHIP_KEY") != "" || os.Getenv("CLOUDSHIPAI_REGISTRATION_KEY") != "" {
-		return "cloudshipai", "cloudship/llama-3.1-70b"
+		return "cloudshipai", "cloudship/glm-4.7"
 	}
 	return "openai", "gpt-4o-mini"
 }
 
 var providerDescriptions = map[string]string{
-	"cloudshipai": "CloudShip AI - Optimized inference with Llama and Qwen models (Recommended)",
+	"cloudshipai": "CloudShip AI - Top-tier tool calling with GLM, DeepSeek, Qwen (Recommended)",
 	"openai":      "OpenAI models - GPT-4o, and more (any model accepted)",
 	"anthropic":   "Anthropic's Claude models - Claude Sonnet 4, Claude 3.7, etc.",
 	"gemini":      "Google's Gemini models - Fast, capable, and cost-effective",
@@ -135,7 +140,7 @@ func ensureCloudShipAuth() error {
 func detectProviderFromEnv() (string, string) {
 	// CloudShip AI takes priority when registration key is available
 	if os.Getenv("STN_CLOUDSHIP_KEY") != "" || os.Getenv("CLOUDSHIPAI_REGISTRATION_KEY") != "" {
-		return "cloudshipai", "cloudship/llama-3.1-70b"
+		return "cloudshipai", "cloudship/glm-4.7"
 	}
 	if os.Getenv("ANTHROPIC_API_KEY") != "" {
 		return "anthropic", "claude-sonnet-4-20250514"

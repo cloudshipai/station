@@ -19,10 +19,42 @@ const (
 )
 
 // SupportedModels defines the models available on CloudShip inference endpoint
+// These are top-tier tool-calling models selected based on BFCL benchmarks
 var SupportedModels = map[string]ai.ModelOptions{
-	// Llama 3.1 models via Together AI backend
-	"cloudship/llama-3.1-8b": {
-		Label: "CloudShip Llama 3.1 8B",
+	// Top-tier tool calling models (2025)
+	"cloudship/glm-4.7": {
+		Label: "CloudShip GLM-4.7 (#1 Tool Calling)",
+		Supports: &ai.ModelSupports{
+			Multiturn:  true,
+			Tools:      true,
+			SystemRole: true,
+			Media:      false,
+			ToolChoice: true,
+		},
+	},
+	"cloudship/deepseek-v3.1": {
+		Label: "CloudShip DeepSeek V3.1 (Advanced Reasoning + Tools)",
+		Supports: &ai.ModelSupports{
+			Multiturn:  true,
+			Tools:      true,
+			SystemRole: true,
+			Media:      false,
+			ToolChoice: true,
+		},
+	},
+	"cloudship/qwen3-235b": {
+		Label: "CloudShip Qwen3 235B MoE (262K Context)",
+		Supports: &ai.ModelSupports{
+			Multiturn:  true,
+			Tools:      true,
+			SystemRole: true,
+			Media:      false,
+			ToolChoice: true,
+		},
+	},
+	// Cost-effective options
+	"cloudship/glm-4.5-air": {
+		Label: "CloudShip GLM-4.5 Air (Fast + Efficient)",
 		Supports: &ai.ModelSupports{
 			Multiturn:  true,
 			Tools:      true,
@@ -41,9 +73,8 @@ var SupportedModels = map[string]ai.ModelOptions{
 			ToolChoice: true,
 		},
 	},
-	// Qwen models via Together AI backend
-	"cloudship/qwen-72b": {
-		Label: "CloudShip Qwen 2.5 72B",
+	"cloudship/llama-3.1-8b": {
+		Label: "CloudShip Llama 3.1 8B (Lightweight)",
 		Supports: &ai.ModelSupports{
 			Multiturn:  true,
 			Tools:      true,
