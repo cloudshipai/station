@@ -17,12 +17,10 @@ type Logger struct {
 var globalLogger *Logger
 
 // Initialize sets up the global logger with debug mode setting
+// All logging goes to stderr to avoid polluting stdout (important for MCP servers)
 func Initialize(debugMode bool) {
-	// Try to use the same output destination as the default log package
-	var output io.Writer = os.Stdout
-	if log.Writer() != os.Stderr {
-		output = log.Writer()
-	}
+	// Always use stderr for logging to avoid interfering with MCP stdio protocol
+	var output io.Writer = os.Stderr
 
 	globalLogger = &Logger{
 		debugEnabled: debugMode,

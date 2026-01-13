@@ -395,7 +395,7 @@ func initConfig() {
 
 	// Read config file if it exists
 	if err := viper.ReadInConfig(); err == nil {
-		fmt.Printf("Using config file: %s\n", viper.ConfigFileUsed())
+		fmt.Fprintf(os.Stderr, "Using config file: %s\n", viper.ConfigFileUsed())
 
 		// CloudShip integration is now handled by the Lighthouse client
 		// in individual command contexts (stdio, serve, CLI modes)
