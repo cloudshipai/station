@@ -168,6 +168,52 @@ print(json.dumps(result))
 
 See **[Sandbox Documentation](../station/sandbox.md)** for complete configuration options and examples.
 
+### Agentic Harness Configuration (Advanced Multi-turn Execution)
+
+For agents that need Claude Agent SDK-like capabilities - multi-turn reasoning, persistent tool execution, and sandboxed environments - use the agentic harness:
+
+```yaml
+harness: agentic
+harness_config:
+  max_steps: 50                  # Maximum reasoning steps (default: 25)
+  doom_loop_threshold: 5         # Abort after N similar outputs (default: 3)
+  timeout: 30m                   # Overall execution timeout (default: 15m)
+  sandbox:                       # Execution environment
+    mode: docker                 # host | docker | e2b (experimental)
+    image: python:3.11-slim      # Docker image (if mode: docker)
+    network: false               # Disable network access
+    memory: 4g                   # Memory limit
+```
+
+**Sandbox Modes:**
+- `host` - Tools execute on host machine (fast, no isolation)
+- `docker` - Tools execute in Docker containers (isolated, files persist via volume)
+- `e2b` - Tools execute in cloud VMs (experimental, data doesn't persist)
+
+**Example Coding Agent:**
+```yaml
+---
+name: coding-agent
+description: Multi-turn coding assistant
+harness: agentic
+harness_config:
+  max_steps: 50
+  sandbox:
+    mode: docker
+    image: python:3.11
+tools:
+  - read
+  - write
+  - edit
+  - bash
+  - glob
+  - grep
+---
+You are a coding assistant. Help users write, debug, and improve code.
+```
+
+See **[Harness Agents Documentation](../features/HARNESS_AGENTS.md)** for complete configuration options.
+
 ### Tool Configuration
 
 ```yaml

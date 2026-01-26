@@ -76,6 +76,8 @@ func init() {
 	rootCmd.AddCommand(latticeCmd)
 	rootCmd.AddCommand(githubCmd)
 	rootCmd.AddCommand(secretsCmd)
+	rootCmd.AddCommand(sessionCmd)
+	rootCmd.AddCommand(harnessCmd)
 
 	filesCmd.AddCommand(filesUploadCmd)
 	filesCmd.AddCommand(filesDownloadCmd)
@@ -279,6 +281,7 @@ func init() {
 	agentCreateCmd.Flags().String("sandbox", "", "Sandbox config JSON (e.g., '{\"enabled\":true,\"image\":\"python:3.11\"}')")
 	agentCreateCmd.Flags().String("coding", "", "Coding config JSON (e.g., '{\"enabled\":true,\"backend\":\"opencode\"}')")
 	agentCreateCmd.Flags().Bool("notify", false, "Enable notifications for this agent")
+	agentCreateCmd.Flags().String("harness-config", "", "Agentic harness config JSON (e.g., '{\"max_steps\":50,\"sandbox\":{\"mode\":\"docker\"}}')")
 
 	agentUpdateCmd.Flags().StringP("environment", "e", "default", "Environment the agent is in")
 	agentUpdateCmd.Flags().StringP("prompt", "p", "", "New system prompt")
@@ -294,6 +297,7 @@ func init() {
 	agentUpdateCmd.Flags().String("sandbox", "", "Sandbox config JSON")
 	agentUpdateCmd.Flags().String("coding", "", "Coding config JSON")
 	agentUpdateCmd.Flags().Bool("notify", false, "Enable notifications")
+	agentUpdateCmd.Flags().String("harness-config", "", "Agentic harness config JSON")
 
 	// Runs command flags
 	runsListCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")

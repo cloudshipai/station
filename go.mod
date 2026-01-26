@@ -8,6 +8,7 @@ require (
 	cloud.google.com/go v0.120.0 // indirect
 	cloud.google.com/go/auth v0.16.2 // indirect
 	cloud.google.com/go/compute/metadata v0.7.0 // indirect
+	connectrpc.com/connect v1.19.1 // indirect
 	github.com/99designs/gqlgen v0.17.75 // indirect
 	github.com/Khan/genqlient v0.8.1 // indirect
 	github.com/KyleBanks/depth v1.2.1 // indirect

@@ -1,0 +1,73 @@
+# Harness Pipeline Workflow
+# Demonstrates: Multi-step workflow using agentic harness agents
+#
+# This workflow uses agents configured with harness: agentic in their dotprompt.
+# Each agent runs through the AgenticExecutor with doom loop detection,
+# context compaction, and tool hooks.
+
+id: harness-pipeline
+version: "1.0"
+name: "Harness Agent Pipeline"
+description: "Demonstrates workflow using agentic harness agents"
+
+inputSchema:
+  type: object
+  properties:
+    project_name:
+      type: string
+      description: "Name of the project to analyze"
+    analysis_type:
+      type: string
+      enum: [quick, thorough]
+      default: quick
+  required: [project_name]
+
+outputSchema:
+  type: object
+  properties:
+    summary:
+      type: string
+    files_created:
+      type: array
+      items:
+        type: string
+    analysis_complete:
+      type: boolean
+
+start: setup
+
+states:
+  # Step 1: Setup agent creates project structure
+  - name: setup
+    type: agent
+    agent: "harness-test"  # Uses harness: agentic in dotprompt
+    input:
+      task: |
+        Create a directory called '{{workflow.input.project_name}}' and inside it:
+        1. Create a README.md with project name and description
+        2. Create a config.json with version "1.0"
+    resultPath: "steps.setup"
+    next: verify
+
+  # Step 2: Verify agent checks the created files
+  - name: verify
+    type: agent
+    agent: "harness-test"  # Uses harness: agentic in dotprompt
+    input:
+      task: |
+        List all files in the '{{workflow.input.project_name}}' directory and
+        read the config.json to confirm version is "1.0".
+        Report what you found.
+    resultPath: "steps.verify"
+    end: true
+
+# Example trigger:
+# curl -X POST http://localhost:8585/api/v1/workflow-runs \
+#   -H "Content-Type: application/json" \
+#   -d '{
+#     "workflow_id": "harness-pipeline",
+#     "input": {
+#       "project_name": "my-test-project",
+#       "analysis_type": "quick"
+#     }
+#   }'

@@ -978,6 +978,70 @@ func runInit(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// Set harness defaults (agentic execution harness)
+	if !viper.IsSet("harness.workspace.path") {
+		viper.Set("harness.workspace.path", "./workspace")
+	}
+	if !viper.IsSet("harness.workspace.mode") {
+		viper.Set("harness.workspace.mode", "host")
+	}
+	if !viper.IsSet("harness.compaction.enabled") {
+		viper.Set("harness.compaction.enabled", true)
+	}
+	if !viper.IsSet("harness.compaction.threshold") {
+		viper.Set("harness.compaction.threshold", "0.85")
+	}
+	if !viper.IsSet("harness.compaction.protect_tokens") {
+		viper.Set("harness.compaction.protect_tokens", 40000)
+	}
+	if !viper.IsSet("harness.git.auto_branch") {
+		viper.Set("harness.git.auto_branch", true)
+	}
+	if !viper.IsSet("harness.git.branch_prefix") {
+		viper.Set("harness.git.branch_prefix", "agent/")
+	}
+	if !viper.IsSet("harness.git.auto_commit") {
+		viper.Set("harness.git.auto_commit", false)
+	}
+	if !viper.IsSet("harness.git.require_approval") {
+		viper.Set("harness.git.require_approval", true)
+	}
+	if !viper.IsSet("harness.git.workflow_branch_strategy") {
+		viper.Set("harness.git.workflow_branch_strategy", "shared")
+	}
+	if !viper.IsSet("harness.nats.enabled") {
+		viper.Set("harness.nats.enabled", true)
+	}
+	if !viper.IsSet("harness.nats.kv_bucket") {
+		viper.Set("harness.nats.kv_bucket", "harness-state")
+	}
+	if !viper.IsSet("harness.nats.object_bucket") {
+		viper.Set("harness.nats.object_bucket", "harness-files")
+	}
+	if !viper.IsSet("harness.nats.max_file_size") {
+		viper.Set("harness.nats.max_file_size", "100MB")
+	}
+	if !viper.IsSet("harness.nats.ttl") {
+		viper.Set("harness.nats.ttl", "24h")
+	}
+	if !viper.IsSet("harness.permissions.external_directory") {
+		viper.Set("harness.permissions.external_directory", "deny")
+	}
+
+	// Set sandbox defaults (Docker-based code execution)
+	if !viper.IsSet("sandbox.enabled") {
+		viper.Set("sandbox.enabled", false)
+	}
+	if !viper.IsSet("sandbox.code_mode_enabled") {
+		viper.Set("sandbox.code_mode_enabled", false)
+	}
+	if !viper.IsSet("sandbox.docker_image") {
+		viper.Set("sandbox.docker_image", "ubuntu:22.04")
+	}
+	if !viper.IsSet("sandbox.idle_timeout_minutes") {
+		viper.Set("sandbox.idle_timeout_minutes", 30)
+	}
+
 	// Generate encryption key if not already present
 	if viper.GetString("encryption_key") == "" {
 		encryptionKey, err := auth.GenerateAPIKey()
@@ -997,6 +1061,14 @@ func runInit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to write config file: %w", err)
 	}
 
+	// Create harness workspace directory
+	harnessWorkspaceDir := filepath.Join(configDir, "workspace")
+	if err := os.MkdirAll(harnessWorkspaceDir, 0755); err != nil {
+		fmt.Printf("   Warning: Failed to create workspace directory: %v\n", err)
+	} else {
+		fmt.Printf("   Created harness workspace directory\n")
+	}
+
 	// Generate .gitignore for workspace if using custom config path
 	if configPath != "" {
 		gitignorePath := filepath.Join(configDir, ".gitignore")
@@ -1005,6 +1077,9 @@ func runInit(cmd *cobra.Command, args []string) error {
 station.db
 station.db-shm
 station.db-wal
+
+# Harness workspace (agent execution artifacts)
+workspace/
 
 # Runtime variable resolution
 vars/

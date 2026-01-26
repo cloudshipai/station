@@ -36,13 +36,14 @@ type ConfigSection struct {
 var ConfigSections = []ConfigSection{
 	{Name: "ai", Description: "AI Provider Settings", Order: 1},
 	{Name: "coding", Description: "Coding Backend Settings", Order: 2},
-	{Name: "cloudship", Description: "CloudShip Integration", Order: 3},
-	{Name: "lattice", Description: "Lattice Mesh Network", Order: 4},
-	{Name: "telemetry", Description: "Telemetry & Observability", Order: 5},
-	{Name: "sandbox", Description: "Sandbox Execution", Order: 6},
-	{Name: "webhook", Description: "Webhook Settings", Order: 7},
-	{Name: "notifications", Description: "Notification Settings", Order: 8},
-	{Name: "server", Description: "Server & Port Settings", Order: 9},
+	{Name: "harness", Description: "Agentic Harness Settings", Order: 3},
+	{Name: "cloudship", Description: "CloudShip Integration", Order: 4},
+	{Name: "lattice", Description: "Lattice Mesh Network", Order: 5},
+	{Name: "telemetry", Description: "Telemetry & Observability", Order: 6},
+	{Name: "sandbox", Description: "Sandbox Execution", Order: 7},
+	{Name: "webhook", Description: "Webhook Settings", Order: 8},
+	{Name: "notifications", Description: "Notification Settings", Order: 9},
+	{Name: "server", Description: "Server & Port Settings", Order: 10},
 }
 
 var ConfigSchema = []ConfigField{
@@ -83,6 +84,32 @@ var ConfigSchema = []ConfigField{
 	{Key: "coding.git.token_env", Type: FieldTypeString, Description: "Environment variable for GitHub token", Default: "GITHUB_TOKEN", Section: "coding"},
 	{Key: "coding.git.user_name", Type: FieldTypeString, Description: "Git commit author name", Default: "Station Bot", Section: "coding"},
 	{Key: "coding.git.user_email", Type: FieldTypeString, Description: "Git commit author email", Default: "station@cloudship.ai", Section: "coding"},
+
+	// Harness Workspace Settings
+	{Key: "harness.workspace.path", Type: FieldTypeString, Description: "Workspace directory path (relative to config)", Default: "./workspace", Section: "harness"},
+	{Key: "harness.workspace.mode", Type: FieldTypeString, Description: "Workspace mode (host, sandbox, agentfs)", Default: "host", Section: "harness", Options: []string{"host", "sandbox", "agentfs"}},
+
+	// Harness Compaction Settings
+	{Key: "harness.compaction.enabled", Type: FieldTypeBool, Description: "Enable automatic context compaction", Default: true, Section: "harness"},
+	{Key: "harness.compaction.threshold", Type: FieldTypeString, Description: "Context window threshold for compaction (0.0-1.0)", Default: "0.85", Section: "harness"},
+	{Key: "harness.compaction.protect_tokens", Type: FieldTypeInt, Description: "Recent tokens to protect from pruning", Default: 40000, Section: "harness"},
+
+	// Harness Git Settings
+	{Key: "harness.git.auto_branch", Type: FieldTypeBool, Description: "Auto-create branch for each task", Default: true, Section: "harness"},
+	{Key: "harness.git.branch_prefix", Type: FieldTypeString, Description: "Prefix for agent-created branches", Default: "agent/", Section: "harness"},
+	{Key: "harness.git.auto_commit", Type: FieldTypeBool, Description: "Auto-commit on task completion", Default: false, Section: "harness"},
+	{Key: "harness.git.require_approval", Type: FieldTypeBool, Description: "Require approval before push/PR", Default: true, Section: "harness"},
+	{Key: "harness.git.workflow_branch_strategy", Type: FieldTypeString, Description: "Branch strategy in workflows (shared, per_agent)", Default: "shared", Section: "harness", Options: []string{"shared", "per_agent"}},
+
+	// Harness NATS Settings
+	{Key: "harness.nats.enabled", Type: FieldTypeBool, Description: "Enable NATS for state sharing", Default: true, Section: "harness"},
+	{Key: "harness.nats.kv_bucket", Type: FieldTypeString, Description: "NATS KV bucket for state", Default: "harness-state", Section: "harness"},
+	{Key: "harness.nats.object_bucket", Type: FieldTypeString, Description: "NATS Object Store bucket", Default: "harness-files", Section: "harness"},
+	{Key: "harness.nats.max_file_size", Type: FieldTypeString, Description: "Max file size for object store", Default: "100MB", Section: "harness"},
+	{Key: "harness.nats.ttl", Type: FieldTypeString, Description: "TTL for stored artifacts", Default: "24h", Section: "harness"},
+
+	// Harness Permission Settings
+	{Key: "harness.permissions.external_directory", Type: FieldTypeString, Description: "Access to paths outside workspace (deny, ask, allow)", Default: "deny", Section: "harness", Options: []string{"deny", "ask", "allow"}},
 
 	// CloudShip Integration
 	{Key: "cloudship.enabled", Type: FieldTypeBool, Description: "Enable CloudShip integration", Default: false, Section: "cloudship"},
