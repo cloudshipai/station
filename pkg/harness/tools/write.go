@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"station/pkg/harness/sandbox"
+
 	"github.com/firebase/genkit/go/ai"
 	"github.com/firebase/genkit/go/genkit"
 )
@@ -21,6 +23,10 @@ type WriteOutput struct {
 }
 
 func NewWriteTool(genkitApp *genkit.Genkit, workspacePath string) ai.Tool {
+	return NewWriteToolWithSandbox(genkitApp, workspacePath, nil)
+}
+
+func NewWriteToolWithSandbox(genkitApp *genkit.Genkit, workspacePath string, sb sandbox.Sandbox) ai.Tool {
 	return genkit.DefineTool(
 		genkitApp,
 		"write",
@@ -40,13 +46,22 @@ IMPORTANT:
 				path = filepath.Join(workspacePath, path)
 			}
 
-			dir := filepath.Dir(path)
-			if err := os.MkdirAll(dir, 0755); err != nil {
-				return WriteOutput{}, fmt.Errorf("failed to create directory: %w", err)
-			}
+			if sb != nil {
+				dir := filepath.Dir(path)
+				sb.Exec(ctx, "mkdir", "-p", dir)
 
-			if err := os.WriteFile(path, []byte(input.Content), 0644); err != nil {
-				return WriteOutput{}, fmt.Errorf("failed to write file: %w", err)
+				if err := sb.WriteFile(ctx, path, []byte(input.Content), 0644); err != nil {
+					return WriteOutput{}, fmt.Errorf("failed to write file: %w", err)
+				}
+			} else {
+				dir := filepath.Dir(path)
+				if err := os.MkdirAll(dir, 0755); err != nil {
+					return WriteOutput{}, fmt.Errorf("failed to create directory: %w", err)
+				}
+
+				if err := os.WriteFile(path, []byte(input.Content), 0644); err != nil {
+					return WriteOutput{}, fmt.Errorf("failed to write file: %w", err)
+				}
 			}
 
 			return WriteOutput{

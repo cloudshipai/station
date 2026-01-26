@@ -1028,6 +1028,20 @@ func runInit(cmd *cobra.Command, args []string) error {
 		viper.Set("harness.permissions.external_directory", "deny")
 	}
 
+	// Set sandbox defaults (Docker-based code execution)
+	if !viper.IsSet("sandbox.enabled") {
+		viper.Set("sandbox.enabled", false)
+	}
+	if !viper.IsSet("sandbox.code_mode_enabled") {
+		viper.Set("sandbox.code_mode_enabled", false)
+	}
+	if !viper.IsSet("sandbox.docker_image") {
+		viper.Set("sandbox.docker_image", "ubuntu:22.04")
+	}
+	if !viper.IsSet("sandbox.idle_timeout_minutes") {
+		viper.Set("sandbox.idle_timeout_minutes", 30)
+	}
+
 	// Generate encryption key if not already present
 	if viper.GetString("encryption_key") == "" {
 		encryptionKey, err := auth.GenerateAPIKey()

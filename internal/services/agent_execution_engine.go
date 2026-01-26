@@ -16,6 +16,7 @@ import (
 	dotprompt "station/pkg/dotprompt"
 	"station/pkg/harness"
 	"station/pkg/harness/git"
+	"station/pkg/harness/sandbox"
 	"station/pkg/harness/stream"
 	"station/pkg/harness/tools"
 	"station/pkg/harness/workspace"
@@ -1173,9 +1174,18 @@ type harnessFrontmatter struct {
 }
 
 type agentHarnessFrontmatter struct {
-	MaxSteps          int    `yaml:"max_steps"`
-	DoomLoopThreshold int    `yaml:"doom_loop_threshold"`
-	Timeout           string `yaml:"timeout"`
+	MaxSteps          int                        `yaml:"max_steps"`
+	DoomLoopThreshold int                        `yaml:"doom_loop_threshold"`
+	Timeout           string                     `yaml:"timeout"`
+	Sandbox           *harnessSandboxFrontmatter `yaml:"sandbox"`
+}
+
+type harnessSandboxFrontmatter struct {
+	Mode        string            `yaml:"mode"`
+	Image       string            `yaml:"image"`
+	Timeout     string            `yaml:"timeout"`
+	Network     bool              `yaml:"network"`
+	Environment map[string]string `yaml:"environment"`
 }
 
 func (aee *AgentExecutionEngine) parseLatticeEnabledFromAgent(agent *models.Agent) bool {
@@ -1412,6 +1422,47 @@ func convertHarnessResultToExecutionResponse(result *harness.ExecutionResult, mo
 	}
 }
 
+func (aee *AgentExecutionEngine) createHarnessSandbox(ctx context.Context, fm *harnessFrontmatter, workspacePath string) (sandbox.Sandbox, error) {
+	if fm == nil || fm.HarnessConfig == nil || fm.HarnessConfig.Sandbox == nil {
+		return nil, nil
+	}
+
+	sbFM := fm.HarnessConfig.Sandbox
+	mode := sandbox.Mode(sbFM.Mode)
+	if mode == "" {
+		mode = sandbox.ModeHost
+	}
+
+	cfg := sandbox.Config{
+		Mode:          mode,
+		Image:         sbFM.Image,
+		WorkspacePath: workspacePath,
+		Environment:   sbFM.Environment,
+		Network: sandbox.NetworkConfig{
+			Enabled: sbFM.Network,
+		},
+	}
+
+	if sbFM.Timeout != "" {
+		if d, err := time.ParseDuration(sbFM.Timeout); err == nil {
+			cfg.Timeout = d
+		}
+	}
+
+	factory := sandbox.NewFactory(sandbox.DefaultConfig())
+	sb, err := factory.Create(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create sandbox: %w", err)
+	}
+
+	if err := sb.Create(ctx); err != nil {
+		return nil, fmt.Errorf("failed to initialize sandbox: %w", err)
+	}
+
+	logging.Info("Sandbox created: mode=%s, image=%s, workspace=%s", mode, sbFM.Image, workspacePath)
+	return sb, nil
+}
+
 func (aee *AgentExecutionEngine) executeWithAgenticHarness(
 	ctx context.Context,
 	agent *models.Agent,
@@ -1444,7 +1495,23 @@ func (aee *AgentExecutionEngine) executeWithAgenticHarness(
 		}, err
 	}
 
-	toolRegistry := tools.NewToolRegistry(genkitApp, workspacePath)
+	sb, err := aee.createHarnessSandbox(ctx, harnessFM, workspacePath)
+	if err != nil {
+		return &dotprompt.ExecutionResponse{
+			Success:  false,
+			Error:    fmt.Sprintf("sandbox creation failed: %v", err),
+			Duration: time.Since(startTime),
+		}, err
+	}
+	if sb != nil {
+		defer func() {
+			if destroyErr := sb.Destroy(ctx); destroyErr != nil {
+				logging.Error("Failed to destroy sandbox: %v", destroyErr)
+			}
+		}()
+	}
+
+	toolRegistry := tools.NewToolRegistryWithSandbox(genkitApp, workspacePath, sb)
 	if err := toolRegistry.RegisterBuiltinTools(); err != nil {
 		return &dotprompt.ExecutionResponse{
 			Success:  false,
@@ -1469,6 +1536,10 @@ func (aee *AgentExecutionEngine) executeWithAgenticHarness(
 	executorOpts := []harness.ExecutorOption{
 		harness.WithWorkspace(ws),
 		harness.WithModelName(modelName),
+	}
+
+	if sb != nil {
+		executorOpts = append(executorOpts, harness.WithSandbox(sb))
 	}
 
 	if harnessConfig.Git.AutoBranch {

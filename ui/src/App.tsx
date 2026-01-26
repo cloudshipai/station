@@ -3921,6 +3921,63 @@ const SettingsPage = () => {
                             </div>
                           </div>
                         </div>
+
+                        <div className="pt-2 border-t border-gray-200">
+                          <label className="block text-xs text-gray-600 mb-1">Docker Image</label>
+                          <input
+                            type="text"
+                            value={configObj.sandbox?.docker_image || 'ubuntu:22.04'}
+                            onChange={(e) => updateSandboxConfig({ docker_image: e.target.value })}
+                            placeholder="ubuntu:22.04"
+                            className="w-full bg-white border border-gray-300 text-gray-900 font-mono text-sm p-2 rounded focus:outline-none focus:border-gray-500 focus:ring-1 focus:ring-gray-500"
+                          />
+                          <p className="text-[10px] text-gray-400 mt-1">Docker image for sandbox containers</p>
+                        </div>
+
+                        <div className="pt-2 border-t border-gray-200">
+                          <label className="block text-xs text-gray-600 mb-2 font-medium">Private Registry Auth (Optional)</label>
+                          <div className="space-y-2">
+                            <div>
+                              <label className="block text-[10px] text-gray-500 mb-1">Registry Server</label>
+                              <input
+                                type="text"
+                                value={configObj.sandbox?.registry_auth?.server_address || ''}
+                                onChange={(e) => updateSandboxConfig({ 
+                                  registry_auth: { ...configObj.sandbox?.registry_auth, server_address: e.target.value }
+                                })}
+                                placeholder="ghcr.io or 123456.dkr.ecr.us-east-1.amazonaws.com"
+                                className="w-full bg-white border border-gray-300 text-gray-900 font-mono text-xs p-1.5 rounded focus:outline-none focus:border-gray-500"
+                              />
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <label className="block text-[10px] text-gray-500 mb-1">Username</label>
+                                <input
+                                  type="text"
+                                  value={configObj.sandbox?.registry_auth?.username || ''}
+                                  onChange={(e) => updateSandboxConfig({ 
+                                    registry_auth: { ...configObj.sandbox?.registry_auth, username: e.target.value }
+                                  })}
+                                  placeholder="username"
+                                  className="w-full bg-white border border-gray-300 text-gray-900 font-mono text-xs p-1.5 rounded focus:outline-none focus:border-gray-500"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[10px] text-gray-500 mb-1">Password/Token</label>
+                                <input
+                                  type="password"
+                                  value={configObj.sandbox?.registry_auth?.password || ''}
+                                  onChange={(e) => updateSandboxConfig({ 
+                                    registry_auth: { ...configObj.sandbox?.registry_auth, password: e.target.value }
+                                  })}
+                                  placeholder="••••••••"
+                                  className="w-full bg-white border border-gray-300 text-gray-900 font-mono text-xs p-1.5 rounded focus:outline-none focus:border-gray-500"
+                                />
+                              </div>
+                            </div>
+                            <p className="text-[10px] text-gray-400">For ECR/GCR, use identity_token instead. Or set STN_SANDBOX_REGISTRY_* env vars.</p>
+                          </div>
+                        </div>
                       </>
                     )}
                     

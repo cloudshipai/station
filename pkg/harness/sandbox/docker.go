@@ -3,6 +3,8 @@ package sandbox
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -35,6 +37,10 @@ func NewDockerSandbox(cfg Config) (*DockerSandbox, error) {
 func (s *DockerSandbox) Create(ctx context.Context) error {
 	if s.created {
 		return nil
+	}
+
+	if err := s.pullImage(ctx); err != nil {
+		return fmt.Errorf("failed to pull image: %w", err)
 	}
 
 	args := []string{
@@ -191,24 +197,40 @@ func (s *DockerSandbox) WriteFile(ctx context.Context, path string, content []by
 
 	containerPath := s.resolveContainerPath(path)
 
-	dir := filepath.Dir(containerPath)
-	mkdirCmd := exec.CommandContext(ctx, "docker", "exec", s.containerName(), "mkdir", "-p", dir)
-	if err := mkdirCmd.Run(); err != nil {
-		return fmt.Errorf("failed to create directory %s: %w", dir, err)
+	// Use docker cp approach which works with --read-only containers
+	// Write content to temp file on host, then docker cp into container
+	tmpFile, err := os.CreateTemp("", "docker-sandbox-write-*")
+	if err != nil {
+		return fmt.Errorf("failed to create temp file: %w", err)
 	}
+	tmpPath := tmpFile.Name()
+	defer os.Remove(tmpPath)
 
-	cmd := exec.CommandContext(ctx, "docker", "exec", "-i", s.containerName(), "tee", containerPath)
-	cmd.Stdin = bytes.NewReader(content)
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to write file %s: %w", containerPath, err)
+	if _, err := tmpFile.Write(content); err != nil {
+		tmpFile.Close()
+		return fmt.Errorf("failed to write temp file: %w", err)
 	}
+	tmpFile.Close()
 
+	// Set permissions on host file before copying (since chmod in container may fail with --cap-drop ALL)
 	if mode != 0 {
-		chmodCmd := exec.CommandContext(ctx, "docker", "exec", s.containerName(),
-			"chmod", fmt.Sprintf("%o", mode), containerPath)
-		if err := chmodCmd.Run(); err != nil {
-			return fmt.Errorf("failed to chmod file %s: %w", containerPath, err)
+		if err := os.Chmod(tmpPath, os.FileMode(mode)); err != nil {
+			return fmt.Errorf("failed to set file permissions: %w", err)
 		}
+	}
+
+	// Ensure the directory exists in the container (workspace is writable via bind mount)
+	dir := filepath.Dir(containerPath)
+	if dir != "/" && dir != "." {
+		mkdirCmd := exec.CommandContext(ctx, "docker", "exec", s.containerName(), "mkdir", "-p", dir)
+		// Ignore error - directory might already exist or be read-only (but workspace is writable)
+		mkdirCmd.Run()
+	}
+
+	// Use docker cp to copy file into container (preserves permissions from host)
+	cpCmd := exec.CommandContext(ctx, "docker", "cp", tmpPath, fmt.Sprintf("%s:%s", s.containerName(), containerPath))
+	if output, err := cpCmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to write file %s: %w, output: %s", containerPath, err, string(output))
 	}
 
 	return nil
@@ -220,6 +242,16 @@ func (s *DockerSandbox) DeleteFile(ctx context.Context, path string) error {
 	}
 
 	containerPath := s.resolveContainerPath(path)
+
+	// If workspace is a bind mount, we can delete from host side
+	// (more reliable with --cap-drop ALL and --read-only)
+	if s.config.WorkspacePath != "" && strings.HasPrefix(containerPath, "/workspace") {
+		relativePath := strings.TrimPrefix(containerPath, "/workspace/")
+		hostPath := filepath.Join(s.config.WorkspacePath, relativePath)
+		return os.Remove(hostPath)
+	}
+
+	// Fallback to docker exec rm for non-workspace paths
 	cmd := exec.CommandContext(ctx, "docker", "exec", s.containerName(), "rm", "-f", containerPath)
 	return cmd.Run()
 }
@@ -316,7 +348,9 @@ func (s *DockerSandbox) CopyIn(ctx context.Context, hostPath, sandboxPath string
 
 func (s *DockerSandbox) CopyOut(ctx context.Context, sandboxPath, hostPath string) error {
 	if !s.created {
-		return fmt.Errorf("container not created")
+		if err := s.Create(ctx); err != nil {
+			return err
+		}
 	}
 
 	containerPath := s.resolveContainerPath(sandboxPath)
@@ -391,4 +425,65 @@ func (s *DockerSandbox) resolveContainerPath(path string) string {
 		return path
 	}
 	return filepath.Join("/workspace", path)
+}
+
+func (s *DockerSandbox) pullImage(ctx context.Context) error {
+	auth := s.config.RegistryAuth
+
+	if auth == nil {
+		cmd := exec.CommandContext(ctx, "docker", "pull", s.config.Image)
+		if output, err := cmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("docker pull failed: %w, output: %s", err, string(output))
+		}
+		return nil
+	}
+
+	if auth.DockerConfigPath != "" {
+		cmd := exec.CommandContext(ctx, "docker", "--config", filepath.Dir(auth.DockerConfigPath), "pull", s.config.Image)
+		if output, err := cmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("docker pull with config failed: %w, output: %s", err, string(output))
+		}
+		return nil
+	}
+
+	if auth.Username != "" && auth.Password != "" {
+		loginCmd := exec.CommandContext(ctx, "docker", "login",
+			"-u", auth.Username,
+			"--password-stdin",
+			auth.ServerAddress)
+		loginCmd.Stdin = strings.NewReader(auth.Password)
+		if output, err := loginCmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("docker login failed: %w, output: %s", err, string(output))
+		}
+
+		pullCmd := exec.CommandContext(ctx, "docker", "pull", s.config.Image)
+		if output, err := pullCmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("docker pull failed: %w, output: %s", err, string(output))
+		}
+		return nil
+	}
+
+	if auth.IdentityToken != "" {
+		authConfig := map[string]string{
+			"identitytoken": auth.IdentityToken,
+		}
+		if auth.ServerAddress != "" {
+			authConfig["serveraddress"] = auth.ServerAddress
+		}
+		authJSON, _ := json.Marshal(authConfig)
+		authB64 := base64.URLEncoding.EncodeToString(authJSON)
+
+		cmd := exec.CommandContext(ctx, "docker", "pull", s.config.Image)
+		cmd.Env = append(os.Environ(), "DOCKER_AUTH_CONFIG="+authB64)
+		if output, err := cmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("docker pull with identity token failed: %w, output: %s", err, string(output))
+		}
+		return nil
+	}
+
+	cmd := exec.CommandContext(ctx, "docker", "pull", s.config.Image)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("docker pull failed: %w, output: %s", err, string(output))
+	}
+	return nil
 }

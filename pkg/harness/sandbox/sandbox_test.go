@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -265,5 +266,82 @@ func TestDefaultConfig(t *testing.T) {
 
 	if cfg.Network.Enabled {
 		t.Error("network should be disabled by default")
+	}
+}
+
+func TestHostSandbox_ExecStream(t *testing.T) {
+	sb, _ := NewHostSandbox(Config{Mode: ModeHost})
+
+	ctx := context.Background()
+	var stdoutData []byte
+
+	handle, err := sb.ExecStream(ctx, ExecOptions{
+		OnStdout: func(data []byte) {
+			stdoutData = append(stdoutData, data...)
+		},
+	}, "echo", "streaming test")
+	if err != nil {
+		t.Fatalf("ExecStream failed: %v", err)
+	}
+
+	result, err := handle.Wait()
+	if err != nil {
+		t.Fatalf("Wait failed: %v", err)
+	}
+
+	if result.ExitCode != 0 {
+		t.Errorf("expected exit code 0, got %d", result.ExitCode)
+	}
+
+	if !strings.Contains(string(stdoutData), "streaming test") {
+		t.Errorf("expected stdout callback to receive 'streaming test', got %q", string(stdoutData))
+	}
+}
+
+func TestHostSandbox_ExecStream_WithStderr(t *testing.T) {
+	sb, _ := NewHostSandbox(Config{Mode: ModeHost})
+
+	ctx := context.Background()
+	var stderrData []byte
+
+	handle, err := sb.ExecStream(ctx, ExecOptions{
+		OnStderr: func(data []byte) {
+			stderrData = append(stderrData, data...)
+		},
+	}, "sh", "-c", "echo error >&2")
+	if err != nil {
+		t.Fatalf("ExecStream failed: %v", err)
+	}
+
+	result, err := handle.Wait()
+	if err != nil {
+		t.Fatalf("Wait failed: %v", err)
+	}
+
+	if result.ExitCode != 0 {
+		t.Errorf("expected exit code 0, got %d", result.ExitCode)
+	}
+
+	if !strings.Contains(string(stderrData), "error") {
+		t.Errorf("expected stderr callback to receive 'error', got %q", string(stderrData))
+	}
+}
+
+func TestHostSandbox_KillProcess(t *testing.T) {
+	sb, _ := NewHostSandbox(Config{Mode: ModeHost})
+
+	ctx := context.Background()
+	handle, err := sb.ExecStream(ctx, ExecOptions{}, "sleep", "60")
+	if err != nil {
+		t.Fatalf("ExecStream failed: %v", err)
+	}
+
+	if err := handle.Kill(); err != nil {
+		t.Fatalf("Kill failed: %v", err)
+	}
+
+	result, _ := handle.Wait()
+	if !result.Killed && result.ExitCode >= 0 {
+		t.Error("expected process to be killed")
 	}
 }

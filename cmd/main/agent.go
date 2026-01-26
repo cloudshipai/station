@@ -63,6 +63,7 @@ ADVANCED OPTIONS:
   --sandbox               Sandbox config JSON for isolated execution
   --coding                Coding config JSON for OpenCode integration
   --notify                Enable notifications for this agent
+  --harness-config        Agentic harness config JSON for multi-turn execution
 
 EXAMPLES:
   # Create a simple agent
@@ -83,6 +84,13 @@ EXAMPLES:
     --description "Runs Python code safely" \
     --prompt "Execute Python code in a sandbox." \
     --sandbox '{"enabled":true,"image":"python:3.11"}'
+
+  # Create with agentic harness (Claude Agent SDK-like)
+  stn agent create coding-agent \
+    --description "Multi-turn coding assistant" \
+    --prompt "You are a coding assistant." \
+    --tools read,write,bash,glob,grep,edit \
+    --harness-config '{"max_steps":50,"sandbox":{"mode":"docker"}}'
 
   # Create with structured output for CloudShip
   stn agent create cost-analyzer \
@@ -121,6 +129,7 @@ ADVANCED OPTIONS:
   --sandbox               Update sandbox config JSON
   --coding                Update coding config JSON
   --notify                Update notification setting
+  --harness-config        Update agentic harness config JSON
 
 EXAMPLES:
   # Update the prompt

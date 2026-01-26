@@ -44,6 +44,10 @@ func (s *AgentExportService) ExportAgentWithSandbox(agentID int64, app, appType,
 }
 
 func (s *AgentExportService) ExportAgentWithConfigs(agentID int64, app, appType, sandboxConfig, codingConfig string, notifyEnabled bool) error {
+	return s.ExportAgentWithAllConfigs(agentID, app, appType, sandboxConfig, codingConfig, "", notifyEnabled)
+}
+
+func (s *AgentExportService) ExportAgentWithAllConfigs(agentID int64, app, appType, sandboxConfig, codingConfig, harnessConfig string, notifyEnabled bool) error {
 	agent, err := s.repos.Agents.GetByID(agentID)
 	if err != nil {
 		return fmt.Errorf("failed to get agent: %v", err)
@@ -78,7 +82,7 @@ func (s *AgentExportService) ExportAgentWithConfigs(agentID int64, app, appType,
 		return fmt.Errorf("failed to get child agents: %v", err)
 	}
 
-	dotpromptContent := s.generateDotpromptContentWithConfigs(agent, toolsWithDetails, childAgents, environment.Name, app, appType, sandboxConfig, codingConfig, notifyEnabled)
+	dotpromptContent := s.generateDotpromptContentWithAllConfigs(agent, toolsWithDetails, childAgents, environment.Name, app, appType, sandboxConfig, codingConfig, harnessConfig, notifyEnabled)
 
 	outputPath := config.GetAgentPromptPath(environment.Name, agent.Name)
 
@@ -104,6 +108,10 @@ func (s *AgentExportService) generateDotpromptContentWithSandbox(agent *models.A
 }
 
 func (s *AgentExportService) generateDotpromptContentWithConfigs(agent *models.Agent, tools []*models.AgentToolWithDetails, childAgents []*models.ChildAgent, environmentName, app, appType, sandboxConfig, codingConfig string, notifyEnabled bool) string {
+	return s.generateDotpromptContentWithAllConfigs(agent, tools, childAgents, environmentName, app, appType, sandboxConfig, codingConfig, "", notifyEnabled)
+}
+
+func (s *AgentExportService) generateDotpromptContentWithAllConfigs(agent *models.Agent, tools []*models.AgentToolWithDetails, childAgents []*models.ChildAgent, environmentName, app, appType, sandboxConfig, codingConfig, harnessConfig string, notifyEnabled bool) string {
 	var toolNames []string
 	for _, tool := range tools {
 		toolNames = append(toolNames, tool.ToolName)
@@ -150,6 +158,14 @@ metadata:
 
 	if notifyEnabled {
 		content += "\nnotify: true"
+	}
+
+	if harnessConfig != "" {
+		harnessYAML := s.convertHarnessConfigJSONToYAML(harnessConfig)
+		if harnessYAML != "" {
+			content += "\nharness: agentic"
+			content += "\nharness_config:\n" + s.indentLines(harnessYAML, "  ")
+		}
 	}
 
 	scheduleSection := s.generateScheduleSection(agent)
@@ -246,6 +262,30 @@ func (s *AgentExportService) convertCodingJSONToYAML(codingJSON string) string {
 	yamlBytes, err := yaml.Marshal(codingMap)
 	if err != nil {
 		log.Printf("Warning: Failed to convert coding to YAML: %v", err)
+		return ""
+	}
+
+	return strings.TrimSpace(string(yamlBytes))
+}
+
+func (s *AgentExportService) convertHarnessConfigJSONToYAML(harnessJSON string) string {
+	if harnessJSON == "" || harnessJSON == "{}" {
+		return ""
+	}
+
+	var harnessMap map[string]interface{}
+	if err := json.Unmarshal([]byte(harnessJSON), &harnessMap); err != nil {
+		log.Printf("Warning: Failed to parse harness_config JSON: %v", err)
+		return ""
+	}
+
+	if len(harnessMap) == 0 {
+		return ""
+	}
+
+	yamlBytes, err := yaml.Marshal(harnessMap)
+	if err != nil {
+		log.Printf("Warning: Failed to convert harness_config to YAML: %v", err)
 		return ""
 	}
 

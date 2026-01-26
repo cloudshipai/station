@@ -122,6 +122,15 @@ func (s *Server) handleCreateAgent(ctx context.Context, request mcp.CallToolRequ
 	}
 
 	notifyEnabled := request.GetBool("notify", false)
+
+	harnessConfig := request.GetString("harness_config", "")
+	if harnessConfig != "" {
+		var harnessMap map[string]interface{}
+		if err := json.Unmarshal([]byte(harnessConfig), &harnessMap); err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("Invalid harness_config JSON: %v. Example: {\"max_steps\": 50, \"sandbox\": {\"mode\": \"docker\"}}", err)), nil
+		}
+	}
+
 	var toolNames []string
 	if request.Params.Arguments != nil {
 		if argsMap, ok := request.Params.Arguments.(map[string]interface{}); ok {
@@ -173,7 +182,7 @@ func (s *Server) handleCreateAgent(ctx context.Context, request mcp.CallToolRequ
 	}
 
 	if s.agentExportService != nil {
-		if err := s.agentExportService.ExportAgentWithConfigs(createdAgent.ID, app, appType, sandboxConfig, codingConfig, notifyEnabled); err != nil {
+		if err := s.agentExportService.ExportAgentWithAllConfigs(createdAgent.ID, app, appType, sandboxConfig, codingConfig, harnessConfig, notifyEnabled); err != nil {
 			response["export_warning"] = fmt.Sprintf("Agent created but export failed: %v. Use 'stn agent export %s' to export manually.", err, name)
 		}
 	}
@@ -351,6 +360,14 @@ func (s *Server) handleUpdateAgent(ctx context.Context, request mcp.CallToolRequ
 		}
 	}
 
+	harnessConfig := request.GetString("harness_config", "")
+	if harnessConfig != "" && harnessConfig != "{}" {
+		var harnessMap map[string]interface{}
+		if err := json.Unmarshal([]byte(harnessConfig), &harnessMap); err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("Invalid harness_config JSON: %v. Example: {\"max_steps\": 50, \"sandbox\": {\"mode\": \"docker\"}}", err)), nil
+		}
+	}
+
 	notifyEnabled := request.GetBool("notify", false)
 
 	err = s.repos.Agents.UpdateWithMemory(
@@ -375,7 +392,7 @@ func (s *Server) handleUpdateAgent(ctx context.Context, request mcp.CallToolRequ
 	}
 
 	if s.agentExportService != nil {
-		if err := s.agentExportService.ExportAgentWithConfigs(agentID, app, appType, sandboxConfig, codingConfig, notifyEnabled); err != nil {
+		if err := s.agentExportService.ExportAgentWithAllConfigs(agentID, app, appType, sandboxConfig, codingConfig, harnessConfig, notifyEnabled); err != nil {
 			response := map[string]interface{}{
 				"success": true,
 				"agent": map[string]interface{}{
