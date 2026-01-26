@@ -106,6 +106,11 @@ type CompactionConfig struct {
 	// ProtectTokens is the number of recent tokens to keep protected from pruning.
 	// Default: 40000
 	ProtectTokens int `yaml:"protect_tokens" json:"protect_tokens"`
+
+	// HistoryOffload enables saving full conversation history before summarization.
+	// This preserves the complete history for debugging and retrieval.
+	// Default: false
+	HistoryOffload bool `yaml:"history_offload" json:"history_offload"`
 }
 
 // GitConfig defines git workflow settings.

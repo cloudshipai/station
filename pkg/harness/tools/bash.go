@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"station/pkg/harness/sandbox"
+
 	"github.com/firebase/genkit/go/ai"
 	"github.com/firebase/genkit/go/genkit"
 )
@@ -31,7 +33,15 @@ type BashOutput struct {
 	TimedOut bool   `json:"timed_out,omitempty"`
 }
 
+// NewBashTool creates a bash tool that uses the host directly (legacy API).
+// Prefer NewBashToolWithSandbox for sandbox isolation support.
 func NewBashTool(genkitApp *genkit.Genkit, workspacePath string) ai.Tool {
+	return NewBashToolWithSandbox(genkitApp, workspacePath, nil)
+}
+
+// NewBashToolWithSandbox creates a bash tool with optional sandbox support.
+// If sb is nil, commands are executed directly on the host.
+func NewBashToolWithSandbox(genkitApp *genkit.Genkit, workspacePath string, sb sandbox.Sandbox) ai.Tool {
 	return genkit.DefineTool(
 		genkitApp,
 		"bash",
@@ -70,50 +80,99 @@ Examples:
 			execCtx, cancel := context.WithTimeout(ctx, timeout)
 			defer cancel()
 
-			cmd := exec.CommandContext(execCtx, "bash", "-c", input.Command)
-			cmd.Dir = workdir
-
-			var stdout, stderr bytes.Buffer
-			cmd.Stdout = &stdout
-			cmd.Stderr = &stderr
-
-			err := cmd.Run()
-
-			output := stdout.String()
-			if stderr.Len() > 0 {
-				if output != "" {
-					output += "\n"
-				}
-				output += stderr.String()
+			// Use sandbox if available, otherwise execute directly on host
+			if sb != nil {
+				return executeBashViaSandbox(execCtx, sb, input.Command, workdir, timeout)
 			}
 
-			timedOut := execCtx.Err() == context.DeadlineExceeded
-
-			if len(output) > maxBashOutputLength {
-				output = output[:maxBashOutputLength]
-				output += fmt.Sprintf("\n\n<bash_metadata>\nbash tool truncated output as it exceeded %d char limit\n</bash_metadata>", maxBashOutputLength)
-			}
-
-			if timedOut {
-				output += fmt.Sprintf("\n\n<bash_metadata>\nbash tool terminated command after exceeding timeout %v\n</bash_metadata>", timeout)
-			}
-
-			exitCode := 0
-			if err != nil {
-				if exitErr, ok := err.(*exec.ExitError); ok {
-					exitCode = exitErr.ExitCode()
-				} else if !timedOut {
-					return BashOutput{}, fmt.Errorf("command execution failed: %w", err)
-				}
-			}
-
-			return BashOutput{
-				Output:   output,
-				ExitCode: exitCode,
-				TimedOut: timedOut,
-			}, nil
+			return executeBashDirect(execCtx, input.Command, workdir, timeout)
 		},
 	)
+}
+
+// executeBashViaSandbox executes the command through the sandbox interface
+func executeBashViaSandbox(ctx context.Context, sb sandbox.Sandbox, command, workdir string, timeout time.Duration) (BashOutput, error) {
+	// Prepend cd to workdir if different from sandbox workspace
+	fullCommand := command
+	if workdir != "" && workdir != sb.Config().WorkspacePath {
+		fullCommand = fmt.Sprintf("cd %q && %s", workdir, command)
+	}
+
+	result, err := sb.Exec(ctx, "bash", "-c", fullCommand)
+	if err != nil {
+		return BashOutput{}, fmt.Errorf("sandbox exec failed: %w", err)
+	}
+
+	output := result.Stdout
+	if result.Stderr != "" {
+		if output != "" {
+			output += "\n"
+		}
+		output += result.Stderr
+	}
+
+	timedOut := result.Killed && strings.Contains(result.KillReason, "timeout")
+
+	if len(output) > maxBashOutputLength {
+		output = output[:maxBashOutputLength]
+		output += fmt.Sprintf("\n\n<bash_metadata>\nbash tool truncated output as it exceeded %d char limit\n</bash_metadata>", maxBashOutputLength)
+	}
+
+	if timedOut {
+		output += fmt.Sprintf("\n\n<bash_metadata>\nbash tool terminated command after exceeding timeout %v\n</bash_metadata>", timeout)
+	}
+
+	return BashOutput{
+		Output:   output,
+		ExitCode: result.ExitCode,
+		TimedOut: timedOut,
+	}, nil
+}
+
+// executeBashDirect executes the command directly on the host (no sandbox)
+func executeBashDirect(ctx context.Context, command, workdir string, timeout time.Duration) (BashOutput, error) {
+	cmd := exec.CommandContext(ctx, "bash", "-c", command)
+	cmd.Dir = workdir
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
+
+	output := stdout.String()
+	if stderr.Len() > 0 {
+		if output != "" {
+			output += "\n"
+		}
+		output += stderr.String()
+	}
+
+	timedOut := ctx.Err() == context.DeadlineExceeded
+
+	if len(output) > maxBashOutputLength {
+		output = output[:maxBashOutputLength]
+		output += fmt.Sprintf("\n\n<bash_metadata>\nbash tool truncated output as it exceeded %d char limit\n</bash_metadata>", maxBashOutputLength)
+	}
+
+	if timedOut {
+		output += fmt.Sprintf("\n\n<bash_metadata>\nbash tool terminated command after exceeding timeout %v\n</bash_metadata>", timeout)
+	}
+
+	exitCode := 0
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			exitCode = exitErr.ExitCode()
+		} else if !timedOut {
+			return BashOutput{}, fmt.Errorf("command execution failed: %w", err)
+		}
+	}
+
+	return BashOutput{
+		Output:   output,
+		ExitCode: exitCode,
+		TimedOut: timedOut,
+	}, nil
 }
 
 func isPathInWorkspace(path, workspacePath string) bool {

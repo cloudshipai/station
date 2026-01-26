@@ -3,8 +3,12 @@ package harness
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
+	"station/pkg/harness/memory"
+	"station/pkg/harness/sandbox"
+	"station/pkg/harness/skills"
 	"station/pkg/harness/stream"
 
 	"github.com/firebase/genkit/go/ai"
@@ -25,22 +29,28 @@ type ExecutionResult struct {
 	FinishReason string                 `json:"finish_reason"`
 	Duration     time.Duration          `json:"duration"`
 	Metadata     map[string]interface{} `json:"metadata,omitempty"`
+	History      []*ai.Message          `json:"-"` // Full message history for session persistence
 }
 
 type AgenticExecutor struct {
-	genkitApp     *genkit.Genkit
-	config        *HarnessConfig
-	agentConfig   *AgentHarnessConfig
-	hooks         *HookRegistry
-	doomDetector  *DoomLoopDetector
-	compactor     *Compactor
-	workspace     WorkspaceManager
-	gitManager    GitManager
-	promptBuilder *PromptBuilder
-	modelName     string
-	systemPrompt  string
-	streamCtx     *stream.StreamContext
-	publisher     stream.Publisher
+	genkitApp        *genkit.Genkit
+	config           *HarnessConfig
+	agentConfig      *AgentHarnessConfig
+	hooks            *HookRegistry
+	doomDetector     *DoomLoopDetector
+	compactor        *Compactor
+	workspace        WorkspaceManager
+	gitManager       GitManager
+	promptBuilder    *PromptBuilder
+	modelName        string
+	systemPrompt     string
+	streamCtx        *stream.StreamContext
+	publisher        stream.Publisher
+	sandbox          sandbox.Sandbox
+	sandboxConfig    *sandbox.Config
+	skillsMiddleware *skills.SkillsMiddleware
+	memoryMiddleware *memory.MemoryMiddleware
+	initialHistory   []*ai.Message
 }
 
 type ExecutorOption func(*AgenticExecutor)
@@ -84,6 +94,39 @@ func WithSystemPrompt(systemPrompt string) ExecutorOption {
 func WithStreamPublisher(publisher stream.Publisher) ExecutorOption {
 	return func(e *AgenticExecutor) {
 		e.publisher = publisher
+	}
+}
+
+func WithSandbox(sb sandbox.Sandbox) ExecutorOption {
+	return func(e *AgenticExecutor) {
+		e.sandbox = sb
+	}
+}
+
+func WithSandboxConfig(cfg *sandbox.Config) ExecutorOption {
+	return func(e *AgenticExecutor) {
+		e.sandboxConfig = cfg
+	}
+}
+
+func WithSkillsMiddleware(sm *skills.SkillsMiddleware) ExecutorOption {
+	return func(e *AgenticExecutor) {
+		e.skillsMiddleware = sm
+	}
+}
+
+func WithMemoryMiddleware(mm *memory.MemoryMiddleware) ExecutorOption {
+	return func(e *AgenticExecutor) {
+		e.memoryMiddleware = mm
+	}
+}
+
+// WithInitialHistory sets the initial message history for session persistence.
+// This allows REPL-style conversations where the agent can continue from
+// previous interactions with full context.
+func WithInitialHistory(history []*ai.Message) ExecutorOption {
+	return func(e *AgenticExecutor) {
+		e.initialHistory = history
 	}
 }
 
@@ -257,17 +300,26 @@ func (e *AgenticExecutor) emitStepComplete(ctx context.Context, stepNum int, tot
 }
 
 func (e *AgenticExecutor) setup(ctx context.Context, agentID string, task string) error {
-	_, span := tracer.Start(ctx, "workspace_init")
+	_, span := tracer.Start(ctx, "harness_setup")
 	defer span.End()
 
+	if err := e.initializeSandbox(ctx); err != nil {
+		span.RecordError(err)
+		return fmt.Errorf("sandbox init failed: %w", err)
+	}
+
 	if e.workspace != nil {
+		_, wsSpan := tracer.Start(ctx, "workspace_init")
 		if err := e.workspace.Initialize(ctx); err != nil {
+			wsSpan.RecordError(err)
+			wsSpan.End()
 			return fmt.Errorf("workspace init failed: %w", err)
 		}
-		span.SetAttributes(
+		wsSpan.SetAttributes(
 			attribute.String("workspace_path", e.workspace.Path()),
 			attribute.String("workspace_mode", e.config.Workspace.Mode),
 		)
+		wsSpan.End()
 	}
 
 	if e.gitManager != nil && e.config.Git.AutoBranch {
@@ -285,6 +337,39 @@ func (e *AgenticExecutor) setup(ctx context.Context, agentID string, task string
 	return nil
 }
 
+func (e *AgenticExecutor) initializeSandbox(ctx context.Context) error {
+	if e.sandbox != nil {
+		return nil
+	}
+
+	if e.sandboxConfig == nil {
+		return nil
+	}
+
+	_, span := tracer.Start(ctx, "sandbox_init")
+	defer span.End()
+
+	factory := sandbox.NewFactory(sandbox.DefaultConfig())
+	sb, err := factory.Create(*e.sandboxConfig)
+	if err != nil {
+		span.RecordError(err)
+		return fmt.Errorf("failed to create sandbox: %w", err)
+	}
+
+	if err := sb.Create(ctx); err != nil {
+		span.RecordError(err)
+		return fmt.Errorf("failed to initialize sandbox: %w", err)
+	}
+
+	e.sandbox = sb
+	span.SetAttributes(
+		attribute.String("sandbox_mode", string(e.sandboxConfig.Mode)),
+		attribute.String("sandbox_id", sb.ID()),
+	)
+
+	return nil
+}
+
 func (e *AgenticExecutor) cleanup(ctx context.Context, agentID string, result *ExecutionResult) error {
 	if e.gitManager != nil && e.config.Git.AutoCommit && result.Success {
 		_, span := tracer.Start(ctx, "git_commit")
@@ -298,7 +383,34 @@ func (e *AgenticExecutor) cleanup(ctx context.Context, agentID string, result *E
 		span.End()
 	}
 
+	if err := e.destroySandbox(ctx); err != nil {
+		return fmt.Errorf("sandbox cleanup failed: %w", err)
+	}
+
 	return nil
+}
+
+func (e *AgenticExecutor) destroySandbox(ctx context.Context) error {
+	if e.sandbox == nil {
+		return nil
+	}
+
+	_, span := tracer.Start(ctx, "sandbox_destroy")
+	defer span.End()
+
+	sandboxID := e.sandbox.ID()
+	if err := e.sandbox.Destroy(ctx); err != nil {
+		span.RecordError(err)
+		return err
+	}
+
+	span.SetAttributes(attribute.String("sandbox_id", sandboxID))
+	e.sandbox = nil
+	return nil
+}
+
+func (e *AgenticExecutor) Sandbox() sandbox.Sandbox {
+	return e.sandbox
 }
 
 func (e *AgenticExecutor) runLoop(
@@ -306,7 +418,12 @@ func (e *AgenticExecutor) runLoop(
 	task string,
 	tools []ai.Tool,
 ) (*ExecutionResult, error) {
+	// Initialize history from previous session if provided
 	var history []*ai.Message
+	if len(e.initialHistory) > 0 {
+		history = make([]*ai.Message, len(e.initialHistory))
+		copy(history, e.initialHistory)
+	}
 	totalTokens := 0
 
 	toolRefs := make([]ai.ToolRef, len(tools))
@@ -328,6 +445,7 @@ func (e *AgenticExecutor) runLoop(
 				TotalSteps:   step - 1,
 				TotalTokens:  totalTokens,
 				FinishReason: "cancelled",
+				History:      history,
 			}, ctx.Err()
 		default:
 		}
@@ -348,14 +466,17 @@ func (e *AgenticExecutor) runLoop(
 
 		genCtx, genSpan := tracer.Start(stepCtx, "llm_generate")
 
+		// Build enhanced system prompt with skills injection
+		enhancedPrompt := e.buildEnhancedSystemPrompt()
+
 		generateOpts := []ai.GenerateOption{
 			ai.WithModelName(e.modelName),
 			ai.WithMessages(history...),
 			ai.WithTools(toolRefs...),
 		}
 
-		if e.systemPrompt != "" {
-			generateOpts = append(generateOpts, ai.WithSystem(e.systemPrompt))
+		if enhancedPrompt != "" {
+			generateOpts = append(generateOpts, ai.WithSystem(enhancedPrompt))
 		}
 
 		if step == 1 {
@@ -374,6 +495,7 @@ func (e *AgenticExecutor) runLoop(
 				TotalSteps:   step,
 				TotalTokens:  totalTokens,
 				FinishReason: "error",
+				History:      history,
 			}, err
 		}
 
@@ -388,6 +510,8 @@ func (e *AgenticExecutor) runLoop(
 
 		toolReqs := resp.ToolRequests()
 		if len(toolReqs) == 0 {
+			// Add final response to history for persistence
+			history = append(history, resp.Message)
 			stepSpan.SetAttributes(attribute.String("finish_reason", "agent_done"))
 			stepSpan.End()
 			return &ExecutionResult{
@@ -396,6 +520,7 @@ func (e *AgenticExecutor) runLoop(
 				TotalSteps:   step,
 				TotalTokens:  totalTokens,
 				FinishReason: "agent_done",
+				History:      history,
 			}, nil
 		}
 
@@ -432,6 +557,7 @@ func (e *AgenticExecutor) runLoop(
 		TotalSteps:   e.agentConfig.MaxSteps,
 		TotalTokens:  totalTokens,
 		FinishReason: "max_steps",
+		History:      history,
 	}, nil
 }
 
@@ -519,6 +645,37 @@ func (e *AgenticExecutor) emitToolResult(ctx context.Context, toolName, toolID s
 	if e.streamCtx != nil {
 		e.streamCtx.EmitToolResult(ctx, toolName, toolID, output, durationMs, err)
 	}
+}
+
+// buildEnhancedSystemPrompt combines the base system prompt with skills and memory sections
+func (e *AgenticExecutor) buildEnhancedSystemPrompt() string {
+	var parts []string
+
+	// Base agent prompt
+	if e.systemPrompt != "" {
+		parts = append(parts, e.systemPrompt)
+	}
+
+	// Skills injection (progressive disclosure - only names and descriptions)
+	if e.skillsMiddleware != nil {
+		skillsList, err := e.skillsMiddleware.LoadSkills()
+		if err == nil && len(skillsList) > 0 {
+			skillsSection := e.skillsMiddleware.FormatSystemPromptSection(skillsList)
+			if skillsSection != "" {
+				parts = append(parts, skillsSection)
+			}
+		}
+	}
+
+	// Memory injection (always loaded, unlike skills)
+	if e.memoryMiddleware != nil {
+		memorySection, err := e.memoryMiddleware.FormatSystemPromptSection()
+		if err == nil && memorySection != "" {
+			parts = append(parts, memorySection)
+		}
+	}
+
+	return strings.Join(parts, "\n")
 }
 
 type WorkspaceManager interface {

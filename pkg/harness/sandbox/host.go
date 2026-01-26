@@ -207,3 +207,179 @@ func (s *HostSandbox) resolvePath(path string) string {
 	}
 	return path
 }
+
+func (s *HostSandbox) ExecStream(ctx context.Context, opts ExecOptions, command string, args ...string) (ProcessHandle, error) {
+	timeout := opts.Timeout
+	if timeout == 0 {
+		timeout = s.config.Timeout
+	}
+	if timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, timeout)
+		_ = cancel
+	}
+
+	cmd := exec.CommandContext(ctx, command, args...)
+
+	cwd := opts.Cwd
+	if cwd == "" {
+		cwd = s.config.WorkspacePath
+	}
+	if cwd != "" {
+		cmd.Dir = cwd
+	}
+
+	env := make(map[string]string)
+	for k, v := range s.config.Environment {
+		env[k] = v
+	}
+	for k, v := range opts.Env {
+		env[k] = v
+	}
+	for k, v := range env {
+		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
+	}
+	if len(cmd.Env) > 0 {
+		cmd.Env = append(os.Environ(), cmd.Env...)
+	}
+
+	var stdinPipe io.WriteCloser
+	var err error
+
+	if opts.Stdin != nil {
+		cmd.Stdin = opts.Stdin
+	} else {
+		stdinPipe, err = cmd.StdinPipe()
+		if err != nil {
+			return nil, fmt.Errorf("create stdin pipe: %w", err)
+		}
+	}
+
+	stdoutPipe, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, fmt.Errorf("create stdout pipe: %w", err)
+	}
+
+	stderrPipe, err := cmd.StderrPipe()
+	if err != nil {
+		return nil, fmt.Errorf("create stderr pipe: %w", err)
+	}
+
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("start command: %w", err)
+	}
+
+	handle := &hostProcessHandle{
+		cmd:       cmd,
+		ctx:       ctx,
+		stdinPipe: stdinPipe,
+		start:     time.Now(),
+		done:      make(chan struct{}),
+	}
+
+	go handle.streamOutput(stdoutPipe, opts.OnStdout, &handle.stdout)
+	go handle.streamOutput(stderrPipe, opts.OnStderr, &handle.stderr)
+	go handle.wait()
+
+	return handle, nil
+}
+
+func (s *HostSandbox) ListProcesses(ctx context.Context) ([]ProcessInfo, error) {
+	return nil, fmt.Errorf("ListProcesses not supported in host sandbox")
+}
+
+func (s *HostSandbox) KillProcess(ctx context.Context, pid int) error {
+	proc, err := os.FindProcess(pid)
+	if err != nil {
+		return err
+	}
+	return proc.Kill()
+}
+
+var _ StreamingSandbox = (*HostSandbox)(nil)
+
+type hostProcessHandle struct {
+	cmd       *exec.Cmd
+	ctx       context.Context
+	stdinPipe io.WriteCloser
+	start     time.Time
+	done      chan struct{}
+	result    *ExecResult
+	err       error
+	stdout    bytes.Buffer
+	stderr    bytes.Buffer
+}
+
+func (h *hostProcessHandle) PID() int {
+	if h.cmd.Process != nil {
+		return h.cmd.Process.Pid
+	}
+	return 0
+}
+
+func (h *hostProcessHandle) Wait() (*ExecResult, error) {
+	<-h.done
+	if h.err != nil {
+		return h.result, h.err
+	}
+	return h.result, nil
+}
+
+func (h *hostProcessHandle) Kill() error {
+	if h.cmd.Process != nil {
+		return h.cmd.Process.Kill()
+	}
+	return nil
+}
+
+func (h *hostProcessHandle) SendStdin(data []byte) error {
+	if h.stdinPipe == nil {
+		return fmt.Errorf("stdin pipe not available")
+	}
+	_, err := h.stdinPipe.Write(data)
+	return err
+}
+
+func (h *hostProcessHandle) streamOutput(r io.Reader, callback func([]byte), buf *bytes.Buffer) {
+	data := make([]byte, 4096)
+	for {
+		n, err := r.Read(data)
+		if n > 0 {
+			buf.Write(data[:n])
+			if callback != nil {
+				callback(data[:n])
+			}
+		}
+		if err != nil {
+			return
+		}
+	}
+}
+
+func (h *hostProcessHandle) wait() {
+	defer close(h.done)
+
+	err := h.cmd.Wait()
+	duration := time.Since(h.start)
+
+	h.result = &ExecResult{
+		Stdout:   h.stdout.String(),
+		Stderr:   h.stderr.String(),
+		Duration: duration,
+	}
+
+	if h.ctx.Err() == context.DeadlineExceeded {
+		h.result.Killed = true
+		h.result.KillReason = "timeout"
+		h.result.ExitCode = -1
+		return
+	}
+
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			h.result.ExitCode = exitErr.ExitCode()
+		} else {
+			h.err = err
+		}
+	}
+}

@@ -501,6 +501,50 @@ For large files, use the NATS file staging system (`sandbox_stage_file` / `sandb
 
 ## Future Enhancements
 
+### Private Registry Authentication
+
+For pulling images from private registries (ECR, GCR, Docker Hub private repos):
+
+**Configuration (config.yaml):**
+```yaml
+sandbox:
+  enabled: true
+  docker_image: "123456789.dkr.ecr.us-east-1.amazonaws.com/myapp:latest"
+  registry_auth:
+    # Option 1: Username/Password (Docker Hub, self-hosted)
+    username: "myuser"
+    password: "${DOCKER_TOKEN}"  # Supports env var expansion
+    server_address: "https://index.docker.io/v1/"
+    
+    # Option 2: Identity Token (ECR, GCR, ACR)
+    identity_token: "${ECR_AUTH_TOKEN}"
+    server_address: "123456789.dkr.ecr.us-east-1.amazonaws.com"
+    
+    # Option 3: Docker config.json
+    docker_config_path: "/home/user/.docker/config.json"
+```
+
+**Environment Variables:**
+| Variable | Description |
+|----------|-------------|
+| `STN_SANDBOX_DOCKER_IMAGE` | Docker image for sandbox containers |
+| `STN_SANDBOX_REGISTRY_USERNAME` | Registry username |
+| `STN_SANDBOX_REGISTRY_PASSWORD` | Registry password/token |
+| `STN_SANDBOX_REGISTRY_TOKEN` | OAuth identity token (ECR/GCR) |
+| `STN_SANDBOX_REGISTRY_SERVER` | Registry server address |
+| `STN_SANDBOX_REGISTRY_CONFIG` | Path to Docker config.json |
+
+**CLI Configuration:**
+```bash
+stn config set sandbox.docker_image "ghcr.io/myorg/sandbox:latest"
+stn config set sandbox.registry_auth.username "myuser"
+stn config set sandbox.registry_auth.server_address "ghcr.io"
+```
+
+**UI:** Settings → Sandbox → Private Registry Auth section
+
+---
+
 ### Cloud Sandbox Fallback
 
 For environments without Docker (ECS Fargate, K8s, Fly.io):

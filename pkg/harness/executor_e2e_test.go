@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"station/internal/genkit/anthropic_oauth"
 	"station/internal/logging"
 	"station/pkg/harness"
+	"station/pkg/harness/sandbox"
 	"station/pkg/harness/tools"
 	"station/pkg/harness/workspace"
 
@@ -476,4 +478,300 @@ func TestAgenticExecutor_E2E_WorkflowSimulation(t *testing.T) {
 	t.Log("=== Workflow Simulation Complete ===")
 	t.Logf("Total steps: Setup=%d, Verify=%d", setupResult.TotalSteps, verifyResult.TotalSteps)
 	t.Logf("Total tokens: Setup=%d, Verify=%d", setupResult.TotalTokens, verifyResult.TotalTokens)
+}
+
+func TestAgenticExecutor_E2E_DockerSandbox(t *testing.T) {
+	if os.Getenv("HARNESS_E2E_TEST") != "1" {
+		t.Skip("Skipping e2e test. Set HARNESS_E2E_TEST=1 to run with real LLM")
+	}
+
+	if _, err := exec.LookPath("docker"); err != nil {
+		t.Skip("Docker not available, skipping Docker sandbox test")
+	}
+
+	ctx := context.Background()
+
+	if err := config.InitViper(""); err != nil {
+		t.Fatalf("Failed to init viper: %v", err)
+	}
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+
+	genkitApp, err := initGenkit(ctx, cfg)
+	if err != nil {
+		t.Fatalf("Failed to initialize GenKit: %v", err)
+	}
+
+	tmpDir, err := os.MkdirTemp("", "harness-e2e-docker-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	t.Logf("Using workspace directory: %s", tmpDir)
+
+	sbConfig := sandbox.Config{
+		Mode:          sandbox.ModeDocker,
+		Image:         "python:3.11-slim",
+		WorkspacePath: tmpDir,
+		Timeout:       5 * time.Minute,
+		Resources: sandbox.ResourceConfig{
+			CPU:    1,
+			Memory: "512m",
+			PIDs:   100,
+		},
+		Network: sandbox.NetworkConfig{
+			Enabled: false,
+		},
+	}
+
+	factory := sandbox.NewFactory(sandbox.DefaultConfig())
+	sb, err := factory.Create(sbConfig)
+	if err != nil {
+		t.Fatalf("Failed to create Docker sandbox: %v", err)
+	}
+	defer func() {
+		if err := sb.Destroy(ctx); err != nil {
+			t.Logf("Warning: failed to destroy sandbox: %v", err)
+		}
+	}()
+
+	if err := sb.Create(ctx); err != nil {
+		t.Fatalf("Failed to initialize Docker sandbox: %v", err)
+	}
+
+	t.Logf("Docker sandbox created: id=%s, image=%s", sb.ID(), sbConfig.Image)
+
+	ws := workspace.NewHostWorkspace(tmpDir)
+	if err := ws.Initialize(ctx); err != nil {
+		t.Fatalf("Failed to initialize workspace: %v", err)
+	}
+
+	toolRegistry := tools.NewToolRegistryWithSandbox(genkitApp, tmpDir, sb)
+	if err := toolRegistry.RegisterBuiltinTools(); err != nil {
+		t.Fatalf("Failed to register tools: %v", err)
+	}
+
+	harnessConfig := harness.DefaultHarnessConfig()
+	agentConfig := &harness.AgentHarnessConfig{
+		MaxSteps:          15,
+		DoomLoopThreshold: 3,
+		Timeout:           3 * time.Minute,
+	}
+
+	modelName := formatModelName(cfg.AIProvider, cfg.AIModel)
+
+	executor := harness.NewAgenticExecutor(
+		genkitApp,
+		harnessConfig,
+		agentConfig,
+		harness.WithWorkspace(ws),
+		harness.WithModelName(modelName),
+		harness.WithSandbox(sb),
+	)
+
+	task := `Create a Python script called 'hello.py' with this content:
+print("Hello from Docker sandbox!")
+import sys
+print(f"Python version: {sys.version}")
+
+Then run it using: python hello.py
+
+Report the output.`
+
+	t.Logf("Executing task in Docker sandbox...")
+	startTime := time.Now()
+
+	result, err := executor.Execute(ctx, "docker-e2e-test", task, toolRegistry.All())
+
+	t.Logf("Execution completed in %v", time.Since(startTime))
+	t.Logf("Result: success=%v, steps=%d, tokens=%d, finish_reason=%s",
+		result.Success, result.TotalSteps, result.TotalTokens, result.FinishReason)
+
+	if err != nil {
+		t.Logf("Execution error: %v", err)
+	}
+
+	if result.Response != "" {
+		t.Logf("Response:\n%s", result.Response)
+	}
+
+	if !result.Success {
+		t.Errorf("Expected successful execution, got error: %s", result.Error)
+	}
+
+	scriptPath := tmpDir + "/hello.py"
+	if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
+		t.Error("Expected hello.py to be created on host (via mounted volume)")
+	} else {
+		content, _ := os.ReadFile(scriptPath)
+		t.Logf("Script content on host:\n%s", string(content))
+	}
+
+	if !strings.Contains(result.Response, "Hello from Docker sandbox") &&
+		!strings.Contains(result.Response, "Python version") {
+		t.Logf("Warning: Response may not contain expected output")
+	}
+}
+
+func TestAgenticExecutor_E2E_DockerWorkflowHandoff(t *testing.T) {
+	if os.Getenv("HARNESS_E2E_TEST") != "1" {
+		t.Skip("Skipping e2e test. Set HARNESS_E2E_TEST=1 to run with real LLM")
+	}
+
+	if _, err := exec.LookPath("docker"); err != nil {
+		t.Skip("Docker not available, skipping Docker sandbox test")
+	}
+
+	ctx := context.Background()
+
+	if err := config.InitViper(""); err != nil {
+		t.Fatalf("Failed to init viper: %v", err)
+	}
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+
+	genkitApp, err := initGenkit(ctx, cfg)
+	if err != nil {
+		t.Fatalf("Failed to initialize GenKit: %v", err)
+	}
+
+	tmpDir, err := os.MkdirTemp("", "harness-e2e-docker-handoff-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	t.Log("=== Docker Workflow Handoff Test ===")
+	t.Logf("Shared workspace: %s", tmpDir)
+
+	harnessConfig := harness.DefaultHarnessConfig()
+	modelName := formatModelName(cfg.AIProvider, cfg.AIModel)
+
+	t.Log("Step 1: Agent A creates files in Docker container")
+
+	sbConfigA := sandbox.Config{
+		Mode:          sandbox.ModeDocker,
+		Image:         "python:3.11-slim",
+		WorkspacePath: tmpDir,
+		Timeout:       3 * time.Minute,
+		Resources: sandbox.ResourceConfig{
+			CPU:    1,
+			Memory: "512m",
+		},
+	}
+
+	factoryA := sandbox.NewFactory(sandbox.DefaultConfig())
+	sbA, err := factoryA.Create(sbConfigA)
+	if err != nil {
+		t.Fatalf("Failed to create sandbox A: %v", err)
+	}
+
+	if err := sbA.Create(ctx); err != nil {
+		t.Fatalf("Failed to initialize sandbox A: %v", err)
+	}
+
+	t.Logf("Sandbox A created: %s", sbA.ID())
+
+	wsA := workspace.NewHostWorkspace(tmpDir)
+	wsA.Initialize(ctx)
+
+	toolRegistryA := tools.NewToolRegistryWithSandbox(genkitApp, tmpDir, sbA)
+	toolRegistryA.RegisterBuiltinTools()
+
+	executorA := harness.NewAgenticExecutor(
+		genkitApp,
+		harnessConfig,
+		&harness.AgentHarnessConfig{MaxSteps: 10, DoomLoopThreshold: 3, Timeout: 2 * time.Minute},
+		harness.WithWorkspace(wsA),
+		harness.WithModelName(modelName),
+		harness.WithSandbox(sbA),
+	)
+
+	taskA := "Create a file called 'data.json' with content: {\"created_by\": \"agent_a\", \"value\": 42}"
+
+	resultA, err := executorA.Execute(ctx, "agent-a", taskA, toolRegistryA.All())
+	if err != nil || !resultA.Success {
+		t.Fatalf("Agent A failed: %v / %s", err, resultA.Error)
+	}
+	t.Logf("Agent A completed: steps=%d", resultA.TotalSteps)
+
+	if err := sbA.Destroy(ctx); err != nil {
+		t.Logf("Warning: failed to destroy sandbox A: %v", err)
+	}
+	t.Log("Sandbox A destroyed")
+
+	dataPath := tmpDir + "/data.json"
+	if _, err := os.Stat(dataPath); os.IsNotExist(err) {
+		t.Fatal("data.json should exist on host after Agent A")
+	}
+	contentAfterA, _ := os.ReadFile(dataPath)
+	t.Logf("File content after Agent A: %s", string(contentAfterA))
+
+	t.Log("Step 2: Agent B reads and modifies files in NEW Docker container")
+
+	sbConfigB := sandbox.Config{
+		Mode:          sandbox.ModeDocker,
+		Image:         "python:3.11-slim",
+		WorkspacePath: tmpDir,
+		Timeout:       3 * time.Minute,
+		Resources: sandbox.ResourceConfig{
+			CPU:    1,
+			Memory: "512m",
+		},
+	}
+
+	factoryB := sandbox.NewFactory(sandbox.DefaultConfig())
+	sbB, err := factoryB.Create(sbConfigB)
+	if err != nil {
+		t.Fatalf("Failed to create sandbox B: %v", err)
+	}
+
+	if err := sbB.Create(ctx); err != nil {
+		t.Fatalf("Failed to initialize sandbox B: %v", err)
+	}
+
+	t.Logf("Sandbox B created: %s (different container!)", sbB.ID())
+
+	wsB := workspace.NewHostWorkspace(tmpDir)
+	wsB.Initialize(ctx)
+
+	toolRegistryB := tools.NewToolRegistryWithSandbox(genkitApp, tmpDir, sbB)
+	toolRegistryB.RegisterBuiltinTools()
+
+	executorB := harness.NewAgenticExecutor(
+		genkitApp,
+		harnessConfig,
+		&harness.AgentHarnessConfig{MaxSteps: 10, DoomLoopThreshold: 3, Timeout: 2 * time.Minute},
+		harness.WithWorkspace(wsB),
+		harness.WithModelName(modelName),
+		harness.WithSandbox(sbB),
+	)
+
+	taskB := "Read the file 'data.json', report who created it and what value is stored."
+
+	resultB, err := executorB.Execute(ctx, "agent-b", taskB, toolRegistryB.All())
+	if err != nil || !resultB.Success {
+		t.Fatalf("Agent B failed: %v / %s", err, resultB.Error)
+	}
+	t.Logf("Agent B completed: steps=%d", resultB.TotalSteps)
+	t.Logf("Agent B response: %s", resultB.Response)
+
+	if err := sbB.Destroy(ctx); err != nil {
+		t.Logf("Warning: failed to destroy sandbox B: %v", err)
+	}
+
+	if !strings.Contains(resultB.Response, "agent_a") || !strings.Contains(resultB.Response, "42") {
+		t.Error("Agent B should report data created by Agent A")
+	}
+
+	t.Log("=== Docker Workflow Handoff Test Complete ===")
+	t.Log("Files created by Agent A were successfully read by Agent B in a DIFFERENT container")
+	t.Log("This proves workspace volume mounting enables session persistence across container destroys")
 }

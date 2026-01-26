@@ -260,6 +260,7 @@ func (h *AgentHandler) RunAgentCreate(cmd *cobra.Command, args []string) error {
 	sandboxConfig, _ := cmd.Flags().GetString("sandbox")
 	codingConfig, _ := cmd.Flags().GetString("coding")
 	notifyEnabled, _ := cmd.Flags().GetBool("notify")
+	harnessConfig, _ := cmd.Flags().GetString("harness-config")
 
 	if sandboxConfig != "" {
 		var sandboxMap map[string]interface{}
@@ -271,6 +272,12 @@ func (h *AgentHandler) RunAgentCreate(cmd *cobra.Command, args []string) error {
 		var codingMap map[string]interface{}
 		if err := json.Unmarshal([]byte(codingConfig), &codingMap); err != nil {
 			return fmt.Errorf("invalid --coding JSON: %v", err)
+		}
+	}
+	if harnessConfig != "" {
+		var harnessMap map[string]interface{}
+		if err := json.Unmarshal([]byte(harnessConfig), &harnessMap); err != nil {
+			return fmt.Errorf("invalid --harness-config JSON: %v", err)
 		}
 	}
 
@@ -341,8 +348,8 @@ func (h *AgentHandler) RunAgentCreate(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to create agent: %v", err)
 	}
 
-	if sandboxConfig != "" || codingConfig != "" || notifyEnabled {
-		if err := exportService.ExportAgentWithConfigs(createdAgent.ID, app, appType, sandboxConfig, codingConfig, notifyEnabled); err != nil {
+	if sandboxConfig != "" || codingConfig != "" || harnessConfig != "" || notifyEnabled {
+		if err := exportService.ExportAgentWithAllConfigs(createdAgent.ID, app, appType, sandboxConfig, codingConfig, harnessConfig, notifyEnabled); err != nil {
 			fmt.Printf("⚠️  Agent created but export failed: %v\n", err)
 		}
 	}
@@ -397,6 +404,7 @@ func (h *AgentHandler) RunAgentUpdate(cmd *cobra.Command, args []string) error {
 	sandboxConfig, _ := cmd.Flags().GetString("sandbox")
 	codingConfig, _ := cmd.Flags().GetString("coding")
 	notifyEnabled, _ := cmd.Flags().GetBool("notify")
+	harnessConfig, _ := cmd.Flags().GetString("harness-config")
 
 	if sandboxConfig != "" {
 		var sandboxMap map[string]interface{}
@@ -408,6 +416,12 @@ func (h *AgentHandler) RunAgentUpdate(cmd *cobra.Command, args []string) error {
 		var codingMap map[string]interface{}
 		if err := json.Unmarshal([]byte(codingConfig), &codingMap); err != nil {
 			return fmt.Errorf("invalid --coding JSON: %v", err)
+		}
+	}
+	if harnessConfig != "" {
+		var harnessMap map[string]interface{}
+		if err := json.Unmarshal([]byte(harnessConfig), &harnessMap); err != nil {
+			return fmt.Errorf("invalid --harness-config JSON: %v", err)
 		}
 	}
 
@@ -537,13 +551,17 @@ func (h *AgentHandler) RunAgentUpdate(cmd *cobra.Command, args []string) error {
 		updates = append(updates, "notify")
 		needsExport = true
 	}
+	if cmd.Flags().Changed("harness-config") {
+		updates = append(updates, "harness-config")
+		needsExport = true
+	}
 
 	if len(updates) == 0 {
 		fmt.Printf("⚠️  No updates specified. Available flags:\n")
 		fmt.Printf("   --prompt, --description, --max-steps, --tools, --output-schema\n")
 		fmt.Printf("   --output-schema-preset, --app, --app-type\n")
 		fmt.Printf("   --memory-topic, --memory-max-tokens\n")
-		fmt.Printf("   --sandbox, --coding, --notify\n")
+		fmt.Printf("   --sandbox, --coding, --notify, --harness-config\n")
 		return nil
 	}
 
@@ -561,7 +579,7 @@ func (h *AgentHandler) RunAgentUpdate(cmd *cobra.Command, args []string) error {
 	if needsExport {
 		finalApp := agentConfig.App
 		finalAppType := agentConfig.AppType
-		if err := exportService.ExportAgentWithConfigs(updatedAgent.ID, finalApp, finalAppType, sandboxConfig, codingConfig, notifyEnabled); err != nil {
+		if err := exportService.ExportAgentWithAllConfigs(updatedAgent.ID, finalApp, finalAppType, sandboxConfig, codingConfig, harnessConfig, notifyEnabled); err != nil {
 			fmt.Printf("⚠️  Agent updated but export failed: %v\n", err)
 		}
 	}

@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"station/pkg/harness/sandbox"
+
 	"github.com/firebase/genkit/go/ai"
 	"github.com/firebase/genkit/go/genkit"
 )
@@ -39,6 +41,10 @@ type GrepOutput struct {
 }
 
 func NewGrepTool(genkitApp *genkit.Genkit, workspacePath string) ai.Tool {
+	return NewGrepToolWithSandbox(genkitApp, workspacePath, nil)
+}
+
+func NewGrepToolWithSandbox(genkitApp *genkit.Genkit, workspacePath string, sb sandbox.Sandbox) ai.Tool {
 	return genkit.DefineTool(
 		genkitApp,
 		"grep",
@@ -74,53 +80,29 @@ Limited to 100 matches.`,
 				}
 			}
 
-			var matches []GrepMatch
 			var filesSearched []fileWithTime
 
-			err = filepath.Walk(basePath, func(path string, info os.FileInfo, err error) error {
-				if err != nil {
-					return nil
-				}
-
-				if info.IsDir() {
-					if shouldSkipDir(info.Name()) {
-						return filepath.SkipDir
-					}
-					return nil
-				}
-
-				if info.Size() > maxGrepFileSize {
-					return nil
-				}
-
-				if input.Include != "" && !matchInclude(input.Include, info.Name()) {
-					return nil
-				}
-
-				filesSearched = append(filesSearched, fileWithTime{
-					path:    path,
-					modTime: info.ModTime(),
-				})
-
-				return nil
-			})
-
-			if err != nil {
-				return GrepOutput{}, fmt.Errorf("failed to walk directory: %w", err)
+			if sb != nil {
+				filesSearched = collectFilesViaSandbox(ctx, sb, basePath, input.Include)
+			} else {
+				filesSearched = collectFilesDirect(basePath, input.Include)
 			}
 
 			sort.Slice(filesSearched, func(i, j int) bool {
 				return filesSearched[i].modTime.After(filesSearched[j].modTime)
 			})
 
+			var matches []GrepMatch
 			for _, f := range filesSearched {
 				if len(matches) >= maxGrepMatches {
 					break
 				}
 
-				fileMatches, err := searchFile(f.path, re, basePath)
-				if err != nil {
-					continue
+				var fileMatches []GrepMatch
+				if sb != nil {
+					fileMatches = searchFileViaSandbox(ctx, sb, f.path, re, basePath)
+				} else {
+					fileMatches, _ = searchFile(f.path, re, basePath)
 				}
 
 				for _, m := range fileMatches {
@@ -140,6 +122,103 @@ Limited to 100 matches.`,
 			}, nil
 		},
 	)
+}
+
+func collectFilesViaSandbox(ctx *ai.ToolContext, sb sandbox.Sandbox, basePath, include string) []fileWithTime {
+	var files []fileWithTime
+	walkSandboxDirForGrep(ctx, sb, basePath, basePath, include, &files)
+	return files
+}
+
+func walkSandboxDirForGrep(ctx *ai.ToolContext, sb sandbox.Sandbox, basePath, currentPath, include string, files *[]fileWithTime) {
+	entries, err := sb.ListFiles(ctx, currentPath)
+	if err != nil {
+		return
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir {
+			if shouldSkipDir(entry.Name) {
+				continue
+			}
+			walkSandboxDirForGrep(ctx, sb, basePath, filepath.Join(currentPath, entry.Name), include, files)
+			continue
+		}
+
+		if entry.Size > maxGrepFileSize {
+			continue
+		}
+
+		if include != "" && !matchInclude(include, entry.Name) {
+			continue
+		}
+
+		*files = append(*files, fileWithTime{
+			path:    filepath.Join(currentPath, entry.Name),
+			modTime: entry.ModTime,
+		})
+	}
+}
+
+func searchFileViaSandbox(ctx *ai.ToolContext, sb sandbox.Sandbox, path string, re *regexp.Regexp, basePath string) []GrepMatch {
+	content, err := sb.ReadFile(ctx, path)
+	if err != nil {
+		return nil
+	}
+
+	relPath, err := filepath.Rel(basePath, path)
+	if err != nil {
+		relPath = path
+	}
+
+	var matches []GrepMatch
+	lines := strings.Split(string(content), "\n")
+
+	for lineNum, line := range lines {
+		if re.MatchString(line) {
+			matches = append(matches, GrepMatch{
+				File:    relPath,
+				Line:    lineNum + 1,
+				Content: truncateLine(line, 200),
+			})
+		}
+	}
+
+	return matches
+}
+
+func collectFilesDirect(basePath, include string) []fileWithTime {
+	var files []fileWithTime
+
+	filepath.Walk(basePath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+
+		if info.IsDir() {
+			if shouldSkipDir(info.Name()) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+
+		if info.Size() > maxGrepFileSize {
+			return nil
+		}
+
+		if include != "" && !matchInclude(include, info.Name()) {
+			return nil
+		}
+
+		files = append(files, fileWithTime{
+			path:    path,
+			modTime: info.ModTime(),
+		})
+
+		return nil
+	})
+
+	return files
 }
 
 type fileWithTime struct {

@@ -10,11 +10,9 @@ import (
 type Mode string
 
 const (
-	ModeHost        Mode = "host"
-	ModeDocker      Mode = "docker"
-	ModeFirecracker Mode = "firecracker"
-	ModeGVisor      Mode = "gvisor"
-	ModeWASM        Mode = "wasm"
+	ModeHost   Mode = "host"
+	ModeDocker Mode = "docker"
+	ModeE2B    Mode = "e2b"
 )
 
 type Config struct {
@@ -26,6 +24,27 @@ type Config struct {
 	Timeout       time.Duration     `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 	WorkspacePath string            `json:"workspace_path,omitempty" yaml:"workspace_path,omitempty"`
 	Environment   map[string]string `json:"environment,omitempty" yaml:"environment,omitempty"`
+	// RegistryAuth holds authentication for private container registries (ECR, GCR, Docker Hub, etc.)
+	RegistryAuth *RegistryAuthConfig `json:"registry_auth,omitempty" yaml:"registry_auth,omitempty"`
+}
+
+// RegistryAuthConfig holds authentication credentials for private container registries.
+// Supports multiple authentication methods:
+// - Username/Password: Basic auth for Docker Hub, self-hosted registries
+// - IdentityToken: OAuth tokens for cloud providers (ECR, GCR, ACR)
+// - DockerConfigPath: Path to ~/.docker/config.json for complex setups
+type RegistryAuthConfig struct {
+	// Username for basic auth (Docker Hub, self-hosted registries)
+	Username string `json:"username,omitempty" yaml:"username,omitempty"`
+	// Password or access token for basic auth
+	Password string `json:"password,omitempty" yaml:"password,omitempty"`
+	// IdentityToken is an OAuth bearer token (for cloud providers like ECR, GCR)
+	IdentityToken string `json:"identity_token,omitempty" yaml:"identity_token,omitempty"`
+	// ServerAddress is the registry server (e.g., "https://index.docker.io/v1/", "123456789.dkr.ecr.us-east-1.amazonaws.com")
+	ServerAddress string `json:"server_address,omitempty" yaml:"server_address,omitempty"`
+	// DockerConfigPath is the path to a Docker config.json file for complex auth setups
+	// When set, this takes precedence over Username/Password/IdentityToken
+	DockerConfigPath string `json:"docker_config_path,omitempty" yaml:"docker_config_path,omitempty"`
 }
 
 type ResourceConfig struct {
@@ -94,6 +113,37 @@ type FileInfo struct {
 	IsDir   bool      `json:"is_dir"`
 }
 
+type ExecOptions struct {
+	Cwd      string
+	Env      map[string]string
+	Timeout  time.Duration
+	OnStdout func(data []byte)
+	OnStderr func(data []byte)
+	Stdin    io.Reader
+}
+
+type ProcessInfo struct {
+	PID     int               `json:"pid"`
+	Command string            `json:"command"`
+	Args    []string          `json:"args"`
+	Cwd     string            `json:"cwd"`
+	Env     map[string]string `json:"env"`
+}
+
+type ProcessHandle interface {
+	PID() int
+	Wait() (*ExecResult, error)
+	Kill() error
+	SendStdin(data []byte) error
+}
+
+type StreamingSandbox interface {
+	Sandbox
+	ExecStream(ctx context.Context, opts ExecOptions, command string, args ...string) (ProcessHandle, error)
+	ListProcesses(ctx context.Context) ([]ProcessInfo, error)
+	KillProcess(ctx context.Context, pid int) error
+}
+
 type Factory struct {
 	DefaultConfig Config
 }
@@ -110,12 +160,11 @@ func (f *Factory) Create(cfg Config) (Sandbox, error) {
 		return NewHostSandbox(merged)
 	case ModeDocker:
 		return NewDockerSandbox(merged)
-	case ModeFirecracker:
-		return nil, fmt.Errorf("firecracker sandbox not yet implemented")
-	case ModeGVisor:
-		return nil, fmt.Errorf("gvisor sandbox not yet implemented")
-	case ModeWASM:
-		return nil, fmt.Errorf("wasm sandbox not yet implemented")
+	case ModeE2B:
+		return NewE2BSandbox(merged, E2BConfig{
+			TemplateID: merged.Image,
+			TimeoutSec: int(merged.Timeout.Seconds()),
+		})
 	default:
 		return nil, fmt.Errorf("unknown sandbox mode: %s", merged.Mode)
 	}
@@ -149,6 +198,10 @@ func (f *Factory) mergeConfig(cfg Config) Config {
 		merged.Resources.Memory = f.DefaultConfig.Resources.Memory
 	}
 
+	if merged.WorkspacePath == "" {
+		merged.WorkspacePath = f.DefaultConfig.WorkspacePath
+	}
+
 	return merged
 }
 
@@ -158,7 +211,7 @@ func DefaultConfig() Config {
 		Timeout: 30 * time.Minute,
 		Resources: ResourceConfig{
 			CPU:    2,
-			Memory: "4Gi",
+			Memory: "4g",
 			PIDs:   1000,
 		},
 		Network: NetworkConfig{

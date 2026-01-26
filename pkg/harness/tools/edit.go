@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"station/pkg/harness/sandbox"
+
 	"github.com/firebase/genkit/go/ai"
 	"github.com/firebase/genkit/go/genkit"
 )
@@ -24,6 +26,10 @@ type EditOutput struct {
 }
 
 func NewEditTool(genkitApp *genkit.Genkit, workspacePath string) ai.Tool {
+	return NewEditToolWithSandbox(genkitApp, workspacePath, nil)
+}
+
+func NewEditToolWithSandbox(genkitApp *genkit.Genkit, workspacePath string, sb sandbox.Sandbox) ai.Tool {
 	return genkit.DefineTool(
 		genkitApp,
 		"edit",
@@ -54,7 +60,14 @@ Examples:
 				path = filepath.Join(workspacePath, path)
 			}
 
-			content, err := os.ReadFile(path)
+			var content []byte
+			var err error
+
+			if sb != nil {
+				content, err = sb.ReadFile(ctx, path)
+			} else {
+				content, err = os.ReadFile(path)
+			}
 			if err != nil {
 				return EditOutput{}, fmt.Errorf("failed to read file: %w", err)
 			}
@@ -78,7 +91,12 @@ Examples:
 				count = 1
 			}
 
-			if err := os.WriteFile(path, []byte(newContent), 0644); err != nil {
+			if sb != nil {
+				err = sb.WriteFile(ctx, path, []byte(newContent), 0644)
+			} else {
+				err = os.WriteFile(path, []byte(newContent), 0644)
+			}
+			if err != nil {
 				return EditOutput{}, fmt.Errorf("failed to write file: %w", err)
 			}
 

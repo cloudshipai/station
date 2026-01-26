@@ -2,19 +2,30 @@ package harness
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/firebase/genkit/go/ai"
 	"github.com/firebase/genkit/go/genkit"
 )
 
+// HistoryBackend interface for persisting conversation history
+type HistoryBackend interface {
+	WriteFile(path string, content []byte) error
+	ReadFile(path string) ([]byte, error)
+}
+
 type Compactor struct {
-	genkitApp     *genkit.Genkit
-	modelName     string
-	config        CompactionConfig
-	tokenCounter  TokenCounter
-	contextWindow int
+	genkitApp      *genkit.Genkit
+	modelName      string
+	config         CompactionConfig
+	tokenCounter   TokenCounter
+	contextWindow  int
+	historyBackend HistoryBackend // For history offload
+	historyPrefix  string         // e.g., "/conversation_history"
+	sessionID      string         // For unique history file names
 }
 
 type TokenCounter interface {
@@ -47,6 +58,13 @@ func NewCompactor(genkitApp *genkit.Genkit, modelName string, config CompactionC
 
 func (c *Compactor) WithTokenCounter(counter TokenCounter) *Compactor {
 	c.tokenCounter = counter
+	return c
+}
+
+func (c *Compactor) WithHistoryBackend(backend HistoryBackend, prefix, sessionID string) *Compactor {
+	c.historyBackend = backend
+	c.historyPrefix = prefix
+	c.sessionID = sessionID
 	return c
 }
 
@@ -105,6 +123,17 @@ func (c *Compactor) compact(ctx context.Context, history []*ai.Message) ([]*ai.M
 		return history, nil
 	}
 
+	// Offload history before summarization (preserves full data)
+	var historyFile string
+	if c.config.HistoryOffload {
+		var err error
+		historyFile, err = c.offloadHistory(toSummarize)
+		if err != nil {
+			// Log but don't fail - offload is optional
+			fmt.Printf("Warning: failed to offload history: %v\n", err)
+		}
+	}
+
 	summary, err := c.summarizeHistory(ctx, toSummarize)
 	if err != nil {
 		return history, err
@@ -116,12 +145,21 @@ func (c *Compactor) compact(ctx context.Context, history []*ai.Message) ([]*ai.M
 		compacted = append(compacted, history[0])
 	}
 
-	compacted = append(compacted, ai.NewUserTextMessage(fmt.Sprintf(
-		"[CONTEXT COMPACTION: The following is a summary of %d previous messages totaling ~%d tokens]\n\n%s\n\n[END SUMMARY - Continuing from recent context]",
+	// Build summary message with optional file reference
+	summaryMsg := fmt.Sprintf(
+		"[CONTEXT COMPACTION: The following is a summary of %d previous messages totaling ~%d tokens]\n\n%s\n\n",
 		len(toSummarize),
 		currentTokens-tokensToPreserve,
 		summary,
-	)))
+	)
+
+	if historyFile != "" {
+		summaryMsg += fmt.Sprintf("[Full history preserved at: %s]\n\n", historyFile)
+	}
+
+	summaryMsg += "[END SUMMARY - Continuing from recent context]"
+
+	compacted = append(compacted, ai.NewUserTextMessage(summaryMsg))
 
 	compacted = append(compacted, history[preserveFromIdx:]...)
 
@@ -208,4 +246,183 @@ func (c *Compactor) ShouldCompact(history []*ai.Message) (bool, int, error) {
 
 	threshold := int(float64(c.contextWindow) * c.config.Threshold)
 	return currentTokens >= threshold, currentTokens, nil
+}
+
+// offloadHistory saves conversation history to the backend before summarization
+// This preserves the full history for debugging and retrieval
+func (c *Compactor) offloadHistory(messages []*ai.Message) (string, error) {
+	if c.historyBackend == nil {
+		return "", nil
+	}
+
+	// Create serializable structure for history
+	type HistoryEntry struct {
+		Timestamp time.Time `json:"timestamp"`
+		SessionID string    `json:"session_id"`
+		Messages  []struct {
+			Role    string `json:"role"`
+			Content string `json:"content"`
+			Tools   []struct {
+				Name   string `json:"name"`
+				Type   string `json:"type"` // "request" or "response"
+				Input  any    `json:"input,omitempty"`
+				Output any    `json:"output,omitempty"`
+			} `json:"tools,omitempty"`
+		} `json:"messages"`
+	}
+
+	entry := HistoryEntry{
+		Timestamp: time.Now(),
+		SessionID: c.sessionID,
+	}
+
+	for _, msg := range messages {
+		msgEntry := struct {
+			Role    string `json:"role"`
+			Content string `json:"content"`
+			Tools   []struct {
+				Name   string `json:"name"`
+				Type   string `json:"type"`
+				Input  any    `json:"input,omitempty"`
+				Output any    `json:"output,omitempty"`
+			} `json:"tools,omitempty"`
+		}{
+			Role: string(msg.Role),
+		}
+
+		for _, part := range msg.Content {
+			if part.IsText() {
+				msgEntry.Content += part.Text
+			} else if part.IsToolRequest() {
+				msgEntry.Tools = append(msgEntry.Tools, struct {
+					Name   string `json:"name"`
+					Type   string `json:"type"`
+					Input  any    `json:"input,omitempty"`
+					Output any    `json:"output,omitempty"`
+				}{
+					Name:  part.ToolRequest.Name,
+					Type:  "request",
+					Input: part.ToolRequest.Input,
+				})
+			} else if part.IsToolResponse() {
+				msgEntry.Tools = append(msgEntry.Tools, struct {
+					Name   string `json:"name"`
+					Type   string `json:"type"`
+					Input  any    `json:"input,omitempty"`
+					Output any    `json:"output,omitempty"`
+				}{
+					Name:   part.ToolResponse.Name,
+					Type:   "response",
+					Output: part.ToolResponse.Output,
+				})
+			}
+		}
+
+		entry.Messages = append(entry.Messages, msgEntry)
+	}
+
+	data, err := json.MarshalIndent(entry, "", "  ")
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal history: %w", err)
+	}
+
+	// Generate unique filename with timestamp
+	filename := fmt.Sprintf("%s/%s_%s.json",
+		c.historyPrefix,
+		c.sessionID,
+		time.Now().Format("20060102_150405"),
+	)
+
+	if err := c.historyBackend.WriteFile(filename, data); err != nil {
+		return "", fmt.Errorf("failed to write history: %w", err)
+	}
+
+	return filename, nil
+}
+
+// TruncateOldArgs truncates large tool arguments in older messages to reduce token count
+// This is useful for tools like write_file and edit_file that have large inputs
+func (c *Compactor) TruncateOldArgs(messages []*ai.Message, maxArgLength int) []*ai.Message {
+	if maxArgLength <= 0 {
+		maxArgLength = 500 // Default max length for truncated args
+	}
+
+	// Don't modify the last few messages (keep them intact)
+	preserveCount := 4
+	if len(messages) <= preserveCount {
+		return messages
+	}
+
+	result := make([]*ai.Message, len(messages))
+	copy(result[len(messages)-preserveCount:], messages[len(messages)-preserveCount:])
+
+	for i := 0; i < len(messages)-preserveCount; i++ {
+		msg := messages[i]
+		newContent := make([]*ai.Part, len(msg.Content))
+
+		for j, part := range msg.Content {
+			if part.IsToolRequest() {
+				// Check if this is a tool with potentially large args
+				toolName := part.ToolRequest.Name
+				if shouldTruncateArgs(toolName) {
+					// Create truncated version
+					truncatedInput := truncateInput(part.ToolRequest.Input, maxArgLength)
+					newPart := ai.NewToolRequestPart(&ai.ToolRequest{
+						Name:  toolName,
+						Input: truncatedInput,
+					})
+					newContent[j] = newPart
+				} else {
+					newContent[j] = part
+				}
+			} else {
+				newContent[j] = part
+			}
+		}
+
+		result[i] = &ai.Message{
+			Role:    msg.Role,
+			Content: newContent,
+		}
+	}
+
+	return result
+}
+
+// shouldTruncateArgs returns true for tools that typically have large arguments
+func shouldTruncateArgs(toolName string) bool {
+	largeArgTools := map[string]bool{
+		"write_file":      true,
+		"edit_file":       true,
+		"bash":            true,
+		"create_file":     true,
+		"update_file":     true,
+		"patch_file":      true,
+		"__write_file":    true,
+		"__edit_file":     true,
+		"__create_file":   true,
+	}
+	return largeArgTools[toolName]
+}
+
+// truncateInput truncates the input map values that are strings
+func truncateInput(input any, maxLength int) any {
+	if input == nil {
+		return nil
+	}
+
+	switch v := input.(type) {
+	case map[string]any:
+		result := make(map[string]any)
+		for key, val := range v {
+			if str, ok := val.(string); ok && len(str) > maxLength {
+				result[key] = str[:maxLength] + fmt.Sprintf("... [truncated %d chars]", len(str)-maxLength)
+			} else {
+				result[key] = val
+			}
+		}
+		return result
+	default:
+		return input
+	}
 }

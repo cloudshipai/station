@@ -10,7 +10,7 @@ import (
 func (s *Server) setupTools() {
 	// Agent management tools (CRUD operations)
 	createAgentTool := mcp.NewTool("create_agent",
-		mcp.WithDescription("Create a new AI agent with specified configuration. For sandbox options, read 'station://docs/sandbox' resource."),
+		mcp.WithDescription("Create a new AI agent with specified configuration. For sandbox options, read 'station://docs/sandbox' resource. For agentic harness (Claude Agent SDK-like execution), use harness_config."),
 		mcp.WithString("name", mcp.Required(), mcp.Description("Name of the agent")),
 		mcp.WithString("description", mcp.Required(), mcp.Description("Description of what the agent does")),
 		mcp.WithString("prompt", mcp.Required(), mcp.Description("System prompt for the agent")),
@@ -28,12 +28,13 @@ func (s *Server) setupTools() {
 		mcp.WithString("sandbox", mcp.Description("Sandbox configuration as JSON. Read 'station://docs/sandbox' for all options. Modes: 'compute' (single execution, default) or 'code' (persistent session). For code mode, use 'session': 'workflow' to share sandbox across workflow steps, or 'agent' (default) for per-agent sessions. Example: {\"mode\": \"code\", \"session\": \"workflow\", \"runtime\": \"python\", \"pip_packages\": [\"pandas\"]}. Full options: mode, session, runtime, image, timeout_seconds, allow_network, pip_packages, npm_packages, limits.")),
 		mcp.WithString("coding", mcp.Description("OpenCode AI coding backend configuration as JSON. Enables coding_open, code, coding_close, coding_commit, coding_push tools. Example: {\"enabled\": true, \"backend\": \"opencode\", \"workspace_path\": \"/tmp/my-project\"}. Options: enabled (bool), backend (\"opencode\"), workspace_path (optional default workspace).")),
 		mcp.WithBoolean("notify", mcp.Description("Enable the notify tool for this agent to send webhook notifications (ntfy, Slack, Discord, etc.). Requires notify webhook to be configured in Station config. Default: false.")),
+		mcp.WithString("harness_config", mcp.Description("Agentic harness configuration as JSON. Enables Claude Agent SDK-like multi-turn execution with sandbox isolation. Example: {\"max_steps\": 50, \"doom_loop_threshold\": 5, \"timeout\": \"30m\", \"sandbox\": {\"mode\": \"docker\", \"image\": \"python:3.11\"}}. Options: max_steps (int, default 25), doom_loop_threshold (int, default 3), timeout (duration string), sandbox (object with mode: host|docker|e2b). When set, adds 'harness: agentic' to frontmatter. Tools should include: read, write, bash, glob, grep, edit.")),
 	)
 	s.mcpServer.AddTool(createAgentTool, s.handleCreateAgent)
 
 	// Update agent tool
 	updateAgentTool := mcp.NewTool("update_agent",
-		mcp.WithDescription("Update an existing agent's configuration. Note: To manage tools, use add_tool/remove_tool instead. For sandbox options, read 'station://docs/sandbox' resource."),
+		mcp.WithDescription("Update an existing agent's configuration. Note: To manage tools, use add_tool/remove_tool instead. For sandbox options, read 'station://docs/sandbox' resource. For agentic harness, use harness_config."),
 		mcp.WithString("agent_id", mcp.Required(), mcp.Description("ID of the agent to update")),
 		mcp.WithString("name", mcp.Description("New name for the agent")),
 		mcp.WithString("description", mcp.Description("New description for the agent")),
@@ -47,6 +48,7 @@ func (s *Server) setupTools() {
 		mcp.WithString("sandbox", mcp.Description("Sandbox configuration as JSON. Read 'station://docs/sandbox' for all options. For code mode with workflow scoping: {\"mode\": \"code\", \"session\": \"workflow\", \"runtime\": \"python\"}. Set to \"{}\" to remove sandbox. Options: mode (compute/code), session (workflow/agent), runtime, pip_packages, npm_packages, timeout_seconds, allow_network, limits.")),
 		mcp.WithString("coding", mcp.Description("OpenCode AI coding backend configuration as JSON. Set to \"{}\" to remove. Example: {\"enabled\": true, \"backend\": \"opencode\"}.")),
 		mcp.WithBoolean("notify", mcp.Description("Enable/disable the notify tool for this agent. Set to true to enable webhook notifications, false to disable.")),
+		mcp.WithString("harness_config", mcp.Description("Agentic harness configuration as JSON. Set to \"{}\" to remove. Example: {\"max_steps\": 50, \"sandbox\": {\"mode\": \"docker\"}}. Options: max_steps, doom_loop_threshold, timeout, sandbox (mode: host|docker|e2b).")),
 	)
 	s.mcpServer.AddTool(updateAgentTool, s.handleUpdateAgent)
 

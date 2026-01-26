@@ -128,6 +128,12 @@ var ConfigSchema = []ConfigField{
 	{Key: "sandbox.enabled", Type: FieldTypeBool, Description: "Enable sandbox code execution", Default: false, Section: "sandbox"},
 	{Key: "sandbox.code_mode_enabled", Type: FieldTypeBool, Description: "Enable code mode in sandbox", Default: false, Section: "sandbox"},
 	{Key: "sandbox.idle_timeout_minutes", Type: FieldTypeInt, Description: "Sandbox idle timeout in minutes", Default: 30, Section: "sandbox"},
+	{Key: "sandbox.docker_image", Type: FieldTypeString, Description: "Docker image for sandbox containers", Default: "ubuntu:22.04", Section: "sandbox"},
+	{Key: "sandbox.registry_auth.username", Type: FieldTypeString, Description: "Registry username for private images", Section: "sandbox"},
+	{Key: "sandbox.registry_auth.password", Type: FieldTypeString, Description: "Registry password or access token", Secret: true, Section: "sandbox"},
+	{Key: "sandbox.registry_auth.identity_token", Type: FieldTypeString, Description: "OAuth token for ECR/GCR/ACR", Secret: true, Section: "sandbox"},
+	{Key: "sandbox.registry_auth.server_address", Type: FieldTypeString, Description: "Registry server (e.g., ghcr.io, 123456.dkr.ecr.us-east-1.amazonaws.com)", Section: "sandbox"},
+	{Key: "sandbox.registry_auth.docker_config_path", Type: FieldTypeString, Description: "Path to Docker config.json for auth", Section: "sandbox"},
 
 	// Webhook Settings
 	{Key: "webhook.enabled", Type: FieldTypeBool, Description: "Enable webhook execute endpoint", Default: true, Section: "webhook"},

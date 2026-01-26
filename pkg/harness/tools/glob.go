@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"station/pkg/harness/sandbox"
+
 	"github.com/firebase/genkit/go/ai"
 	"github.com/firebase/genkit/go/genkit"
 )
@@ -29,6 +31,10 @@ type GlobOutput struct {
 }
 
 func NewGlobTool(genkitApp *genkit.Genkit, workspacePath string) ai.Tool {
+	return NewGlobToolWithSandbox(genkitApp, workspacePath, nil)
+}
+
+func NewGlobToolWithSandbox(genkitApp *genkit.Genkit, workspacePath string, sb sandbox.Sandbox) ai.Tool {
 	return genkit.DefineTool(
 		genkitApp,
 		"glob",
@@ -58,42 +64,12 @@ Limited to 100 results with 60s timeout.`,
 
 			var matches []fileInfo
 			pattern := input.Pattern
-
 			hasDoublestar := strings.Contains(pattern, "**")
 
-			err := filepath.Walk(basePath, func(path string, info os.FileInfo, err error) error {
-				if err != nil {
-					return nil
-				}
-
-				if info.IsDir() {
-					return nil
-				}
-
-				relPath, err := filepath.Rel(basePath, path)
-				if err != nil {
-					return nil
-				}
-
-				var matched bool
-				if hasDoublestar {
-					matched = matchDoublestar(pattern, relPath)
-				} else {
-					matched, _ = filepath.Match(pattern, filepath.Base(relPath))
-				}
-
-				if matched {
-					matches = append(matches, fileInfo{
-						path:    relPath,
-						modTime: info.ModTime(),
-					})
-				}
-
-				return nil
-			})
-
-			if err != nil {
-				return GlobOutput{}, fmt.Errorf("failed to walk directory: %w", err)
+			if sb != nil {
+				matches = globViaSandbox(ctx, sb, basePath, pattern, hasDoublestar)
+			} else {
+				matches = globDirect(basePath, pattern, hasDoublestar)
 			}
 
 			sort.Slice(matches, func(i, j int) bool {
@@ -118,6 +94,80 @@ Limited to 100 results with 60s timeout.`,
 			}, nil
 		},
 	)
+}
+
+func globViaSandbox(ctx *ai.ToolContext, sb sandbox.Sandbox, basePath, pattern string, hasDoublestar bool) []fileInfo {
+	var matches []fileInfo
+	walkSandboxDir(ctx, sb, basePath, basePath, pattern, hasDoublestar, &matches)
+	return matches
+}
+
+func walkSandboxDir(ctx *ai.ToolContext, sb sandbox.Sandbox, basePath, currentPath, pattern string, hasDoublestar bool, matches *[]fileInfo) {
+	files, err := sb.ListFiles(ctx, currentPath)
+	if err != nil {
+		return
+	}
+
+	for _, f := range files {
+		fullPath := filepath.Join(currentPath, f.Name)
+		relPath, _ := filepath.Rel(basePath, fullPath)
+
+		if f.IsDir {
+			walkSandboxDir(ctx, sb, basePath, fullPath, pattern, hasDoublestar, matches)
+			continue
+		}
+
+		var matched bool
+		if hasDoublestar {
+			matched = matchDoublestar(pattern, relPath)
+		} else {
+			matched, _ = filepath.Match(pattern, filepath.Base(relPath))
+		}
+
+		if matched {
+			*matches = append(*matches, fileInfo{
+				path:    relPath,
+				modTime: f.ModTime,
+			})
+		}
+	}
+}
+
+func globDirect(basePath, pattern string, hasDoublestar bool) []fileInfo {
+	var matches []fileInfo
+
+	filepath.Walk(basePath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+
+		if info.IsDir() {
+			return nil
+		}
+
+		relPath, err := filepath.Rel(basePath, path)
+		if err != nil {
+			return nil
+		}
+
+		var matched bool
+		if hasDoublestar {
+			matched = matchDoublestar(pattern, relPath)
+		} else {
+			matched, _ = filepath.Match(pattern, filepath.Base(relPath))
+		}
+
+		if matched {
+			matches = append(matches, fileInfo{
+				path:    relPath,
+				modTime: info.ModTime(),
+			})
+		}
+
+		return nil
+	})
+
+	return matches
 }
 
 type fileInfo struct {

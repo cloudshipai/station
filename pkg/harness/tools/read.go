@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"station/pkg/harness/sandbox"
+
 	"github.com/firebase/genkit/go/ai"
 	"github.com/firebase/genkit/go/genkit"
 )
@@ -29,6 +31,10 @@ type ReadOutput struct {
 }
 
 func NewReadTool(genkitApp *genkit.Genkit, workspacePath string) ai.Tool {
+	return NewReadToolWithSandbox(genkitApp, workspacePath, nil)
+}
+
+func NewReadToolWithSandbox(genkitApp *genkit.Genkit, workspacePath string, sb sandbox.Sandbox) ai.Tool {
 	return genkit.DefineTool(
 		genkitApp,
 		"read",
@@ -48,7 +54,14 @@ Lines longer than 2000 characters are truncated.`,
 				path = filepath.Join(workspacePath, path)
 			}
 
-			content, err := os.ReadFile(path)
+			var content []byte
+			var err error
+
+			if sb != nil {
+				content, err = sb.ReadFile(ctx, path)
+			} else {
+				content, err = os.ReadFile(path)
+			}
 			if err != nil {
 				return ReadOutput{}, fmt.Errorf("failed to read file: %w", err)
 			}

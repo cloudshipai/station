@@ -426,6 +426,38 @@ sandbox:
   # image: golang:1.22  # any Docker image
 ```
 
+### Private Registry Authentication
+
+To use images from private registries (ECR, GCR, Docker Hub private repos), configure registry auth in `config.yaml`:
+
+```yaml
+sandbox:
+  enabled: true
+  docker_image: "ghcr.io/myorg/custom-sandbox:latest"
+  registry_auth:
+    username: "myuser"
+    password: "${DOCKER_TOKEN}"
+    server_address: "ghcr.io"
+```
+
+Or use environment variables:
+
+```bash
+export STN_SANDBOX_DOCKER_IMAGE="123456.dkr.ecr.us-east-1.amazonaws.com/sandbox:latest"
+export STN_SANDBOX_REGISTRY_USERNAME="AWS"
+export STN_SANDBOX_REGISTRY_PASSWORD="$(aws ecr get-login-password)"
+export STN_SANDBOX_REGISTRY_SERVER="123456.dkr.ecr.us-east-1.amazonaws.com"
+```
+
+| Environment Variable | Description |
+|---------------------|-------------|
+| `STN_SANDBOX_DOCKER_IMAGE` | Docker image for sandbox containers |
+| `STN_SANDBOX_REGISTRY_USERNAME` | Registry username |
+| `STN_SANDBOX_REGISTRY_PASSWORD` | Registry password/token |
+| `STN_SANDBOX_REGISTRY_TOKEN` | OAuth identity token (ECR/GCR) |
+| `STN_SANDBOX_REGISTRY_SERVER` | Registry server address |
+| `STN_SANDBOX_REGISTRY_CONFIG` | Path to Docker config.json |
+
 ### Code Mode Configuration
 
 | Field | Type | Default | Description |

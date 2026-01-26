@@ -476,6 +476,8 @@ func redactSecrets(m map[string]interface{}) map[string]interface{} {
 		"token":                  true,
 		"ai_oauth_token":         true,
 		"ai_oauth_refresh_token": true,
+		"password":               true,
+		"identity_token":         true,
 	}
 
 	return redactSecretsRecursive(m, secretKeys)
