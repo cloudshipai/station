@@ -41,9 +41,9 @@ func TestValidateCommand_DangerousPatterns(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := validateCommand(tt.command, workspace)
-			if result.Valid != tt.valid {
+			if result.Allowed != tt.valid {
 				t.Errorf("validateCommand(%q) = %v, want %v (reason: %s)",
-					tt.command, result.Valid, tt.valid, result.Reason)
+					tt.command, result.Allowed, tt.valid, result.Reason)
 			}
 		})
 	}
@@ -121,7 +121,7 @@ func TestValidateCommand_SensitiveDirectories(t *testing.T) {
 	for _, cmd := range sensitiveCommands {
 		t.Run(cmd, func(t *testing.T) {
 			result := validateCommand(cmd, workspace)
-			if result.Valid {
+			if result.Allowed {
 				t.Errorf("validateCommand(%q) should block access to sensitive directory", cmd)
 			}
 		})
