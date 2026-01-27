@@ -376,6 +376,16 @@ func (e *AgenticExecutor) initializeSandbox(ctx context.Context) error {
 }
 
 func (e *AgenticExecutor) cleanup(ctx context.Context, agentID string, result *ExecutionResult) error {
+	// Memory flush before cleanup (if configured)
+	if e.memoryMiddleware != nil && e.agentConfig.MemoryFlushEnabled {
+		_, memSpan := tracer.Start(ctx, "memory_flush")
+		if err := e.flushMemory(ctx, result); err != nil {
+			memSpan.RecordError(err)
+			// Log but don't fail cleanup
+		}
+		memSpan.End()
+	}
+
 	if e.gitManager != nil && e.config.Git.AutoCommit && result.Success {
 		_, span := tracer.Start(ctx, "git_commit")
 		commitSHA, err := e.gitManager.Commit(ctx, result.Response)
@@ -393,6 +403,48 @@ func (e *AgenticExecutor) cleanup(ctx context.Context, agentID string, result *E
 	}
 
 	return nil
+}
+
+// flushMemory persists session insights to memory before cleanup
+func (e *AgenticExecutor) flushMemory(ctx context.Context, result *ExecutionResult) error {
+	if e.memoryMiddleware == nil || result == nil {
+		return nil
+	}
+
+	// Generate a brief summary of the session
+	summary := e.generateSessionSummary(result)
+	if summary == "" {
+		return nil
+	}
+
+	return e.memoryMiddleware.FlushSessionMemory(summary)
+}
+
+// generateSessionSummary creates a brief summary of the execution for memory
+func (e *AgenticExecutor) generateSessionSummary(result *ExecutionResult) string {
+	if result == nil || !result.Success {
+		return ""
+	}
+
+	// Only flush successful sessions with meaningful output
+	if len(result.Response) < 50 {
+		return ""
+	}
+
+	// Create a simple summary entry
+	var sb strings.Builder
+	sb.WriteString("### Session Summary\n")
+	sb.WriteString(fmt.Sprintf("- Steps: %d, Tokens: %d\n", result.TotalSteps, result.TotalTokens))
+	sb.WriteString(fmt.Sprintf("- Duration: %s\n", result.Duration.Round(time.Second)))
+
+	// Truncate response for summary
+	response := result.Response
+	if len(response) > 500 {
+		response = response[:500] + "..."
+	}
+	sb.WriteString(fmt.Sprintf("- Outcome: %s\n", response))
+
+	return sb.String()
 }
 
 func (e *AgenticExecutor) destroySandbox(ctx context.Context) error {

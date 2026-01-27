@@ -449,7 +449,7 @@ func handleReplCommand(ctx context.Context, session *ReplSession, skillsMW *skil
 			} else {
 				session.MessageCount = 0
 				session.TotalTokens = 0
-				fmt.Println("History cleared.\n")
+				fmt.Println("History cleared.")
 			}
 		} else {
 			fmt.Println("History store not initialized")
@@ -484,7 +484,7 @@ func handleReplCommand(ctx context.Context, session *ReplSession, skillsMW *skil
 
 	case "/files":
 		fmt.Println("\nWorkspace file listing not implemented yet")
-		fmt.Println("Use: /tools to see available file operations\n")
+		fmt.Println("Use: /tools to see available file operations")
 
 	default:
 		fmt.Printf("Unknown command: %s (try /help)\n\n", cmdName)
@@ -494,8 +494,7 @@ func handleReplCommand(ctx context.Context, session *ReplSession, skillsMW *skil
 }
 
 func printReplHelp() {
-	fmt.Println(`
-REPL Commands:
+	fmt.Println(`REPL Commands:
   /help, /h    Show this help
   /status      Show session status (steps, tokens)
   /history     Show conversation history with recent messages
@@ -509,8 +508,7 @@ REPL Commands:
   /load FILE   Load session state from file
   /exit, /q    Exit REPL
 
-Any other input is sent to the agent as a task.
-`)
+Any other input is sent to the agent as a task.`)
 }
 
 func printReplSessionStatus(session *ReplSession) {

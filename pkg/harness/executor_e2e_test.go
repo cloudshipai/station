@@ -13,6 +13,7 @@ import (
 	"station/internal/genkit/anthropic_oauth"
 	"station/internal/logging"
 	"station/pkg/harness"
+	harness_memory "station/pkg/harness/memory"
 	"station/pkg/harness/sandbox"
 	"station/pkg/harness/tools"
 	"station/pkg/harness/workspace"
@@ -20,6 +21,7 @@ import (
 	"github.com/firebase/genkit/go/genkit"
 	"github.com/firebase/genkit/go/plugins/compat_oai/openai"
 	"github.com/firebase/genkit/go/plugins/googlegenai"
+	"github.com/openai/openai-go/option"
 )
 
 func TestAgenticExecutor_E2E_RealLLM(t *testing.T) {
@@ -224,12 +226,17 @@ func initGenkit(ctx context.Context, cfg *config.Config) (*genkit.Genkit, error)
 		provider = "openai"
 	}
 
-	logging.Info("Initializing GenKit for e2e test with provider: %s, model: %s", provider, cfg.AIModel)
+	logging.Info("Initializing GenKit for e2e test with provider: %s, model: %s, base_url: %s", provider, cfg.AIModel, cfg.AIBaseURL)
 
 	switch provider {
 	case "openai":
+		oaiPlugin := &openai.OpenAI{APIKey: cfg.AIAPIKey}
+		// Support OpenAI-compatible providers like Together AI, CloudShip, etc.
+		if cfg.AIBaseURL != "" {
+			oaiPlugin.Opts = append(oaiPlugin.Opts, option.WithBaseURL(cfg.AIBaseURL))
+		}
 		return genkit.Init(ctx,
-			genkit.WithPlugins(&openai.OpenAI{APIKey: cfg.AIAPIKey}),
+			genkit.WithPlugins(oaiPlugin),
 			genkit.WithPromptDir(promptDir)), nil
 
 	case "gemini", "googlegenai":
@@ -615,6 +622,130 @@ Report the output.`
 		!strings.Contains(result.Response, "Python version") {
 		t.Logf("Warning: Response may not contain expected output")
 	}
+}
+
+func TestAgenticExecutor_E2E_MemoryFlush(t *testing.T) {
+	if os.Getenv("HARNESS_E2E_TEST") != "1" {
+		t.Skip("Skipping e2e test. Set HARNESS_E2E_TEST=1 to run with real LLM")
+	}
+
+	ctx := context.Background()
+
+	if err := config.InitViper(""); err != nil {
+		t.Fatalf("Failed to init viper: %v", err)
+	}
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+
+	genkitApp, err := initGenkit(ctx, cfg)
+	if err != nil {
+		t.Fatalf("Failed to initialize GenKit: %v", err)
+	}
+
+	tmpDir, err := os.MkdirTemp("", "harness-e2e-memflush-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	ws := workspace.NewHostWorkspace(tmpDir)
+	if err := ws.Initialize(ctx); err != nil {
+		t.Fatalf("Failed to initialize workspace: %v", err)
+	}
+
+	toolRegistry := tools.NewToolRegistry(genkitApp, tmpDir)
+	if err := toolRegistry.RegisterBuiltinTools(); err != nil {
+		t.Fatalf("Failed to register tools: %v", err)
+	}
+
+	// Create memory middleware with workspace
+	memBackend := &memoryFSBackend{}
+	memMW := harness_memory.NewMemoryMiddlewareWithWorkspace(memBackend, nil, tmpDir)
+	if err := memMW.InitializeWorkspaceMemory(); err != nil {
+		t.Fatalf("Failed to initialize workspace memory: %v", err)
+	}
+
+	harnessConfig := harness.DefaultHarnessConfig()
+	agentConfig := &harness.AgentHarnessConfig{
+		MaxSteps:           10,
+		DoomLoopThreshold:  3,
+		Timeout:            2 * time.Minute,
+		MemoryFlushEnabled: true, // Enable memory flush
+	}
+
+	modelName := formatModelName(cfg.AIProvider, cfg.AIModel)
+
+	executor := harness.NewAgenticExecutor(
+		genkitApp,
+		harnessConfig,
+		agentConfig,
+		harness.WithWorkspace(ws),
+		harness.WithModelName(modelName),
+		harness.WithMemoryMiddleware(memMW),
+	)
+
+	task := "Create a file called 'notes.txt' with a brief summary of today's work. Say that you analyzed a codebase and found 3 issues."
+
+	t.Logf("Executing task with memory flush enabled")
+	startTime := time.Now()
+
+	result, err := executor.Execute(ctx, "memory-flush-test", task, toolRegistry.All())
+
+	t.Logf("Execution completed in %v", time.Since(startTime))
+	t.Logf("Result: success=%v, steps=%d, tokens=%d, finish_reason=%s",
+		result.Success, result.TotalSteps, result.TotalTokens, result.FinishReason)
+
+	if err != nil {
+		t.Logf("Execution error: %v", err)
+	}
+
+	if !result.Success {
+		t.Errorf("Expected successful execution, got error: %s", result.Error)
+	}
+
+	// Verify MEMORY.md was created
+	memoryFile := tmpDir + "/MEMORY.md"
+	if _, err := os.Stat(memoryFile); os.IsNotExist(err) {
+		t.Error("Expected MEMORY.md to be created")
+	} else {
+		content, _ := os.ReadFile(memoryFile)
+		t.Logf("MEMORY.md content:\n%s", string(content))
+	}
+
+	// Verify HEARTBEAT.md was created
+	heartbeatFile := tmpDir + "/HEARTBEAT.md"
+	if _, err := os.Stat(heartbeatFile); os.IsNotExist(err) {
+		t.Error("Expected HEARTBEAT.md to be created")
+	} else {
+		content, _ := os.ReadFile(heartbeatFile)
+		t.Logf("HEARTBEAT.md content:\n%s", string(content))
+		if !strings.Contains(string(content), "HEARTBEAT_OK") {
+			t.Error("HEARTBEAT.md should contain HEARTBEAT_OK token")
+		}
+	}
+
+	// Verify daily memory log was created (if result was successful with enough content)
+	memoryDir := tmpDir + "/memory"
+	if info, err := os.Stat(memoryDir); err == nil && info.IsDir() {
+		files, _ := os.ReadDir(memoryDir)
+		t.Logf("Memory directory contents: %d files", len(files))
+		for _, f := range files {
+			content, _ := os.ReadFile(memoryDir + "/" + f.Name())
+			t.Logf("Memory file %s:\n%s", f.Name(), string(content))
+		}
+	}
+
+	t.Log("Memory flush test completed successfully")
+}
+
+// memoryFSBackend implements memory.Backend for testing
+type memoryFSBackend struct{}
+
+func (b *memoryFSBackend) ReadFile(path string) ([]byte, error) {
+	return os.ReadFile(path)
 }
 
 func TestAgenticExecutor_E2E_DockerWorkflowHandoff(t *testing.T) {

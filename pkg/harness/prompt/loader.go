@@ -46,6 +46,29 @@ type HarnessConfig struct {
 	DoomLoop   *DoomLoopConfig   `yaml:"doom_loop,omitempty"`
 	Compaction *CompactionConfig `yaml:"compaction,omitempty"`
 	Progress   *ProgressConfig   `yaml:"progress,omitempty"`
+	Heartbeat  *HeartbeatConfig  `yaml:"heartbeat,omitempty"`
+}
+
+// HeartbeatConfig configures periodic agent heartbeats
+type HeartbeatConfig struct {
+	Enabled     bool               `yaml:"enabled,omitempty"`
+	Every       string             `yaml:"every,omitempty"`        // e.g., "30m", "1h"
+	ActiveHours *ActiveHoursConfig `yaml:"active_hours,omitempty"`
+	Session     string             `yaml:"session,omitempty"` // "main" (default) or "isolated"
+	Notify      *NotifyConfig      `yaml:"notify,omitempty"`
+}
+
+// ActiveHoursConfig defines when heartbeats should run
+type ActiveHoursConfig struct {
+	Start    string `yaml:"start,omitempty"`    // "08:00" (24h format)
+	End      string `yaml:"end,omitempty"`      // "20:00" (24h format)
+	Timezone string `yaml:"timezone,omitempty"` // "local", "UTC", or IANA timezone
+}
+
+// NotifyConfig configures heartbeat notifications
+type NotifyConfig struct {
+	Channel string `yaml:"channel,omitempty"` // "webhook"
+	URL     string `yaml:"url,omitempty"`     // Webhook URL
 }
 
 // DoomLoopConfig configures doom loop detection
@@ -60,6 +83,7 @@ type CompactionConfig struct {
 	Threshold      float64 `yaml:"threshold,omitempty"`       // Default: 0.85
 	ProtectTokens  int     `yaml:"protect_tokens,omitempty"`  // Default: 40000
 	HistoryOffload bool    `yaml:"history_offload,omitempty"` // Save to NATS before summarizing
+	MemoryFlush    bool    `yaml:"memory_flush,omitempty"`    // Auto-flush memory before compaction
 }
 
 // ProgressConfig configures progress tracking
@@ -233,4 +257,38 @@ func (c *AgentConfig) GetSandboxMode() string {
 		return c.Sandbox.Mode
 	}
 	return "host"
+}
+
+// IsHeartbeatEnabled returns whether heartbeat is enabled
+func (c *AgentConfig) IsHeartbeatEnabled() bool {
+	return c.Harness != nil && c.Harness.Heartbeat != nil && c.Harness.Heartbeat.Enabled
+}
+
+// GetHeartbeatInterval returns the heartbeat interval as a Duration
+func (c *AgentConfig) GetHeartbeatInterval() time.Duration {
+	if c.Harness == nil || c.Harness.Heartbeat == nil || c.Harness.Heartbeat.Every == "" {
+		return 30 * time.Minute // Default
+	}
+
+	d, err := time.ParseDuration(c.Harness.Heartbeat.Every)
+	if err != nil {
+		return 30 * time.Minute
+	}
+	return d
+}
+
+// GetHeartbeatSession returns the heartbeat session mode ("main" or "isolated")
+func (c *AgentConfig) GetHeartbeatSession() string {
+	if c.Harness == nil || c.Harness.Heartbeat == nil || c.Harness.Heartbeat.Session == "" {
+		return "main" // Default
+	}
+	return c.Harness.Heartbeat.Session
+}
+
+// IsMemoryFlushEnabled returns whether memory flush before compaction is enabled
+func (c *AgentConfig) IsMemoryFlushEnabled() bool {
+	if c.Harness == nil || c.Harness.Compaction == nil {
+		return false // Disabled by default
+	}
+	return c.Harness.Compaction.MemoryFlush
 }

@@ -192,6 +192,11 @@ type AgentHarnessConfig struct {
 	// Timeout is the maximum execution time for the entire task.
 	// Default: 30m
 	Timeout time.Duration `yaml:"timeout" json:"timeout"`
+
+	// MemoryFlushEnabled enables automatic memory flush before session cleanup.
+	// When enabled, session summaries are persisted to the daily memory log.
+	// Default: false
+	MemoryFlushEnabled bool `yaml:"memory_flush" json:"memory_flush"`
 }
 
 // DefaultHarnessConfig returns the default harness configuration.
