@@ -1239,10 +1239,578 @@ Run tests:
 go test ./pkg/harness/session/... -v -count=1
 ```
 
+---
+
+## Phase 7: Developer Experience (DX) Improvements
+
+### Problem Statement
+
+The current harness has powerful capabilities but poor developer ergonomics:
+
+1. **No dedicated CLI commands** - Users must know `--harness-config` JSON
+2. **No scaffolding** - No templates for common agent patterns
+3. **No REPL mode** - Can't develop agents interactively
+4. **Limited debugging** - Hard to inspect runs and tool calls
+5. **Confusing entrypoints** - Multiple ways to trigger, unclear when to use each
+
+### Proposed CLI Commands
+
+#### 1. `stn harness init` - Scaffold New Harness Agent
+
+```bash
+# Interactive mode (guided prompts)
+stn harness init
+
+# One-liner with options
+stn harness init code-reviewer \
+  --template coding \
+  --sandbox docker \
+  --image python:3.11 \
+  --max-steps 50
+
+# Templates available:
+# - coding: read, write, edit, bash, glob, grep
+# - sre: read, bash, grep + prometheus tools
+# - security: read, glob, grep + security scanning
+# - data: read, write, bash + pandas/sql
+```
+
+**Output:**
+- Creates `.prompt` file with proper frontmatter
+- Syncs environment automatically
+- Prints usage instructions
+
+#### 2. `stn harness run` - Execute Harness Agent
+
+```bash
+# Basic execution
+stn harness run code-reviewer "Review auth module"
+
+# With workspace (clones repo)
+stn harness run code-reviewer "Fix tests" --repo https://github.com/org/repo
+
+# With session persistence
+stn harness run code-reviewer "Continue refactoring" --session my-session
+
+# With streaming output
+stn harness run code-reviewer "Analyze code" --stream
+
+# With variables
+stn harness run scanner "Scan {{path}}" --var path=./src --var depth=3
+```
+
+#### 3. `stn harness repl` - Interactive Development Mode
+
+```bash
+stn harness repl code-reviewer
+
+╭──────────────────────────────────────────────────╮
+│ Harness REPL: code-reviewer                      │
+│ Session: ses_abc123 | Steps: 0/50 | Tokens: 0    │
+│ Type /help for commands, Ctrl+C to exit          │
+╰──────────────────────────────────────────────────╯
+
+[code-reviewer] > Read the main.py file
+
+[Step 1/50] Executing: read
+✓ read main.py (245 lines)
+
+[code-reviewer] > Find security issues
+
+[Step 2/50] Executing: grep
+✓ grep "password|secret|key" (3 matches)
+
+[Step 3/50] Reasoning...
+I found 3 potential security issues:
+1. Hardcoded password on line 42
+...
+
+[code-reviewer] > /save
+✓ Session saved: ses_abc123
+
+[code-reviewer] > /export ./report.md
+✓ Exported conversation to ./report.md
+
+[code-reviewer] > /exit
+```
+
+**REPL Commands:**
+| Command | Description |
+|---------|-------------|
+| `/help` | Show available commands |
+| `/tools` | List available tools |
+| `/history` | Show conversation history |
+| `/save` | Save session checkpoint |
+| `/load <id>` | Load previous session |
+| `/export <path>` | Export conversation |
+| `/clear` | Clear current context |
+| `/exit` | Exit REPL |
+
+#### 4. `stn harness inspect` - Debug/Inspect Runs
+
+```bash
+# List recent harness runs
+stn harness runs
+ID          AGENT           STATUS    STEPS   TOKENS  DURATION
+run_abc123  code-reviewer   success   12      4,521   2m34s
+run_def456  code-reviewer   error     5       1,203   45s
+
+# Inspect a run
+stn harness inspect run_abc123
+
+╭─ Run: run_abc123 ─────────────────────────────────╮
+│ Agent:    code-reviewer                           │
+│ Status:   success                                 │
+│ Steps:    12/50                                   │
+│ Tokens:   4,521 (in: 1,200 out: 3,321)           │
+│ Duration: 2m34s                                   │
+│ Session:  ses_xyz789                              │
+│ Sandbox:  docker (python:3.11)                    │
+╰───────────────────────────────────────────────────╯
+
+Tool Calls:
+  1. [0.2s] read main.py → 245 lines
+  2. [0.1s] grep "TODO|FIXME" → 3 matches
+  3. [0.3s] edit main.py → 1 replacement
+  4. [0.8s] bash pytest → exit 0
+  ...
+
+# Stream logs in real-time
+stn harness logs run_abc123 --follow
+
+# Export run data
+stn harness export run_abc123 --format json > run.json
+```
+
+### Implementation Plan
+
+| Task | Priority | Estimate |
+|------|----------|----------|
+| `stn harness init` with templates | High | 1 day |
+| `stn harness run` with flags | High | 1 day |
+| `stn harness inspect` / `runs` | High | 0.5 day |
+| `stn harness repl` interactive mode | Medium | 2 days |
+| Templates (coding, sre, security) | Medium | 1 day |
+
+---
+
+## Phase 8: Entrypoints, Triggers & Artifacts
+
+### Overview
+
+Harness agents need clear entrypoints (how they're triggered) and exitpoints (how results get out). This phase defines the complete lifecycle.
+
+### Entrypoints (Triggers)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        ENTRYPOINTS                               │
+│                 (How harness agents get triggered)               │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐              │
+│  │     CLI     │  │   MCP/API   │  │   Workflow  │              │
+│  │  One-shot   │  │   Request   │  │    Step     │              │
+│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘              │
+│         │                │                │                      │
+│  ┌──────┴──────┐  ┌──────┴──────┐  ┌──────┴──────┐              │
+│  │    Cron     │  │   Webhook   │  │   Event     │              │
+│  │  Scheduled  │  │   HTTP      │  │  NATS/PubSub│              │
+│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘              │
+│         │                │                │                      │
+│         └────────────────┴────────────────┘                      │
+│                          │                                       │
+│                          ▼                                       │
+│              ┌───────────────────────┐                          │
+│              │   HarnessEntrypoint   │                          │
+│              │   (unified handler)    │                          │
+│              └───────────────────────┘                          │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+#### 1. CLI Entrypoint (Interactive)
+
+```bash
+# One-shot execution
+stn harness run <agent> "<task>"
+
+# Interactive REPL
+stn harness repl <agent>
+
+# Resume session
+stn harness run <agent> --session <session-id>
+```
+
+#### 2. MCP/API Entrypoint (Programmatic)
+
+```go
+// MCP tool: call_harness_agent
+{
+  "agent": "code-reviewer",
+  "task": "Review PR #123",
+  "session_id": "pr-123-review",  // Optional
+  "workspace": {
+    "repo": "https://github.com/org/repo",
+    "ref": "pull/123/head"
+  },
+  "timeout": "30m"
+}
+
+// HTTP API: POST /api/v1/harness/run
+{
+  "agent_id": 42,
+  "task": "...",
+  "session_id": "...",
+  "variables": {...}
+}
+```
+
+#### 3. Cron Entrypoint (Scheduled)
+
+```bash
+# Set up scheduled harness agent
+stn harness schedule code-scanner \
+  --cron "0 2 * * *" \
+  --task "Scan codebase for security issues" \
+  --session "nightly-scan" \
+  --repo https://github.com/org/repo
+
+# Cron config in agent
+---
+name: code-scanner
+harness: agentic
+schedule:
+  cron: "0 2 * * *"
+  task: "Scan codebase for security issues"
+  session: "nightly-scan"
+  workspace:
+    repo: "${REPO_URL}"
+---
+```
+
+#### 4. Webhook Entrypoint (Event-Driven)
+
+```bash
+# Register webhook trigger
+stn harness webhook create code-reviewer \
+  --path /hooks/pr-review \
+  --secret "${WEBHOOK_SECRET}"
+
+# Incoming webhook payload:
+POST /hooks/pr-review
+{
+  "action": "opened",
+  "pull_request": {
+    "number": 123,
+    "head": {"ref": "feature-branch"}
+  },
+  "repository": {
+    "clone_url": "https://github.com/org/repo"
+  }
+}
+
+# Webhook config in agent
+---
+name: pr-reviewer
+harness: agentic
+webhook:
+  path: /hooks/pr-review
+  events: ["pull_request.opened", "pull_request.synchronize"]
+  task_template: "Review PR #{{.pull_request.number}}"
+  workspace:
+    repo: "{{.repository.clone_url}}"
+    ref: "{{.pull_request.head.ref}}"
+---
+```
+
+#### 5. Event Entrypoint (NATS/PubSub)
+
+```yaml
+# Agent subscribes to events
+---
+name: incident-responder
+harness: agentic
+subscribe:
+  - subject: "alerts.pagerduty.triggered"
+    task_template: "Investigate alert: {{.incident.title}}"
+  - subject: "monitoring.anomaly.detected"
+    task_template: "Analyze anomaly in {{.service}}"
+---
+
+# Event published
+{
+  "subject": "alerts.pagerduty.triggered",
+  "data": {
+    "incident": {
+      "id": "INC-123",
+      "title": "High CPU on prod-web-01"
+    }
+  }
+}
+```
+
+#### 6. Workflow Entrypoint (Pipeline Step)
+
+```yaml
+id: incident-response-pipeline
+states:
+  - name: investigate
+    type: harness_agent        # Dedicated harness state type
+    agent: incident-investigator
+    harness:
+      max_steps: 100
+      timeout: 1h
+      sandbox:
+        mode: docker
+        network: true          # Need network for kubectl
+    input:
+      incident_id: "{{ctx.incident_id}}"
+    resultPath: investigation
+    next: remediate
+```
+
+### Exitpoints (Results & Artifacts)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        EXITPOINTS                                │
+│                (How results get out of harness)                  │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│              ┌───────────────────────┐                          │
+│              │   HarnessExitpoint    │                          │
+│              │   (result handler)    │                          │
+│              └───────────┬───────────┘                          │
+│                          │                                       │
+│     ┌────────────────────┼────────────────────┐                 │
+│     │                    │                    │                 │
+│     ▼                    ▼                    ▼                 │
+│  ┌──────────┐     ┌──────────┐       ┌──────────┐              │
+│  │ Response │     │ Artifact │       │  Event   │              │
+│  │  (sync)  │     │  Upload  │       │  Publish │              │
+│  └──────────┘     └──────────┘       └──────────┘              │
+│                                                                  │
+│  - Final text     - Files (workspace)  - Completion event       │
+│  - Structured     - Logs               - Webhook callback       │
+│    output         - Screenshots        - CloudShip sync         │
+│                   - Reports                                      │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Artifact Handling
+
+#### Current State
+
+| Mode | Artifact Storage | Persistence | Cross-Step Access |
+|------|------------------|-------------|-------------------|
+| Host | Local filesystem | Session dir | Yes (same session) |
+| Docker | Docker volumes | Named volume | Yes (volume mount) |
+| E2B | E2B filesystem | Sandbox lifetime | No (ephemeral) |
+
+#### Artifact Types
+
+```go
+type ArtifactType string
+
+const (
+    ArtifactTypeFile       ArtifactType = "file"        // Created/modified files
+    ArtifactTypeLog        ArtifactType = "log"         // Execution logs
+    ArtifactTypeReport     ArtifactType = "report"      // Generated reports
+    ArtifactTypeScreenshot ArtifactType = "screenshot"  // Browser captures
+    ArtifactTypeData       ArtifactType = "data"        // Structured data output
+)
+
+type Artifact struct {
+    ID          string       `json:"id"`
+    Type        ArtifactType `json:"type"`
+    Name        string       `json:"name"`
+    Path        string       `json:"path"`        // Local path in workspace
+    Size        int64        `json:"size"`
+    ContentType string       `json:"content_type"`
+    CreatedAt   time.Time    `json:"created_at"`
+
+    // Storage location
+    StorageKey  string       `json:"storage_key"` // NATS Object Store key
+    TTL         time.Duration `json:"ttl"`
+
+    // Lineage
+    SessionID   string       `json:"session_id"`
+    RunID       string       `json:"run_id"`
+    StepID      string       `json:"step_id,omitempty"`
+}
+```
+
+#### Artifact Lifecycle
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    ARTIFACT LIFECYCLE                            │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  1. CREATION (during execution)                                  │
+│     ├─ write tool → local file in workspace                     │
+│     ├─ bash tool → stdout/stderr captured                       │
+│     └─ explicit artifact_save tool → designated artifact        │
+│                                                                  │
+│  2. CAPTURE (post-execution)                                     │
+│     ├─ Scan workspace for new/modified files                    │
+│     ├─ Filter by .harnessignore patterns                        │
+│     └─ Create Artifact records with metadata                    │
+│                                                                  │
+│  3. UPLOAD (to storage)                                          │
+│     ├─ Local: Keep in workspace, index in SQLite                │
+│     ├─ NATS: Upload to Object Store with TTL                    │
+│     └─ CloudShip: Sync to management channel                    │
+│                                                                  │
+│  4. ACCESS (retrieval)                                           │
+│     ├─ Same session: Direct filesystem access                   │
+│     ├─ Next workflow step: Download from Object Store           │
+│     └─ CloudShip UI: Fetch via management channel               │
+│                                                                  │
+│  5. CLEANUP (TTL expiration)                                     │
+│     ├─ Object Store: Auto-expire after TTL (default 24h)        │
+│     ├─ Workspace: Optional cleanup on session end               │
+│     └─ CloudShip: Retention policy per organization             │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+#### Artifact Configuration
+
+```yaml
+harness:
+  artifacts:
+    # Auto-capture settings
+    capture:
+      enabled: true
+      include:
+        - "**/*.py"
+        - "**/*.md"
+        - "**/*.json"
+        - "**/*.log"
+      exclude:
+        - "node_modules/**"
+        - ".git/**"
+        - "*.tmp"
+      max_file_size: 10MB
+
+    # Storage settings
+    storage:
+      mode: nats              # local | nats | cloudship
+      ttl: 24h                # Time-to-live for stored artifacts
+      max_total_size: 100MB   # Per-run artifact limit
+
+    # Sync to CloudShip
+    cloudship:
+      sync_enabled: true      # Push artifacts to management channel
+      sync_reports: true      # Sync generated reports
+      sync_logs: false        # Don't sync verbose logs
+```
+
+### Session Isolation
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    SESSION ISOLATION                             │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  SESSION: ses_abc123                                             │
+│  ├── workspace/                                                  │
+│  │   ├── src/                   # Cloned repo or working files  │
+│  │   │   ├── main.py                                            │
+│  │   │   └── utils.py                                           │
+│  │   └── .harness/              # Harness metadata               │
+│  │       ├── tasks.json         # Task tracking                  │
+│  │       ├── history.json       # Conversation history           │
+│  │       └── artifacts.json     # Artifact index                 │
+│  │                                                               │
+│  ├── runs/                      # Run-specific data              │
+│  │   ├── run_001/                                                │
+│  │   │   ├── logs/                                               │
+│  │   │   └── output/                                             │
+│  │   └── run_002/                                                │
+│  │       ├── logs/                                               │
+│  │       └── output/                                             │
+│  │                                                               │
+│  └── .session.meta              # Session metadata               │
+│                                                                  │
+│  ISOLATION GUARANTEES:                                           │
+│  • Each session has dedicated workspace                          │
+│  • Concurrent runs on same session are serialized (lock)         │
+│  • Different sessions are fully isolated                         │
+│  • Sandbox mode adds OS-level isolation (Docker/E2B)             │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### CloudShip Integration
+
+When connected to CloudShip via management channel:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    CLOUDSHIP INTEGRATION                         │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  STATION (Customer Infrastructure)                               │
+│  ├── Receives WorkAssignment via NATS                           │
+│  │   {                                                           │
+│  │     "work_id": "work_123",                                   │
+│  │     "orchestrator_run_id": "uuid-from-cloudship",            │
+│  │     "agent_id": "42",                                        │
+│  │     "task": "Review code",                                   │
+│  │     "workspace": { "repo": "...", "ref": "..." }             │
+│  │   }                                                           │
+│  │                                                               │
+│  ├── Creates session: ses_{work_id}                             │
+│  ├── Clones repo into session workspace                         │
+│  ├── Executes harness agent                                      │
+│  │                                                               │
+│  ├── Artifacts uploaded to NATS Object Store                    │
+│  │   Key: runs/{orchestrator_run_id}/output/{filename}          │
+│  │                                                               │
+│  └── Sends WorkResponse via NATS                                │
+│      {                                                           │
+│        "work_id": "work_123",                                   │
+│        "status": "completed",                                   │
+│        "result": "Found 3 issues...",                           │
+│        "artifacts": [                                            │
+│          { "key": "runs/.../report.md", "size": 1234 }          │
+│        ],                                                        │
+│        "duration_ms": 45000,                                    │
+│        "tokens": 4521                                           │
+│      }                                                           │
+│                                                                  │
+│  CLOUDSHIP (Management Plane)                                    │
+│  ├── Tracks run via orchestrator_run_id                         │
+│  ├── Can poll for artifacts from Object Store                   │
+│  ├── Displays results in UI                                     │
+│  └── Applies retention policies                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Implementation Plan
+
+| Task | Priority | Estimate | Phase |
+|------|----------|----------|-------|
+| `stn harness init` command | High | 1 day | 7 |
+| `stn harness run` command | High | 1 day | 7 |
+| `stn harness inspect` command | High | 0.5 day | 7 |
+| Harness agent templates | High | 1 day | 7 |
+| `stn harness repl` command | Medium | 2 days | 7 |
+| Webhook entrypoint | Medium | 1 day | 8 |
+| Event subscription | Medium | 1 day | 8 |
+| Artifact capture system | High | 1 day | 8 |
+| Artifact sync to CloudShip | Medium | 1 day | 8 |
+| `.harnessignore` support | Low | 0.5 day | 8 |
+
+---
+
 ## References
 
 - `internal/services/agent_execution_engine.go` - Integration point
 - `pkg/harness/` - Harness implementation
+- `pkg/harness/session/` - Session management
+- `pkg/harness/nats/` - NATS integration and artifact storage
 - `internal/workflows/runtime/` - Workflow execution system
 - `internal/lattice/work/` - Existing NATS/state infrastructure
 - `internal/services/sandbox_session_manager.go` - Existing session pattern
+- `internal/cloudship/client.go` - CloudShip integration
