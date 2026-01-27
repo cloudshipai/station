@@ -443,5 +443,6 @@ subscribe:
 ## See Also
 
 - [Agentic Harness PRD](../features/PRD_AGENTIC_HARNESS.md) - Full architecture documentation
+- [Heartbeat and Memory](./HEARTBEAT_AND_MEMORY.md) - Proactive scheduling and session memory persistence
 - [Harness DX Proposal](../HARNESS_DX_PROPOSAL.md) - Developer experience design
 - [Session Management](../features/PRD_AGENTIC_HARNESS.md#phase-2-session-and-workspace-management) - Session details
