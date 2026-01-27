@@ -73,10 +73,10 @@ Limited to 100 matches.`,
 
 			basePath := workspacePath
 			if input.Path != "" {
-				if filepath.IsAbs(input.Path) {
-					basePath = input.Path
-				} else {
-					basePath = filepath.Join(workspacePath, input.Path)
+				var err error
+				basePath, err = ValidatePath(input.Path, workspacePath)
+				if err != nil {
+					return GrepOutput{}, err
 				}
 			}
 
