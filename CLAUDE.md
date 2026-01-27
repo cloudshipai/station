@@ -98,6 +98,53 @@ Station is a secure, self-hosted platform for creating intelligent multi-environ
 - **Settings Management**: System configuration via CLI commands (list/get/set operations)
 - **Security Layer**: Audit logging, access controls, secure file-based configuration
 
+### Agentic Harness System
+Station includes a powerful agentic harness system for multi-turn AI agents:
+
+**CLI Commands:**
+```bash
+# Scaffold new harness agent from template
+stn harness init my-coder --template coding
+
+# Execute agent with task (one-shot)
+stn harness run my-coder "Fix the bug in main.go"
+
+# Interactive development REPL
+stn harness repl --agent my-coder
+
+# List and inspect runs
+stn harness runs
+stn harness inspect <run-id> -v
+
+# List available templates
+stn harness templates
+```
+
+**Available Templates:**
+- `coding` - Multi-turn coding assistant (50 steps, 30m timeout)
+- `sre` - Site reliability engineering (30 steps, 15m timeout)
+- `security` - Security scanning with Docker sandbox (40 steps, 20m)
+- `data` - Data analysis with Docker sandbox (25 steps, 10m)
+- `minimal` - Base template for customization
+
+**Harness Agent Config (.prompt file):**
+```yaml
+---
+harness:
+  max_steps: 50
+  timeout: 30m
+  sandbox:
+    mode: docker
+    image: python:3.11
+tools:
+  - read
+  - write
+  - bash
+---
+```
+
+**Documentation:** See `docs/harness/HARNESS_CLI.md` for full reference.
+
 ### Key Directories
 - `/station/` - Main project directory
 - Config files likely in standard locations (`.config/`, `~/.station/`, etc.)
