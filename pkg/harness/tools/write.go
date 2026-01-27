@@ -4,12 +4,40 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"station/pkg/harness/sandbox"
 
 	"github.com/firebase/genkit/go/ai"
 	"github.com/firebase/genkit/go/genkit"
 )
+
+// sensitiveFilePatterns defines patterns for files that should have restricted permissions
+var sensitiveFilePatterns = []string{
+	".env", ".env.local", ".env.production", ".env.development",
+	".secret", ".secrets", "secrets.yaml", "secrets.json",
+	"credentials", "credentials.json", "credentials.yaml",
+	".key", ".pem", ".crt", ".p12", ".pfx",
+	"id_rsa", "id_ed25519", "id_ecdsa",
+	".htpasswd", ".pgpass", ".netrc",
+}
+
+// isSensitiveFile checks if a filename matches sensitive patterns
+func isSensitiveFile(filename string) bool {
+	base := filepath.Base(filename)
+	lower := strings.ToLower(base)
+
+	for _, pattern := range sensitiveFilePatterns {
+		if strings.Contains(lower, pattern) {
+			return true
+		}
+	}
+
+	return strings.Contains(lower, "secret") ||
+		strings.Contains(lower, "password") ||
+		strings.Contains(lower, "credential") ||
+		strings.Contains(lower, "private")
+}
 
 type WriteInput struct {
 	FilePath string `json:"file_path" jsonschema:"description=Absolute or relative path to the file to write"`
@@ -46,11 +74,26 @@ IMPORTANT:
 				path = filepath.Join(workspacePath, path)
 			}
 
+			// Validate path is within workspace (no sandbox means host execution)
+			if sb == nil {
+				validatedPath, err := ValidatePathForWrite(path, workspacePath)
+				if err != nil {
+					return WriteOutput{}, fmt.Errorf("path validation failed: %w", err)
+				}
+				path = validatedPath
+			}
+
+			// Determine file permissions based on sensitivity
+			var perm uint32 = 0644
+			if isSensitiveFile(path) {
+				perm = 0600 // Restricted permissions for sensitive files
+			}
+
 			if sb != nil {
 				dir := filepath.Dir(path)
 				sb.Exec(ctx, "mkdir", "-p", dir)
 
-				if err := sb.WriteFile(ctx, path, []byte(input.Content), 0644); err != nil {
+				if err := sb.WriteFile(ctx, path, []byte(input.Content), perm); err != nil {
 					return WriteOutput{}, fmt.Errorf("failed to write file: %w", err)
 				}
 			} else {
@@ -59,7 +102,7 @@ IMPORTANT:
 					return WriteOutput{}, fmt.Errorf("failed to create directory: %w", err)
 				}
 
-				if err := os.WriteFile(path, []byte(input.Content), 0644); err != nil {
+				if err := os.WriteFile(path, []byte(input.Content), os.FileMode(perm)); err != nil {
 					return WriteOutput{}, fmt.Errorf("failed to write file: %w", err)
 				}
 			}

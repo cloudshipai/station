@@ -60,6 +60,15 @@ Examples:
 				path = filepath.Join(workspacePath, path)
 			}
 
+			// Validate path is within workspace (no sandbox means host execution)
+			if sb == nil {
+				validatedPath, err := ValidatePathForWrite(path, workspacePath)
+				if err != nil {
+					return EditOutput{}, fmt.Errorf("path validation failed: %w", err)
+				}
+				path = validatedPath
+			}
+
 			var content []byte
 			var err error
 

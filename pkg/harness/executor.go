@@ -303,6 +303,11 @@ func (e *AgenticExecutor) setup(ctx context.Context, agentID string, task string
 	_, span := tracer.Start(ctx, "harness_setup")
 	defer span.End()
 
+	// Check for context cancellation early
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+
 	if err := e.initializeSandbox(ctx); err != nil {
 		span.RecordError(err)
 		return fmt.Errorf("sandbox init failed: %w", err)
@@ -566,6 +571,11 @@ func (e *AgenticExecutor) executeTool(
 	req *ai.ToolRequest,
 	toolMap map[string]ai.Tool,
 ) (interface{}, error) {
+	// Check for context cancellation before executing tool
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
 	_, span := tracer.Start(ctx, "tool_execution",
 		trace.WithAttributes(
 			attribute.String("tool", req.Name),

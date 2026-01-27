@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -14,6 +15,106 @@ import (
 	"github.com/firebase/genkit/go/ai"
 	"github.com/firebase/genkit/go/genkit"
 )
+
+// dangerousPatterns defines regex patterns for commands that should be blocked
+var dangerousPatterns = []*regexp.Regexp{
+	// Destructive file operations
+	regexp.MustCompile(`(?i)rm\s+(-[rRfF]+\s+)*(/|/\*|~|~/\*|\$HOME)`),
+	regexp.MustCompile(`(?i)rm\s+(-[rRfF]+\s+)*\.\./`),
+	regexp.MustCompile(`(?i)mkfs`),
+	regexp.MustCompile(`(?i)dd\s+.*of=/dev/`),
+
+	// System modification
+	regexp.MustCompile(`(?i)chmod\s+(-R\s+)?[0-7]*777.*(/|~)`),
+	regexp.MustCompile(`(?i)chown\s+(-R\s+)?.*(/|~)`),
+
+	// Fork bomb patterns
+	regexp.MustCompile(`:\(\)\{\s*:\|:\s*&\s*\};:`),
+	regexp.MustCompile(`fork\s+while`),
+
+	// Sensitive file access
+	regexp.MustCompile(`(?i)cat\s+/etc/(passwd|shadow)`),
+	regexp.MustCompile(`(?i)(cat|head|tail|less|more)\s+.*\.(pem|key|crt|p12)`),
+
+	// Remote code execution
+	regexp.MustCompile(`(?i)curl\s+.*\|\s*(ba)?sh`),
+	regexp.MustCompile(`(?i)wget\s+.*\|\s*(ba)?sh`),
+	regexp.MustCompile(`(?i)curl\s+.*-o\s*/`),
+
+	// Environment manipulation
+	regexp.MustCompile(`(?i)export\s+(PATH|LD_PRELOAD|LD_LIBRARY_PATH)=`),
+	regexp.MustCompile(`(?i)unset\s+(PATH|HOME)`),
+}
+
+// sensitiveDirectories are paths that commands should not access
+var sensitiveDirectories = []string{
+	"/etc/nginx", "/etc/apache2", "/etc/ssh",
+	"/root", "/var/log", "/boot", "/proc", "/sys",
+}
+
+// CommandValidationResult represents the result of command validation
+type CommandValidationResult struct {
+	Allowed bool
+	Reason  string
+	Warning string
+}
+
+// validateCommand checks if a command is safe to execute
+func validateCommand(command string, workspacePath string) CommandValidationResult {
+	for _, pattern := range dangerousPatterns {
+		if pattern.MatchString(command) {
+			return CommandValidationResult{
+				Allowed: false,
+				Reason:  fmt.Sprintf("command matches dangerous pattern: %s", pattern.String()),
+			}
+		}
+	}
+
+	for _, dir := range sensitiveDirectories {
+		if strings.Contains(command, dir) {
+			return CommandValidationResult{
+				Allowed: false,
+				Reason:  fmt.Sprintf("command attempts to access sensitive directory: %s", dir),
+			}
+		}
+	}
+
+	var warning string
+	if strings.Contains(command, "sudo") {
+		warning = "command uses sudo - may require elevated privileges"
+	}
+
+	return CommandValidationResult{
+		Allowed: true,
+		Warning: warning,
+	}
+}
+
+// validateWorkdir ensures the working directory is within the workspace
+func validateWorkdir(workdir, workspacePath string) error {
+	if workdir == "" {
+		return nil
+	}
+
+	absWorkdir, err := filepath.Abs(workdir)
+	if err != nil {
+		return fmt.Errorf("invalid workdir path: %w", err)
+	}
+
+	absWorkspace, err := filepath.Abs(workspacePath)
+	if err != nil {
+		return fmt.Errorf("invalid workspace path: %w", err)
+	}
+
+	cleanWorkdir := filepath.Clean(absWorkdir)
+	cleanWorkspace := filepath.Clean(absWorkspace)
+
+	if !strings.HasPrefix(cleanWorkdir, cleanWorkspace) {
+		return fmt.Errorf("workdir %q is outside workspace %q", workdir, workspacePath)
+	}
+
+	return nil
+}
 
 const (
 	defaultBashTimeout  = 2 * time.Minute
@@ -63,6 +164,15 @@ Examples:
 				return BashOutput{}, fmt.Errorf("command is required")
 			}
 
+			// Validate command for dangerous patterns
+			validation := validateCommand(input.Command, workspacePath)
+			if !validation.Allowed {
+				return BashOutput{
+					Output:   fmt.Sprintf("Command blocked: %s", validation.Reason),
+					ExitCode: 1,
+				}, nil
+			}
+
 			workdir := workspacePath
 			if input.Workdir != "" {
 				if filepath.IsAbs(input.Workdir) {
@@ -70,6 +180,14 @@ Examples:
 				} else {
 					workdir = filepath.Join(workspacePath, input.Workdir)
 				}
+			}
+
+			// Validate workdir is within workspace
+			if err := validateWorkdir(workdir, workspacePath); err != nil {
+				return BashOutput{
+					Output:   fmt.Sprintf("Workdir validation failed: %s", err.Error()),
+					ExitCode: 1,
+				}, nil
 			}
 
 			timeout := defaultBashTimeout

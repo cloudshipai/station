@@ -11,6 +11,7 @@ type ToolRegistry struct {
 	genkitApp     *genkit.Genkit
 	workspacePath string
 	sandbox       sandbox.Sandbox
+	taskManager   *TaskManager
 	tools         map[string]ai.Tool
 }
 
@@ -18,6 +19,7 @@ func NewToolRegistry(genkitApp *genkit.Genkit, workspacePath string) *ToolRegist
 	return &ToolRegistry{
 		genkitApp:     genkitApp,
 		workspacePath: workspacePath,
+		taskManager:   NewTaskManager(workspacePath),
 		tools:         make(map[string]ai.Tool),
 	}
 }
@@ -27,6 +29,7 @@ func NewToolRegistryWithSandbox(genkitApp *genkit.Genkit, workspacePath string, 
 		genkitApp:     genkitApp,
 		workspacePath: workspacePath,
 		sandbox:       sb,
+		taskManager:   NewTaskManager(workspacePath),
 		tools:         make(map[string]ai.Tool),
 	}
 }
@@ -49,6 +52,12 @@ func (r *ToolRegistry) RegisterBuiltinTools() error {
 
 	grepTool := NewGrepToolWithSandbox(r.genkitApp, r.workspacePath, r.sandbox)
 	r.tools["grep"] = grepTool
+
+	// Task tracking tools
+	r.tools["task_create"] = NewTaskCreateTool(r.genkitApp, r.taskManager)
+	r.tools["task_update"] = NewTaskUpdateTool(r.genkitApp, r.taskManager)
+	r.tools["task_get"] = NewTaskGetTool(r.genkitApp, r.taskManager)
+	r.tools["task_list"] = NewTaskListTool(r.genkitApp, r.taskManager)
 
 	return nil
 }

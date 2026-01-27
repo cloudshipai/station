@@ -54,6 +54,15 @@ Lines longer than 2000 characters are truncated.`,
 				path = filepath.Join(workspacePath, path)
 			}
 
+			// Validate path is within workspace (no sandbox means host execution)
+			if sb == nil {
+				validatedPath, err := ValidatePath(path, workspacePath)
+				if err != nil {
+					return ReadOutput{}, fmt.Errorf("path validation failed: %w", err)
+				}
+				path = validatedPath
+			}
+
 			var content []byte
 			var err error
 
