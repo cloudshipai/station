@@ -1,0 +1,240 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+# Station Lattice Lab - Multi-VM Setup
+# Creates VMs for testing distributed agent orchestration
+# Supports two modes:
+#   1. Embedded NATS: orchestrator runs NATS internally
+#   2. Centralized NATS: separate NATS server, stations connect as clients
+
+VAGRANTFILE_API_VERSION = "2"
+
+# Configuration
+NATS_SERVER_IP = "192.168.56.9"     # Standalone NATS server (Lab 8)
+ORCHESTRATOR_IP = "192.168.56.10"
+MEMBER1_IP = "192.168.56.11"
+MEMBER2_IP = "192.168.56.12"
+
+# VM settings
+VM_BOX = "generic/ubuntu2204"  # Works with libvirt
+VM_MEMORY = "2048"
+VM_CPUS = 2
+
+Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
+  
+  # Common configuration for all VMs
+  config.vm.box = VM_BOX
+  
+  # Disable default synced folder
+  config.vm.synced_folder ".", "/vagrant", disabled: true
+  
+  # ============================================
+  # NATS Server VM - Standalone NATS (Lab 8)
+  # ============================================
+  # Use this for centralized NATS deployments where NATS
+  # is managed separately from Station instances.
+  # Start with: vagrant up nats
+  config.vm.define "nats", autostart: false do |nats|
+    nats.vm.hostname = "nats-server"
+    nats.vm.network "private_network", ip: NATS_SERVER_IP
+    
+    # Forward NATS ports
+    nats.vm.network "forwarded_port", guest: 4222, host: 4222    # NATS client
+    nats.vm.network "forwarded_port", guest: 8222, host: 8222    # NATS HTTP monitoring
+    nats.vm.network "forwarded_port", guest: 6222, host: 6222    # NATS cluster (future)
+    
+    # Libvirt provider settings
+    nats.vm.provider "libvirt" do |lv|
+      lv.memory = "1024"
+      lv.cpus = 1
+      lv.title = "nats-server"
+    end
+    
+    # VirtualBox provider settings (fallback)
+    nats.vm.provider "virtualbox" do |vb|
+      vb.memory = "1024"
+      vb.cpus = 1
+      vb.name = "nats-server"
+    end
+    
+    # Provision with Docker and NATS
+    nats.vm.provision "shell", inline: <<-SHELL
+      echo "=== Installing Docker on NATS Server ==="
+      apt-get update
+      apt-get install -y apt-transport-https ca-certificates curl software-properties-common
+      curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+      echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+      apt-get update
+      apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+      usermod -aG docker vagrant
+      systemctl enable docker
+      systemctl start docker
+      
+      # Create NATS config directory
+      mkdir -p /opt/nats/config
+      mkdir -p /opt/nats/data
+      chown -R 1000:1000 /opt/nats
+      
+      echo "=== NATS Server Ready ==="
+      echo "NATS will be available at: #{NATS_SERVER_IP}:4222"
+      echo "Monitoring at: #{NATS_SERVER_IP}:8222"
+    SHELL
+  end
+  
+  # ============================================
+  # Orchestrator VM - NATS Hub + Station
+  # ============================================
+  config.vm.define "orchestrator", primary: true do |orchestrator|
+    orchestrator.vm.hostname = "station-orchestrator"
+    orchestrator.vm.network "private_network", ip: ORCHESTRATOR_IP
+    
+    # Forward NATS and Station ports
+    orchestrator.vm.network "forwarded_port", guest: 4222, host: 4222    # NATS
+    orchestrator.vm.network "forwarded_port", guest: 8222, host: 8222    # NATS HTTP monitoring
+    orchestrator.vm.network "forwarded_port", guest: 8585, host: 18585   # Station API
+    orchestrator.vm.network "forwarded_port", guest: 8586, host: 18586   # Station MCP
+    
+    # Libvirt provider settings
+    orchestrator.vm.provider "libvirt" do |lv|
+      lv.memory = VM_MEMORY
+      lv.cpus = VM_CPUS
+      lv.title = "station-lattice-orchestrator"
+    end
+    
+    # VirtualBox provider settings (fallback)
+    orchestrator.vm.provider "virtualbox" do |vb|
+      vb.memory = VM_MEMORY
+      vb.cpus = VM_CPUS
+      vb.name = "station-lattice-orchestrator"
+    end
+    
+    # Provision with Docker
+    orchestrator.vm.provision "shell", inline: <<-SHELL
+      echo "=== Installing Docker on Orchestrator ==="
+      apt-get update
+      apt-get install -y apt-transport-https ca-certificates curl software-properties-common
+      curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+      echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+      apt-get update
+      apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+      usermod -aG docker vagrant
+      systemctl enable docker
+      systemctl start docker
+      
+      echo "=== Docker installed ==="
+      docker --version
+      
+      # Create station directories
+      mkdir -p /opt/station/orchestrator/data
+      mkdir -p /opt/station/orchestrator/bundle
+      chown -R 1000:1000 /opt/station
+      
+      echo "=== Orchestrator Ready ==="
+      echo "NATS will be available at: #{ORCHESTRATOR_IP}:4222"
+      echo "Station API at: #{ORCHESTRATOR_IP}:8585"
+    SHELL
+  end
+  
+  # ============================================
+  # Member 1 VM - PostHog Agent Station
+  # ============================================
+  config.vm.define "member1" do |member1|
+    member1.vm.hostname = "station-member1"
+    member1.vm.network "private_network", ip: MEMBER1_IP
+    
+    # Forward Station ports
+    member1.vm.network "forwarded_port", guest: 8585, host: 28585   # Station API
+    member1.vm.network "forwarded_port", guest: 8586, host: 28586   # Station MCP
+    
+    # Libvirt provider settings
+    member1.vm.provider "libvirt" do |lv|
+      lv.memory = VM_MEMORY
+      lv.cpus = VM_CPUS
+      lv.title = "station-lattice-member1"
+    end
+    
+    # VirtualBox provider settings (fallback)
+    member1.vm.provider "virtualbox" do |vb|
+      vb.memory = VM_MEMORY
+      vb.cpus = VM_CPUS
+      vb.name = "station-lattice-member1"
+    end
+    
+    # Provision with Docker
+    member1.vm.provision "shell", inline: <<-SHELL
+      echo "=== Installing Docker on Member 1 ==="
+      apt-get update
+      apt-get install -y apt-transport-https ca-certificates curl software-properties-common
+      curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+      echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+      apt-get update
+      apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+      usermod -aG docker vagrant
+      systemctl enable docker
+      systemctl start docker
+      
+      echo "=== Docker installed ==="
+      docker --version
+      
+      # Create station directories
+      mkdir -p /opt/station/member1/data
+      mkdir -p /opt/station/member1/bundle
+      chown -R 1000:1000 /opt/station
+      
+      echo "=== Member 1 Ready ==="
+      echo "Will connect to NATS at: #{ORCHESTRATOR_IP}:4222"
+    SHELL
+  end
+  
+  # ============================================
+  # Member 2 VM - Additional Agents (Optional)
+  # ============================================
+  config.vm.define "member2", autostart: false do |member2|
+    member2.vm.hostname = "station-member2"
+    member2.vm.network "private_network", ip: MEMBER2_IP
+    
+    # Forward Station ports
+    member2.vm.network "forwarded_port", guest: 8585, host: 38585   # Station API
+    member2.vm.network "forwarded_port", guest: 8586, host: 38586   # Station MCP
+    
+    # Libvirt provider settings
+    member2.vm.provider "libvirt" do |lv|
+      lv.memory = VM_MEMORY
+      lv.cpus = VM_CPUS
+      lv.title = "station-lattice-member2"
+    end
+    
+    # VirtualBox provider settings (fallback)
+    member2.vm.provider "virtualbox" do |vb|
+      vb.memory = VM_MEMORY
+      vb.cpus = VM_CPUS
+      vb.name = "station-lattice-member2"
+    end
+    
+    # Provision with Docker
+    member2.vm.provision "shell", inline: <<-SHELL
+      echo "=== Installing Docker on Member 2 ==="
+      apt-get update
+      apt-get install -y apt-transport-https ca-certificates curl software-properties-common
+      curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+      echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+      apt-get update
+      apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+      usermod -aG docker vagrant
+      systemctl enable docker
+      systemctl start docker
+      
+      echo "=== Docker installed ==="
+      docker --version
+      
+      # Create station directories
+      mkdir -p /opt/station/member2/data
+      mkdir -p /opt/station/member2/bundle
+      chown -R 1000:1000 /opt/station
+      
+      echo "=== Member 2 Ready ==="
+      echo "Will connect to NATS at: #{ORCHESTRATOR_IP}:4222"
+    SHELL
+  end
+
+end

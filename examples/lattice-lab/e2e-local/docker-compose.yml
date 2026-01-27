@@ -1,0 +1,59 @@
+services:
+  nats:
+    image: nats:2.10-alpine
+    container_name: lattice-e2e-nats
+    command: 
+      - "--auth"
+      - "${NATS_AUTH_TOKEN}"
+      - "--http_port"
+      - "8222"
+      - "-js"
+      - "-sd"
+      - "/data"
+    ports:
+      - "14222:4222"
+      - "18222:8222"
+    volumes:
+      - nats-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8222/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  station:
+    image: ghcr.io/cloudshipai/station:latest
+    container_name: lattice-e2e-station
+    depends_on:
+      nats:
+        condition: service_healthy
+    ports:
+      - "8586:8586"
+      - "8587:8587"
+    environment:
+      - STN_AI_PROVIDER=${STN_AI_PROVIDER}
+      - STN_AI_MODEL=${STN_AI_MODEL}
+      - STN_AI_API_KEY=${STN_AI_API_KEY:-}
+      - STN_AI_AUTH_TYPE=${STN_AI_AUTH_TYPE:-}
+      - STN_AI_OAUTH_TOKEN=${STN_AI_OAUTH_TOKEN:-}
+      - STN_AI_OAUTH_REFRESH_TOKEN=${STN_AI_OAUTH_REFRESH_TOKEN:-}
+      - STN_LATTICE_STATION_NAME=${STATION_NAME}
+      - STN_LATTICE_NATS_URL=nats://${NATS_AUTH_TOKEN}@nats:4222
+      - STN_ENCRYPTION_KEY=${STATION_ENCRYPTION_KEY}
+      - POSTHOG_API_KEY=${POSTHOG_API_KEY:-}
+      - GITHUB_PERSONAL_ACCESS_TOKEN=${GITHUB_PERSONAL_ACCESS_TOKEN:-}
+      - STN_CLOUDSHIP_ENABLED=${STN_CLOUDSHIP_ENABLED:-false}
+      - STN_CLOUDSHIP_KEY=${STN_CLOUDSHIP_KEY:-}
+      - STN_CLOUDSHIP_NAME=${STN_CLOUDSHIP_NAME:-}
+      - STN_CLOUDSHIP_ENDPOINT=${STN_CLOUDSHIP_ENDPOINT:-}
+    volumes:
+      - ${HOME}/.config/station/environments/default:/home/station/.config/station/environments/default:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8587/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  nats-data:

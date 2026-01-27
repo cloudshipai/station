@@ -27,6 +27,9 @@ type AgentServiceInterface interface {
 
 	// SetFileStore configures the file store for sandbox file staging
 	SetFileStore(store storage.FileStore)
+
+	// SetSessionStore configures the session store for sandbox session persistence
+	SetSessionStore(store SessionStore)
 }
 
 // AgentConfig represents the configuration for creating/updating an agent

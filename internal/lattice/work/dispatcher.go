@@ -10,6 +10,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"
+
+	"station/internal/lattice/events"
 )
 
 type NATSClient interface {
@@ -33,6 +35,7 @@ type Dispatcher struct {
 	pendingWork sync.Map
 	childIndex  atomic.Int64
 	store       *WorkStore
+	events      *events.Publisher
 
 	mu           sync.RWMutex
 	subscription *nats.Subscription
@@ -43,6 +46,12 @@ type DispatcherOption func(*Dispatcher)
 func WithWorkStore(store *WorkStore) DispatcherOption {
 	return func(d *Dispatcher) {
 		d.store = store
+	}
+}
+
+func WithEventPublisher(pub *events.Publisher) DispatcherOption {
+	return func(d *Dispatcher) {
+		d.events = pub
 	}
 }
 
@@ -144,6 +153,20 @@ func (d *Dispatcher) AssignWork(ctx context.Context, assignment *WorkAssignment)
 		return "", fmt.Errorf("failed to publish work assignment: %w", err)
 	}
 
+	if d.events != nil {
+		d.events.PublishWorkAssigned(ctx, &events.WorkAssignedData{
+			WorkID:            assignment.WorkID,
+			OrchestratorRunID: assignment.OrchestratorRunID,
+			ParentWorkID:      assignment.ParentWorkID,
+			SourceStation:     d.stationID,
+			TargetStation:     targetStation,
+			AgentID:           assignment.AgentID,
+			AgentName:         assignment.AgentName,
+			Task:              truncateTask(assignment.Task, 500),
+			AssignedAt:        assignment.AssignedAt,
+		})
+	}
+
 	return assignment.WorkID, nil
 }
 
@@ -228,6 +251,8 @@ func (d *Dispatcher) handleResponse(msg *nats.Msg) {
 		d.updateStoreFromResponse(&response)
 	}
 
+	d.publishResponseEvent(&response)
+
 	val, ok := d.pendingWork.Load(response.WorkID)
 	if !ok {
 		return
@@ -255,6 +280,52 @@ func (d *Dispatcher) handleResponse(msg *nats.Msg) {
 			}
 			close(pending.ProgressChan)
 		}
+	}
+}
+
+func (d *Dispatcher) publishResponseEvent(response *WorkResponse) {
+	if d.events == nil {
+		return
+	}
+
+	ctx := context.Background()
+	now := time.Now()
+
+	switch response.Type {
+	case MsgWorkAccepted:
+		d.events.PublishWorkAccepted(ctx, &events.WorkAcceptedData{
+			WorkID:     response.WorkID,
+			StationID:  response.StationID,
+			AcceptedAt: now,
+		})
+
+	case MsgWorkComplete:
+		d.events.PublishWorkCompleted(ctx, &events.WorkCompletedData{
+			WorkID:      response.WorkID,
+			StationID:   response.StationID,
+			Result:      truncateTask(response.Result, 500),
+			CompletedAt: now,
+			DurationMs:  int64(response.DurationMs),
+			ToolCalls:   response.ToolCalls,
+		})
+
+	case MsgWorkFailed:
+		d.events.PublishWorkFailed(ctx, &events.WorkFailedData{
+			WorkID:     response.WorkID,
+			StationID:  response.StationID,
+			Error:      response.Error,
+			FailedAt:   now,
+			DurationMs: int64(response.DurationMs),
+			ToolCalls:  response.ToolCalls,
+		})
+
+	case MsgWorkEscalate:
+		d.events.PublishWorkEscalated(ctx, &events.WorkEscalatedData{
+			WorkID:      response.WorkID,
+			StationID:   response.StationID,
+			Reason:      response.EscalationReason,
+			EscalatedAt: now,
+		})
 	}
 }
 
@@ -298,4 +369,11 @@ func (d *Dispatcher) updateStoreFromResponse(response *WorkResponse) {
 func (d *Dispatcher) GenerateChildWorkID(parentWorkID string) string {
 	idx := d.childIndex.Add(1)
 	return fmt.Sprintf("%s-%d", parentWorkID, idx)
+}
+
+func truncateTask(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
 }

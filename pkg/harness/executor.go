@@ -300,12 +300,6 @@ func (e *AgenticExecutor) emitStepComplete(ctx context.Context, stepNum int, tot
 }
 
 func (e *AgenticExecutor) setup(ctx context.Context, agentID string, task string) error {
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	default:
-	}
-
 	_, span := tracer.Start(ctx, "harness_setup")
 	defer span.End()
 
@@ -572,12 +566,6 @@ func (e *AgenticExecutor) executeTool(
 	req *ai.ToolRequest,
 	toolMap map[string]ai.Tool,
 ) (interface{}, error) {
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	default:
-	}
-
 	_, span := tracer.Start(ctx, "tool_execution",
 		trace.WithAttributes(
 			attribute.String("tool", req.Name),

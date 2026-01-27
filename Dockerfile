@@ -18,7 +18,19 @@ RUN apt-get update && apt-get install -y \
     python3-venv \
     build-essential \
     openssh-client \
+    unzip \
     && rm -rf /var/lib/apt/lists/*
+
+# Install AWS CLI v2 for runtime secrets loading from SSM/Secrets Manager
+RUN ARCH=$(dpkg --print-architecture) && \
+    if [ "$ARCH" = "arm64" ]; then \
+        curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip" -o "/tmp/awscliv2.zip"; \
+    else \
+        curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "/tmp/awscliv2.zip"; \
+    fi && \
+    unzip -q /tmp/awscliv2.zip -d /tmp && \
+    /tmp/aws/install && \
+    rm -rf /tmp/aws /tmp/awscliv2.zip
 
 # Install Node.js 20 and genkit CLI for development mode
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \

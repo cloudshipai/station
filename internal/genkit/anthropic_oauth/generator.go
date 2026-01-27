@@ -202,9 +202,14 @@ func (g *Generator) convertToolResults(parts []*ai.Part) []anthropic.ContentBloc
 func (g *Generator) convertTools(tools []*ai.ToolDefinition) []anthropic.ToolUnionParam {
 	var anthropicTools []anthropic.ToolUnionParam
 
-	for _, tool := range tools {
+	for i, tool := range tools {
 		if tool == nil || tool.Name == "" {
+			log.Printf("[Generator] convertTools: skipping tool at index %d (nil or empty name)", i)
 			continue
+		}
+
+		if tool.InputSchema == nil {
+			log.Printf("[Generator] convertTools: tool '%s' (index %d) has nil InputSchema, using empty object schema", tool.Name, i)
 		}
 
 		toolParam := anthropic.ToolParam{
@@ -214,6 +219,9 @@ func (g *Generator) convertTools(tools []*ai.ToolDefinition) []anthropic.ToolUni
 
 		schemaParam := anthropic.ToolInputSchemaParam{
 			Properties: make(map[string]interface{}),
+			ExtraFields: map[string]any{
+				"type": "object",
+			},
 		}
 
 		if tool.InputSchema != nil {

@@ -1,0 +1,22 @@
+---
+nats_image: "nats:2.10-alpine"
+nats_install_dir: "/opt/nats"
+nats_config_dir: "/opt/nats/config"
+nats_data_dir: "/opt/nats/data"
+
+nats_client_port: 4222
+nats_http_port: 8222
+nats_cluster_port: 6222
+
+nats_auth_enabled: true
+nats_auth_token: "lattice-secret-token-change-me"
+
+nats_users: []
+
+nats_jetstream_enabled: true
+nats_jetstream_store_dir: "/data/jetstream"
+nats_jetstream_max_memory: "256M"
+nats_jetstream_max_file: "1G"
+
+nats_server_name: "lattice-nats"
+nats_max_payload: "8MB"

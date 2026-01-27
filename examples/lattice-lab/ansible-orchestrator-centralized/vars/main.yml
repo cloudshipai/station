@@ -1,0 +1,15 @@
+---
+station_image: "ghcr.io/cloudship-ai/station:latest"
+station_name: "station-orchestrator"
+station_install_dir: "/opt/station/orchestrator"
+station_data_dir: "/opt/station/orchestrator/data"
+
+station_mcp_port: 8586
+station_dynamic_mcp_port: 8587
+
+nats_server_ip: "192.168.56.9"
+nats_auth_token: ""
+
+station_env:
+  OPENAI_API_KEY: "{{ lookup('env', 'OPENAI_API_KEY') }}"
+  STN_LATTICE_STATION_NAME: "orchestrator"

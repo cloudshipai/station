@@ -396,8 +396,13 @@ func (mcs *ManagementChannelService) receiveMessages(stream proto.LighthouseServ
 func (mcs *ManagementChannelService) processRequest(stream proto.LighthouseService_ManagementChannelClient, req *proto.ManagementMessage) {
 	logging.Info("Processing management request: %s (request_id: %s)", mcs.getRequestType(req), req.RequestId)
 
+	// Add timeout context - 25s to respond before CloudShip's 30s gRPC deadline
+	// This ensures we always respond (even with an error) before the deadline expires
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+	defer cancel()
+
 	// Process the request using the management handler
-	resp, err := mcs.managementHandler.ProcessManagementRequest(context.Background(), req)
+	resp, err := mcs.managementHandler.ProcessManagementRequest(ctx, req)
 	if err != nil {
 		logging.Error("Failed to process management request: %v", err)
 

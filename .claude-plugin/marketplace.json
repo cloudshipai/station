@@ -12,7 +12,7 @@
     {
       "name": "station",
       "source": "./claude-code-plugin",
-      "description": "Station MCP tools, skills, and slash commands for AI agent orchestration",
+      "description": "Lightweight Station integration with skills and slash commands - guides Claude through Station operations",
       "version": "1.0.0",
       "author": {
         "name": "CloudShip AI"
@@ -20,7 +20,20 @@
       "homepage": "https://docs.cloudshipai.com/station/overview",
       "repository": "https://github.com/cloudshipai/station",
       "license": "Apache-2.0",
-      "keywords": ["station", "agents", "mcp", "orchestration", "ai", "cloudship", "sre", "devops"]
+      "keywords": ["station", "agents", "mcp", "orchestration", "ai", "cloudship", "sre", "devops", "skills"]
+    },
+    {
+      "name": "station-agent",
+      "source": "./claude-code-plugin-agent",
+      "description": "Full Station integration with pre-configured subagent - autonomous Station operations via dedicated expert agent",
+      "version": "1.0.0",
+      "author": {
+        "name": "CloudShip AI"
+      },
+      "homepage": "https://docs.cloudshipai.com/station/overview",
+      "repository": "https://github.com/cloudshipai/station",
+      "license": "Apache-2.0",
+      "keywords": ["station", "agents", "mcp", "orchestration", "ai", "cloudship", "sre", "devops", "subagent"]
     }
   ]
 }

@@ -3,6 +3,7 @@ package services
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -15,6 +16,7 @@ import (
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
+	"github.com/docker/docker/api/types/registry"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
 )
@@ -621,7 +623,12 @@ func (b *DockerBackend) ensureImage(ctx context.Context, imageName string) error
 		return nil
 	}
 
-	reader, err := b.client.ImagePull(ctx, imageName, image.PullOptions{})
+	pullOpts := image.PullOptions{}
+	if authStr := b.buildRegistryAuth(); authStr != "" {
+		pullOpts.RegistryAuth = authStr
+	}
+
+	reader, err := b.client.ImagePull(ctx, imageName, pullOpts)
 	if err != nil {
 		return fmt.Errorf("pull image %s: %w", imageName, err)
 	}
@@ -642,6 +649,27 @@ func (b *DockerBackend) ensureImage(ctx context.Context, imageName string) error
 	}
 
 	return nil
+}
+
+func (b *DockerBackend) buildRegistryAuth() string {
+	auth := b.config.RegistryAuth
+	if auth.Username == "" && auth.Password == "" && auth.IdentityToken == "" {
+		return ""
+	}
+
+	authConfig := registry.AuthConfig{
+		Username:      auth.Username,
+		Password:      auth.Password,
+		IdentityToken: auth.IdentityToken,
+		ServerAddress: auth.ServerAddress,
+	}
+
+	encodedJSON, err := json.Marshal(authConfig)
+	if err != nil {
+		return ""
+	}
+
+	return base64.URLEncoding.EncodeToString(encodedJSON)
 }
 
 func generateShortID() string {

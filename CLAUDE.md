@@ -77,6 +77,12 @@ Station is a secure, self-hosted platform for creating intelligent multi-environ
   - Likely causes: hanging MCP connections, database locks, resource cleanup delays
   - Needs investigation of timeout settings and connection pooling
 
+### Pending Documentation Updates
+- **CloudShip AI Models**: Update docs to reflect new model lineup (commit 5578545c)
+  - New models: GLM-4.7 (default), DeepSeek-V3.1, Qwen3-235B, GLM-4.5-Air
+  - Files to update: README.md, docs/station/configuration.md, docs/QUICKSTART.md
+  - Note: Kimi K2 models "Coming Soon" on Together AI - add when available
+
 ### Active Agents
 - **Home Directory Scanner** (ID: 2): Scheduled daily at midnight to scan home directory structure
   - Tools: list_directory, directory_tree, read_text_file, get_file_info, search_files

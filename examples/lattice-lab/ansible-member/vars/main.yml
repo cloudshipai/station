@@ -1,0 +1,19 @@
+---
+station_name: station-default
+station_image: ghcr.io/cloudshipai/station:latest
+station_install_dir: /opt/station/station-default
+station_data_dir: /opt/station/station-default/data
+station_state: present
+
+station_mcp_port: 8586
+station_dynamic_mcp_port: 8587
+
+station_env:
+  STN_LATTICE_NATS_URL: "nats://192.168.56.10:4222"
+  STN_LATTICE_STATION_NAME: "agent-member"
+  
+  STN_AI_PROVIDER: "anthropic"
+  STN_AI_MODEL: "claude-sonnet-4-20250514"
+  STN_AI_API_KEY: "your-api-key-here"
+  
+  WORKSPACE_PATH: "/tmp/workspace"

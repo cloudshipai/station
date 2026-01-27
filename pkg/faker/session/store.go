@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"os"
 	"time"
 
 	"station/internal/db"
@@ -46,7 +47,7 @@ func (s *store) createSession(ctx context.Context, instruction string, debug boo
 	}
 
 	if debug {
-		fmt.Printf("[FAKER SESSION] Created session %s: %s\n", session.ID, instruction)
+		fmt.Fprintf(os.Stderr, "[FAKER SESSION] Created session %s: %s\n", session.ID, instruction)
 	}
 
 	return session, nil
@@ -96,7 +97,7 @@ func (s *store) deleteSession(ctx context.Context, sessionID string, debug bool)
 	}
 
 	if debug {
-		fmt.Printf("[FAKER SESSION] Deleted session %s\n", sessionID)
+		fmt.Fprintf(os.Stderr, "[FAKER SESSION] Deleted session %s\n", sessionID)
 	}
 
 	return nil
@@ -140,7 +141,7 @@ func (s *store) recordEvent(ctx context.Context, event *Event, debug bool) error
 	event.ID = id
 
 	if debug {
-		fmt.Printf("[FAKER SESSION] Recorded %s event: %s (%s)\n",
+		fmt.Fprintf(os.Stderr, "[FAKER SESSION] Recorded %s event: %s (%s)\n",
 			event.OperationType, event.ToolName, event.SessionID)
 	}
 
@@ -306,7 +307,7 @@ func (s *store) clearAllSessions(ctx context.Context, debug bool) (int, error) {
 
 	rows, _ := result.RowsAffected()
 	if debug {
-		fmt.Printf("[FAKER SESSION] Cleared %d sessions\n", rows)
+		fmt.Fprintf(os.Stderr, "[FAKER SESSION] Cleared %d sessions\n", rows)
 	}
 
 	return int(rows), nil

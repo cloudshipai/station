@@ -24,6 +24,16 @@ type ProviderConfig struct {
 
 func getProviderModels() map[string][]string {
 	return map[string][]string{
+		"cloudshipai": {
+			// Top-tier tool calling models (2025)
+			"cloudship/glm-4.7",          // #1 tool calling - interleaved thinking
+			"cloudship/deepseek-v3.1",    // Advanced reasoning + tools, 128K context
+			"cloudship/qwen3-235b",       // MoE 22B active, 262K context
+			// Cost-effective options
+			"cloudship/glm-4.5-air",      // Fast GLM with excellent tool support
+			"cloudship/llama-3.1-70b",    // Solid general purpose
+			"cloudship/llama-3.1-8b",     // Lightweight option
+		},
 		"openai": config.GetSupportedOpenAIModels(),
 		"anthropic": {
 			"claude-sonnet-4-20250514",
@@ -39,14 +49,19 @@ func getProviderModels() map[string][]string {
 
 // getDefaultProvider returns the default provider and model
 func getDefaultProvider() (string, string) {
-	return "openai", "gpt-5-mini"
+	// CloudShip AI is the default when registration key is available
+	if os.Getenv("STN_CLOUDSHIP_KEY") != "" || os.Getenv("CLOUDSHIPAI_REGISTRATION_KEY") != "" {
+		return "cloudshipai", "cloudship/glm-4.7"
+	}
+	return "openai", "gpt-4o-mini"
 }
 
 var providerDescriptions = map[string]string{
-	"openai":    "OpenAI models - GPT-4o, and more (any model accepted)",
-	"anthropic": "Anthropic's Claude models - Claude Sonnet 4, Claude 3.7, etc.",
-	"gemini":    "Google's Gemini models - Fast, capable, and cost-effective",
-	"custom":    "Configure a custom provider (any OpenAI-compatible endpoint)",
+	"cloudshipai": "CloudShip AI - Top-tier tool calling with GLM, DeepSeek, Qwen (Recommended)",
+	"openai":      "OpenAI models - GPT-4o, and more (any model accepted)",
+	"anthropic":   "Anthropic's Claude models - Claude Sonnet 4, Claude 3.7, etc.",
+	"gemini":      "Google's Gemini models - Fast, capable, and cost-effective",
+	"custom":      "Configure a custom provider (any OpenAI-compatible endpoint)",
 }
 
 // setupProviderInteractively runs the interactive provider setup
@@ -79,6 +94,13 @@ func setupProviderInteractively() (*ProviderConfig, error) {
 		}
 	}
 
+	// If cloudshipai is selected, ensure we have authentication
+	if provider == "cloudshipai" {
+		if err := ensureCloudShipAuth(); err != nil {
+			return nil, err
+		}
+	}
+
 	var model string
 	if provider == "custom" {
 		// Step 2a: Custom provider setup
@@ -100,7 +122,26 @@ func setupProviderInteractively() (*ProviderConfig, error) {
 	return &ProviderConfig{Provider: provider, Model: model, BaseURL: ""}, nil
 }
 
+// ensureCloudShipAuth checks if CloudShip auth exists, and runs the auth flow if not
+func ensureCloudShipAuth() error {
+	if HasCloudShipAuth() {
+		log.Printf("✓ CloudShip authentication already configured\n")
+		return nil
+	}
+
+	// Run the auth flow
+	_, err := RunCloudShipAuthFlow()
+	if err != nil {
+		return fmt.Errorf("CloudShip authentication failed: %w", err)
+	}
+	return nil
+}
+
 func detectProviderFromEnv() (string, string) {
+	// CloudShip AI takes priority when registration key is available
+	if os.Getenv("STN_CLOUDSHIP_KEY") != "" || os.Getenv("CLOUDSHIPAI_REGISTRATION_KEY") != "" {
+		return "cloudshipai", "cloudship/glm-4.7"
+	}
 	if os.Getenv("ANTHROPIC_API_KEY") != "" {
 		return "anthropic", "claude-sonnet-4-20250514"
 	}
@@ -336,6 +377,7 @@ var (
 
 func selectProvider() (string, error) {
 	items := []list.Item{
+		item("cloudshipai"),
 		item("openai"),
 		item("anthropic"),
 		item("gemini"),

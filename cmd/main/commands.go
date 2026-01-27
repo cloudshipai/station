@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -44,11 +45,18 @@ Features:
 • Support for custom providers (Anthropic, Ollama, local models)
 • Optional database replication setup with Litestream
 • Ship CLI integration for instant filesystem MCP tools
+• Lattice mesh network for multi-station agent orchestration
 
 Use --provider and --model flags to skip interactive setup.
 Use --yes flag to use sensible defaults without any prompts.
 Use --replicate flag to also configure Litestream for database replication to cloud storage.
-Use --ship flag to bootstrap with ship CLI MCP integration for filesystem access.`,
+Use --ship flag to bootstrap with ship CLI MCP integration for filesystem access.
+
+Lattice Configuration:
+  --lattice-url         Join an existing lattice mesh (e.g., nats://orchestrator:4222)
+  --lattice-orchestrator  Run as orchestrator with embedded NATS server
+  --lattice-name        Station name in the mesh (default: hostname)
+  --lattice-token       Authentication token for NATS`,
 		RunE: runInit,
 	}
 
@@ -412,24 +420,67 @@ and makes them available in the Genkit developer UI for interactive testing.`,
 	}
 
 	deployCmd = &cobra.Command{
-		Use:   "deploy <environment-name>",
+		Use:   "deploy [environment-name]",
 		Short: "Deploy Station environment to cloud platform",
 		Long: `Deploy a Station environment to a cloud platform with agents and MCP tools.
 
-Supported targets:
-  fly        - Fly.io (builds Docker image, persistent storage)
-  cloudflare - [EXPERIMENTAL] Cloudflare Containers (uses base image + CloudShip bundle)
+Deploy using either:
+  1. Local environment: stn deploy <environment-name>
+  2. CloudShip bundle:  stn deploy --bundle-id <uuid>
+  3. Local bundle file: stn deploy --bundle ./my-bundle.tar.gz
 
-The deployed instance exposes agents via MCP for public access.
-The management UI is disabled by default for security.`,
-		Example: `  stn deploy my-env --target fly                    # Deploy to Fly.io
-  stn deploy my-env --target cloudflare             # Deploy to Cloudflare
-  stn deploy my-env --target cf --always-on         # Cloudflare, no sleep
-  stn deploy my-env --target cf --sleep-after 1h    # Sleep after 1 hour
-  stn deploy my-env --target cf --instance-type standard-1  # Bigger container
-  stn deploy my-env --target fly --destroy          # Tear down Fly deployment
-  stn deploy my-env --target cf --destroy           # Tear down Cloudflare`,
-		Args: cobra.ExactArgs(1),
+Supported targets:
+  fly        - Fly.io (uses fly secrets set, persistent storage)
+  kubernetes - Kubernetes (generates manifests, use --secrets-backend for runtime secrets)
+  ansible    - Ansible (generates playbook for Docker + SSH deployment)
+  cloudflare - [EXPERIMENTAL] Cloudflare Containers
+
+Runtime secrets (--secrets-backend):
+  Container fetches secrets at startup from:
+  - aws-secretsmanager  - AWS Secrets Manager
+  - aws-ssm             - AWS SSM Parameter Store
+  - vault               - HashiCorp Vault
+  - gcp-secretmanager   - Google Secret Manager
+  - sops                - SOPS encrypted file
+
+Use 'stn deploy export-vars' to see what secrets are needed for deployment.
+
+The deployed instance exposes agents via MCP for public access.`,
+		Example: `  # Bundle-based deploy (no local environment needed)
+  stn deploy --bundle-id e26b414a-f076-4135-927f-810bc1dc892a --target k8s
+  stn deploy --bundle-id e26b414a-f076-4135-927f-810bc1dc892a --target fly
+  stn deploy --bundle-id e26b414a-f076-4135-927f-810bc1dc892a --name my-station --target ansible
+
+  # Local bundle file deploy
+  stn deploy --bundle ./my-bundle.tar.gz --target fly
+  stn deploy --bundle ./my-bundle.tar.gz --target k8s --name my-station
+
+  # Fly.io
+  stn deploy my-env --target fly                    # Deploy to Fly.io (always-on)
+  stn deploy my-env --target fly --auto-stop        # Enable auto-stop when idle
+  stn deploy my-env --target fly --destroy          # Tear down deployment
+
+  # Kubernetes
+  stn deploy my-env --target kubernetes             # Generate K8s manifests
+  stn deploy my-env --target k8s --namespace prod   # Deploy to namespace
+  stn deploy my-env --target k8s --dry-run          # Preview only
+  stn deploy my-env --target k8s --context my-ctx   # Use specific context
+
+  # Ansible (SSH + Docker)
+  stn deploy my-env --target ansible --dry-run      # Generate playbook
+  stn deploy my-env --target ansible                # Run playbook
+
+  # Runtime secrets (container fetches from backend at startup)
+  stn deploy --bundle-id xxx --target k8s --secrets-backend vault --secrets-path secret/data/station/prod
+  stn deploy --bundle-id xxx --target k8s --secrets-backend aws-secretsmanager --secrets-path station/prod
+
+  # See what secrets are needed
+  stn deploy export-vars default                           # For environment
+  stn deploy export-vars --bundle-id xxx                   # For bundle
+
+  # Generate secrets template for CI/CD
+  stn deploy export-vars default --format env > secrets.env`,
+		Args: cobra.MaximumNArgs(1),
 		RunE: runDeploy,
 	}
 )
@@ -799,10 +850,20 @@ func runInit(cmd *cobra.Command, args []string) error {
 			if provider == "openai" {
 				recommended := config.GetRecommendedOpenAIModels()
 				model = recommended["cost_effective"]
+			} else if provider == "cloudshipai" {
+				model = "cloudship/llama-3.1-70b"
 			} else {
 				model = "gemini-2.5-flash"
 			}
 		}
+
+		// If cloudshipai is selected via flag, ensure we have authentication
+		if provider == "cloudshipai" && !configExists {
+			if err := ensureCloudShipAuth(); err != nil {
+				return fmt.Errorf("CloudShip AI authentication required: %w", err)
+			}
+		}
+
 		providerConfig = &ProviderConfig{Provider: provider, Model: model, BaseURL: baseURL}
 
 		if !configExists {
@@ -863,6 +924,58 @@ func runInit(cmd *cobra.Command, args []string) error {
 		viper.Set("otel_endpoint", otelEndpoint)
 		fmt.Printf("📊 OpenTelemetry integration enabled\n")
 		fmt.Printf("   OTLP Endpoint: %s\n", otelEndpoint)
+	}
+
+	// Set Lattice configuration
+	latticeURL, _ := cmd.Flags().GetString("lattice-url")
+	latticeName, _ := cmd.Flags().GetString("lattice-name")
+	latticeOrchestrator, _ := cmd.Flags().GetBool("lattice-orchestrator")
+	latticePort, _ := cmd.Flags().GetInt("lattice-port")
+	latticeToken, _ := cmd.Flags().GetString("lattice-token")
+
+	// Check environment variables as fallback
+	if latticeURL == "" {
+		latticeURL = os.Getenv("STN_LATTICE_NATS_URL")
+	}
+	if latticeName == "" {
+		latticeName = os.Getenv("STN_LATTICE_STATION_NAME")
+	}
+	if latticeToken == "" {
+		latticeToken = os.Getenv("STN_LATTICE_AUTH_TOKEN")
+	}
+
+	// Default station name to hostname
+	if latticeName == "" {
+		if hostname, err := os.Hostname(); err == nil {
+			latticeName = hostname
+		} else {
+			latticeName = "station"
+		}
+	}
+
+	if latticeOrchestrator || latticeURL != "" {
+		viper.Set("lattice.station_name", latticeName)
+
+		if latticeOrchestrator {
+			viper.Set("lattice_orchestration", true)
+			viper.Set("lattice.orchestrator.embedded_nats.port", latticePort)
+			viper.Set("lattice.orchestrator.embedded_nats.http_port", latticePort+4000)
+			if latticeToken != "" {
+				viper.Set("lattice.orchestrator.embedded_nats.auth.enabled", true)
+				viper.Set("lattice.orchestrator.embedded_nats.auth.token", latticeToken)
+			}
+			fmt.Printf("🔗 Lattice orchestrator mode enabled\n")
+			fmt.Printf("   NATS Port: %d\n", latticePort)
+			fmt.Printf("   Station Name: %s\n", latticeName)
+		} else if latticeURL != "" {
+			viper.Set("lattice.nats.url", latticeURL)
+			if latticeToken != "" {
+				viper.Set("lattice.nats.auth.token", latticeToken)
+			}
+			fmt.Printf("🔗 Lattice client mode enabled\n")
+			fmt.Printf("   NATS URL: %s\n", latticeURL)
+			fmt.Printf("   Station Name: %s\n", latticeName)
+		}
 	}
 
 	// Set harness defaults (agentic execution harness)
@@ -1297,6 +1410,10 @@ func runSyncWithBrowser(environment string) error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
+	if err := cfg.LoadSecretsFromBackend(); err != nil {
+		return fmt.Errorf("failed to load secrets from backend: %w", err)
+	}
+
 	browserSync := services.NewBrowserSyncService(cfg.APIPort)
 	_, err = browserSync.SyncWithBrowser(context.Background(), environment)
 	return err
@@ -1334,13 +1451,15 @@ func installShipCLI() error {
 
 // runSyncForEnvironment runs sync for a specific environment using DeclarativeSync service
 func runSyncForEnvironment(environment string) error {
-	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	// Initialize database
+	if err := cfg.LoadSecretsFromBackend(); err != nil {
+		return fmt.Errorf("failed to load secrets from backend: %w", err)
+	}
+
 	database, err := db.New(cfg.DatabaseURL)
 	if err != nil {
 		return fmt.Errorf("failed to initialize database: %w", err)
@@ -1702,22 +1821,136 @@ func runSettingsSet(cmd *cobra.Command, args []string) error {
 }
 
 func runDeploy(cmd *cobra.Command, args []string) error {
-	envName := args[0]
+	var envName string
+	if len(args) > 0 {
+		envName = args[0]
+	}
+
 	target, _ := cmd.Flags().GetString("target")
 	region, _ := cmd.Flags().GetString("region")
 	sleepAfter, _ := cmd.Flags().GetString("sleep-after")
-	alwaysOn, _ := cmd.Flags().GetBool("always-on")
+	autoStop, _ := cmd.Flags().GetBool("auto-stop")
 	instanceType, _ := cmd.Flags().GetString("instance-type")
 	destroy, _ := cmd.Flags().GetBool("destroy")
 	withOpenCode, _ := cmd.Flags().GetBool("with-opencode")
 	withSandbox, _ := cmd.Flags().GetBool("with-sandbox")
+	namespace, _ := cmd.Flags().GetString("namespace")
+	k8sContext, _ := cmd.Flags().GetString("context")
+	outputDir, _ := cmd.Flags().GetString("output-dir")
+	dryRun, _ := cmd.Flags().GetBool("dry-run")
+	bundleID, _ := cmd.Flags().GetString("bundle-id")
+	bundlePath, _ := cmd.Flags().GetString("bundle")
+	appName, _ := cmd.Flags().GetString("name")
+	hosts, _ := cmd.Flags().GetStringSlice("hosts")
+	sshKey, _ := cmd.Flags().GetString("ssh-key")
+	sshUser, _ := cmd.Flags().GetString("ssh-user")
+	envFile, _ := cmd.Flags().GetString("env-file")
+	secretsBackend, _ := cmd.Flags().GetString("secrets-backend")
+	secretsPath, _ := cmd.Flags().GetString("secrets-path")
 
-	if alwaysOn {
+	if envName == "" && bundleID == "" && bundlePath == "" {
+		return fmt.Errorf("either environment name, --bundle-id, or --bundle is required\n\nUsage:\n  stn deploy <environment>          Deploy local environment\n  stn deploy --bundle-id <uuid>     Deploy CloudShip bundle\n  stn deploy --bundle ./file.tar.gz Deploy local bundle file")
+	}
+
+	exclusiveCount := 0
+	if envName != "" {
+		exclusiveCount++
+	}
+	if bundleID != "" {
+		exclusiveCount++
+	}
+	if bundlePath != "" {
+		exclusiveCount++
+	}
+	if exclusiveCount > 1 {
+		return fmt.Errorf("cannot specify multiple of: environment name, --bundle-id, --bundle")
+	}
+
+	if bundlePath != "" {
+		return deployLocalBundle(cmd, bundlePath, target, region, sleepAfter, instanceType, destroy, autoStop, withOpenCode, withSandbox, namespace, k8sContext, outputDir, dryRun, appName, hosts, sshKey, sshUser, envFile, secretsBackend, secretsPath)
+	}
+
+	if !autoStop {
 		sleepAfter = "168h"
 	}
 
 	ctx := context.Background()
-	return handlers.HandleDeploy(ctx, envName, target, region, sleepAfter, instanceType, destroy, alwaysOn, withOpenCode, withSandbox)
+	return handlers.HandleDeploy(ctx, envName, target, region, sleepAfter, instanceType, destroy, autoStop, withOpenCode, withSandbox, namespace, k8sContext, outputDir, dryRun, bundleID, appName, hosts, sshKey, sshUser, "", envFile, secretsBackend, secretsPath)
+}
+
+func resolveDeployEnvName(customName string, cfg *config.Config, bundlePath string) string {
+	if customName != "" {
+		return customName
+	}
+	if cfg != nil && cfg.CloudShip.Name != "" {
+		return cfg.CloudShip.Name
+	}
+	bundleBaseName := filepath.Base(bundlePath)
+	for _, ext := range []string{".tar.gz", ".tgz", ".tar", ".gz"} {
+		if len(bundleBaseName) > len(ext) && bundleBaseName[len(bundleBaseName)-len(ext):] == ext {
+			bundleBaseName = bundleBaseName[:len(bundleBaseName)-len(ext)]
+			break
+		}
+	}
+	if bundleBaseName == "" {
+		return fmt.Sprintf("deploy-%d", time.Now().Unix())
+	}
+	return bundleBaseName
+}
+
+func deployLocalBundle(cmd *cobra.Command, bundlePath, target, region, sleepAfter, instanceType string, destroy, autoStop, withOpenCode, withSandbox bool, namespace, k8sContext, outputDir string, dryRun bool, appName string, hosts []string, sshKey, sshUser, envFile, secretsBackend, secretsPath string) error {
+	if _, err := os.Stat(bundlePath); os.IsNotExist(err) {
+		return fmt.Errorf("bundle file not found: %s", bundlePath)
+	}
+
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load Station config: %w", err)
+	}
+
+	envName := resolveDeployEnvName(appName, cfg, bundlePath)
+
+	normalizedTarget := strings.ToLower(target)
+	skipLocalInstall := normalizedTarget == "kubernetes" || normalizedTarget == "k8s" || normalizedTarget == "ansible"
+
+	// Fly.io doesn't support local bundle file deployment - it needs environment with baked-in agents
+	if !skipLocalInstall && (normalizedTarget == "fly" || normalizedTarget == "flyio" || normalizedTarget == "fly.io") {
+		return fmt.Errorf("fly target does not support --bundle (local file).\n\nOptions:\n  1. Use --bundle-id for CloudShip bundles: stn deploy --bundle-id <uuid> --target fly\n  2. Install bundle locally first and deploy environment: stn bundle install %s my-env && stn deploy my-env --target fly\n  3. Use Kubernetes or Ansible which copy the bundle file: stn deploy --bundle %s --target k8s", bundlePath, bundlePath)
+	}
+
+	if skipLocalInstall {
+		fmt.Printf("📦 Using bundle file directly (no local installation): %s\n", bundlePath)
+		fmt.Printf("   Environment name: %s\n", envName)
+	} else {
+		fmt.Printf("📦 Installing bundle to environment: %s\n", envName)
+
+		database, err := db.New(cfg.DatabaseURL)
+		if err != nil {
+			return fmt.Errorf("failed to connect to database: %w", err)
+		}
+		defer func() { _ = database.Close() }()
+
+		repos := repositories.New(database)
+		bundleService := services.NewBundleServiceWithRepos(repos)
+
+		result, err := bundleService.InstallBundleWithOptions(bundlePath, envName, false)
+		if err != nil || !result.Success {
+			errorMsg := result.Error
+			if errorMsg == "" && err != nil {
+				errorMsg = err.Error()
+			}
+			return fmt.Errorf("bundle installation failed: %s", errorMsg)
+		}
+
+		fmt.Printf("✅ Bundle installed: %d agents, %d MCP configs\n", result.InstalledAgents, result.InstalledMCPs)
+	}
+
+	if !autoStop {
+		sleepAfter = "168h"
+	}
+
+	ctx := context.Background()
+	return handlers.HandleDeploy(ctx, envName, target, region, sleepAfter, instanceType, destroy, autoStop, withOpenCode, withSandbox, namespace, k8sContext, outputDir, dryRun, "", appName, hosts, sshKey, sshUser, bundlePath, envFile, secretsBackend, secretsPath)
 }
 
 // bootstrapGitHubWorkflows creates GitHub Actions workflow files in .github/workflows/

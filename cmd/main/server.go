@@ -125,6 +125,12 @@ func runMainServer() error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
+	// Load secrets from backend (Vault, AWS SSM, etc.) if configured via STN_SECRETS_BACKEND
+	// This fetches secrets at runtime instead of baking them into K8s Secrets
+	if err := cfg.LoadSecretsFromBackend(); err != nil {
+		return fmt.Errorf("failed to load secrets from backend: %w", err)
+	}
+
 	// Apply smart telemetry defaults based on CloudShip connection status
 	// - With CloudShip registration key: use telemetry.cloudshipai.com
 	// - Without CloudShip: use local Jaeger (localhost:4318)
@@ -319,6 +325,9 @@ func runMainServer() error {
 
 	latticeOrchestration := viper.GetBool("lattice_orchestration")
 	latticeURL := viper.GetString("lattice_url")
+	if latticeURL == "" {
+		latticeURL = cfg.Lattice.NATS.URL
+	}
 
 	if latticeOrchestration || latticeURL != "" {
 		log.Printf("🔗 Initializing Station Lattice mesh network...")
@@ -326,26 +335,21 @@ func runMainServer() error {
 		var natsURL string
 
 		if latticeOrchestration {
-			natsPort := viper.GetInt("lattice.orchestrator.embedded_nats.port")
-			if natsPort == 0 {
-				natsPort = 4222
+			embeddedCfg := cfg.Lattice.Orchestrator.EmbeddedNATS
+			if embeddedCfg.Port == 0 {
+				embeddedCfg.Port = 4222
 			}
-			natsHTTPPort := viper.GetInt("lattice.orchestrator.embedded_nats.http_port")
-			if natsHTTPPort == 0 {
-				natsHTTPPort = 8222
+			if embeddedCfg.HTTPPort == 0 {
+				embeddedCfg.HTTPPort = 8222
 			}
 
-			embeddedCfg := config.LatticeEmbeddedNATSConfig{
-				Port:     natsPort,
-				HTTPPort: natsHTTPPort,
-			}
 			latticeEmbedded = lattice.NewEmbeddedServer(embeddedCfg)
 			if err := latticeEmbedded.Start(); err != nil {
 				log.Printf("⚠️  Failed to start embedded NATS server: %v", err)
 				log.Printf("⚠️  Lattice mesh network disabled")
 			} else {
 				natsURL = latticeEmbedded.ClientURL()
-				log.Printf("✅ Lattice orchestrator mode: embedded NATS on port %d", natsPort)
+				log.Printf("✅ Lattice orchestrator mode: embedded NATS on port %d", embeddedCfg.Port)
 			}
 		} else if latticeURL != "" {
 			natsURL = latticeURL
@@ -353,8 +357,15 @@ func runMainServer() error {
 		}
 
 		if natsURL != "" {
+			stationName := cfg.Lattice.StationName
+			if stationName == "" {
+				stationName = cfg.CloudShip.Name
+			}
+			if stationName == "" {
+				stationName = "station"
+			}
 			latticeCfg := config.LatticeConfig{
-				StationName: cfg.CloudShip.Name,
+				StationName: stationName,
 				NATS: config.LatticeNATSConfig{
 					URL: natsURL,
 				},

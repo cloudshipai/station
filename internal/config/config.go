@@ -54,6 +54,8 @@ type Config struct {
 	Coding CodingConfig
 	// Lattice Configuration (Station-to-Station mesh networking)
 	Lattice LatticeConfig
+	// Secrets Configuration (runtime secrets from external backends)
+	Secrets SecretsConfig
 	// Faker Templates (for local development)
 	FakerTemplates map[string]FakerTemplate
 	// Harness Configuration (agentic execution harness)
@@ -163,24 +165,71 @@ type NotifyConfig struct {
 	Format         string `yaml:"format"`          // Webhook format: "ntfy" (default), "json", or "auto"
 }
 
-type SandboxConfig struct {
-	Enabled                bool                       `yaml:"enabled"`
-	CodeModeEnabled        bool                       `yaml:"code_mode_enabled"`
-	IdleTimeoutMinutes     int                        `yaml:"idle_timeout_minutes"`
-	CleanupIntervalMinutes int                        `yaml:"cleanup_interval_minutes"`
-	OpenCodeEnabled        bool                       `yaml:"opencode_enabled"`
-	OpenCodeServerURL      string                     `yaml:"opencode_server_url"`
-	OpenCodeModel          string                     `yaml:"opencode_model"`
-	DockerImage            string                     `yaml:"docker_image"`
-	RegistryAuth           *SandboxRegistryAuthConfig `yaml:"registry_auth,omitempty"`
+// SecretsConfig holds settings for runtime secrets resolution from external backends
+// This allows Station to fetch secrets from Vault, AWS Secrets Manager, etc. at startup
+// instead of requiring secrets to be baked into K8s Secrets or environment variables.
+type SecretsConfig struct {
+	// Backend is the secrets provider: aws-secretsmanager, aws-ssm, vault, gcp-secretmanager, sops
+	Backend string `yaml:"backend"`
+
+	// Path is provider-specific path to secrets:
+	// - AWS Secrets Manager: secret name or ARN (e.g., "station/prod")
+	// - AWS SSM: parameter path prefix (e.g., "/station/prod/")
+	// - Vault: secret path (e.g., "secret/data/station/prod")
+	// - GCP Secret Manager: secret name (e.g., "projects/my-project/secrets/station-prod")
+	// - SOPS: path to encrypted file (e.g., "./secrets/prod.enc.yaml")
+	Path string `yaml:"path"`
+
+	// Region for AWS providers (optional, uses AWS_REGION if not set)
+	Region string `yaml:"region"`
+
+	// VaultAddr for HashiCorp Vault (optional, uses VAULT_ADDR if not set)
+	VaultAddr string `yaml:"vault_addr"`
+
+	// VaultToken for HashiCorp Vault (optional, uses VAULT_TOKEN if not set)
+	VaultToken string `yaml:"vault_token"`
+
+	// Loaded indicates if secrets have been loaded from the backend
+	Loaded bool `yaml:"-"`
+
+	// LoadedSecrets contains the secrets loaded from the backend (not persisted)
+	LoadedSecrets map[string]string `yaml:"-"`
 }
 
+// SandboxRegistryAuthConfig holds authentication settings for private container registries
 type SandboxRegistryAuthConfig struct {
-	Username         string `yaml:"username,omitempty"`
-	Password         string `yaml:"password,omitempty"`
-	IdentityToken    string `yaml:"identity_token,omitempty"`
-	ServerAddress    string `yaml:"server_address,omitempty"`
-	DockerConfigPath string `yaml:"docker_config_path,omitempty"`
+	Username         string `yaml:"username"`           // Basic auth username (Docker Hub, self-hosted)
+	Password         string `yaml:"password"`           // Password or access token
+	IdentityToken    string `yaml:"identity_token"`     // OAuth bearer token (ECR, GCR, ACR)
+	ServerAddress    string `yaml:"server_address"`     // Registry server URL (e.g., "ghcr.io", "123456789.dkr.ecr.us-east-1.amazonaws.com")
+	DockerConfigPath string `yaml:"docker_config_path"` // Path to ~/.docker/config.json for credential helpers
+}
+
+// SandboxConfig holds settings for sandbox code execution
+type SandboxConfig struct {
+	Enabled                bool                      `yaml:"enabled"`
+	CodeModeEnabled        bool                      `yaml:"code_mode_enabled"`
+	Backend                string                    `yaml:"backend"` // "docker", "fly_machines", "opencode", "host"
+	IdleTimeoutMinutes     int                       `yaml:"idle_timeout_minutes"`
+	CleanupIntervalMinutes int                       `yaml:"cleanup_interval_minutes"`
+	OpenCodeEnabled        bool                      `yaml:"opencode_enabled"`
+	OpenCodeServerURL      string                    `yaml:"opencode_server_url"`
+	OpenCodeModel          string                    `yaml:"opencode_model"`
+	DockerImage            string                    `yaml:"docker_image"`  // Custom Docker image for sandbox containers
+	RegistryAuth           SandboxRegistryAuthConfig `yaml:"registry_auth"` // Private registry authentication
+	FlyMachines            SandboxFlyMachinesConfig  `yaml:"fly_machines"`  // Fly Machines backend settings
+}
+
+// SandboxFlyMachinesConfig holds Fly Machines-specific sandbox settings
+type SandboxFlyMachinesConfig struct {
+	AppPrefix    string                    `yaml:"app_prefix"`    // Fly app name prefix for sandbox machines (default: "stn-sandbox")
+	OrgSlug      string                    `yaml:"org_slug"`      // Fly.io organization slug
+	Region       string                    `yaml:"region"`        // Primary region (default: "ord")
+	Image        string                    `yaml:"image"`         // Container image (default: uses sandbox.docker_image or "python:3.11-slim")
+	MemoryMB     int                       `yaml:"memory_mb"`     // Memory per machine (default: 256)
+	CPUKind      string                    `yaml:"cpu_kind"`      // "shared" or "performance" (default: "shared")
+	CPUs         int                       `yaml:"cpus"`          // Number of CPUs (default: 1)
+	RegistryAuth SandboxRegistryAuthConfig `yaml:"registry_auth"` // Private registry authentication (for private images)
 }
 
 type CodingConfig struct {
@@ -367,6 +416,24 @@ type LatticeEmbeddedNATSConfig struct {
 	HTTPPort int `yaml:"http_port"`
 	// StoreDir for JetStream storage (default: $STATION_DATA/nats)
 	StoreDir string `yaml:"store_dir"`
+	// Auth configures authentication for the embedded NATS server
+	Auth LatticeEmbeddedNATSAuthConfig `yaml:"auth"`
+}
+
+// LatticeEmbeddedNATSAuthConfig holds authentication settings for embedded NATS
+type LatticeEmbeddedNATSAuthConfig struct {
+	// Enabled activates authentication on the embedded NATS server
+	Enabled bool `yaml:"enabled"`
+	// Users is a list of username/password pairs for basic auth
+	Users []LatticeNATSUser `yaml:"users"`
+	// Token is a single token for token-based auth (simpler than users)
+	Token string `yaml:"token"`
+}
+
+// LatticeNATSUser defines a NATS user with credentials
+type LatticeNATSUser struct {
+	User     string `yaml:"user"`
+	Password string `yaml:"password"`
 }
 
 // LatticeRegistryConfig holds settings for station registry
@@ -544,6 +611,7 @@ func bindEnvVars() {
 	// Sandbox config
 	viper.BindEnv("sandbox.enabled", "STATION_SANDBOX_ENABLED", "STN_SANDBOX_ENABLED")
 	viper.BindEnv("sandbox.code_mode_enabled", "STATION_SANDBOX_CODE_MODE_ENABLED", "STN_SANDBOX_CODE_MODE_ENABLED")
+	viper.BindEnv("sandbox.backend", "STN_SANDBOX_BACKEND")
 	viper.BindEnv("sandbox.idle_timeout_minutes", "STN_SANDBOX_IDLE_TIMEOUT_MINUTES")
 	viper.BindEnv("sandbox.cleanup_interval_minutes", "STN_SANDBOX_CLEANUP_INTERVAL_MINUTES")
 	viper.BindEnv("sandbox.docker_image", "STN_SANDBOX_DOCKER_IMAGE")
@@ -552,6 +620,13 @@ func bindEnvVars() {
 	viper.BindEnv("sandbox.registry_auth.identity_token", "STN_SANDBOX_REGISTRY_TOKEN")
 	viper.BindEnv("sandbox.registry_auth.server_address", "STN_SANDBOX_REGISTRY_SERVER")
 	viper.BindEnv("sandbox.registry_auth.docker_config_path", "STN_SANDBOX_REGISTRY_CONFIG")
+	viper.BindEnv("sandbox.fly_machines.app_prefix", "STN_SANDBOX_FLY_APP_PREFIX")
+	viper.BindEnv("sandbox.fly_machines.org_slug", "STN_SANDBOX_FLY_ORG", "FLY_ORG")
+	viper.BindEnv("sandbox.fly_machines.region", "STN_SANDBOX_FLY_REGION")
+	viper.BindEnv("sandbox.fly_machines.image", "STN_SANDBOX_FLY_IMAGE")
+	viper.BindEnv("sandbox.fly_machines.memory_mb", "STN_SANDBOX_FLY_MEMORY_MB")
+	viper.BindEnv("sandbox.fly_machines.cpu_kind", "STN_SANDBOX_FLY_CPU_KIND")
+	viper.BindEnv("sandbox.fly_machines.cpus", "STN_SANDBOX_FLY_CPUS")
 
 	viper.BindEnv("coding.backend", "STN_CODING_BACKEND")
 	viper.BindEnv("coding.opencode.url", "STN_CODING_OPENCODE_URL")
@@ -578,8 +653,17 @@ func bindEnvVars() {
 	viper.BindEnv("lattice.orchestrator.embedded_nats.port", "STN_LATTICE_NATS_PORT")
 	viper.BindEnv("lattice.orchestrator.embedded_nats.http_port", "STN_LATTICE_NATS_HTTP_PORT")
 	viper.BindEnv("lattice.orchestrator.embedded_nats.store_dir", "STN_LATTICE_NATS_STORE_DIR")
+	viper.BindEnv("lattice.orchestrator.embedded_nats.auth.enabled", "STN_LATTICE_AUTH_ENABLED")
+	viper.BindEnv("lattice.orchestrator.embedded_nats.auth.token", "STN_LATTICE_AUTH_TOKEN")
 	viper.BindEnv("lattice.orchestrator.registry.presence_ttl_sec", "STN_LATTICE_PRESENCE_TTL_SEC")
 	viper.BindEnv("lattice.orchestrator.routing.timeout_sec", "STN_LATTICE_ROUTING_TIMEOUT_SEC")
+
+	// Secrets config (runtime secrets from external backends)
+	viper.BindEnv("secrets.backend", "STN_SECRETS_BACKEND")
+	viper.BindEnv("secrets.path", "STN_SECRETS_PATH")
+	viper.BindEnv("secrets.region", "STN_SECRETS_REGION")
+	viper.BindEnv("secrets.vault_addr", "STN_SECRETS_VAULT_ADDR", "VAULT_ADDR")
+	viper.BindEnv("secrets.vault_token", "STN_SECRETS_VAULT_TOKEN", "VAULT_TOKEN")
 
 	// Telemetry config
 	viper.BindEnv("telemetry_enabled", "STN_TELEMETRY_ENABLED", "STATION_TELEMETRY_ENABLED")
@@ -681,8 +765,18 @@ func Load() (*Config, error) {
 		Sandbox: SandboxConfig{
 			Enabled:                getEnvBoolOrDefault("STATION_SANDBOX_ENABLED", false),
 			CodeModeEnabled:        getEnvBoolOrDefault("STATION_SANDBOX_CODE_MODE_ENABLED", false),
+			Backend:                getEnvOrDefault("STN_SANDBOX_BACKEND", "docker"),
 			IdleTimeoutMinutes:     getEnvIntOrDefault("STN_SANDBOX_IDLE_TIMEOUT_MINUTES", 30),
 			CleanupIntervalMinutes: getEnvIntOrDefault("STN_SANDBOX_CLEANUP_INTERVAL_MINUTES", 5),
+			FlyMachines: SandboxFlyMachinesConfig{
+				AppPrefix: getEnvOrDefault("STN_SANDBOX_FLY_APP_PREFIX", "stn-sandbox"),
+				OrgSlug:   getEnvOrDefault("FLY_ORG", ""),
+				Region:    getEnvOrDefault("STN_SANDBOX_FLY_REGION", "ord"),
+				Image:     getEnvOrDefault("STN_SANDBOX_FLY_IMAGE", ""),
+				MemoryMB:  getEnvIntOrDefault("STN_SANDBOX_FLY_MEMORY_MB", 256),
+				CPUKind:   getEnvOrDefault("STN_SANDBOX_FLY_CPU_KIND", "shared"),
+				CPUs:      getEnvIntOrDefault("STN_SANDBOX_FLY_CPUS", 1),
+			},
 		},
 		Coding: CodingConfig{
 			Backend: "opencode",
@@ -943,27 +1037,44 @@ func Load() (*Config, error) {
 	if viper.IsSet("sandbox.docker_image") {
 		cfg.Sandbox.DockerImage = viper.GetString("sandbox.docker_image")
 	}
-	if viper.IsSet("sandbox.registry_auth.username") || viper.IsSet("sandbox.registry_auth.password") ||
-		viper.IsSet("sandbox.registry_auth.identity_token") || viper.IsSet("sandbox.registry_auth.server_address") ||
-		viper.IsSet("sandbox.registry_auth.docker_config_path") {
-		if cfg.Sandbox.RegistryAuth == nil {
-			cfg.Sandbox.RegistryAuth = &SandboxRegistryAuthConfig{}
-		}
-		if viper.IsSet("sandbox.registry_auth.username") {
-			cfg.Sandbox.RegistryAuth.Username = viper.GetString("sandbox.registry_auth.username")
-		}
-		if viper.IsSet("sandbox.registry_auth.password") {
-			cfg.Sandbox.RegistryAuth.Password = viper.GetString("sandbox.registry_auth.password")
-		}
-		if viper.IsSet("sandbox.registry_auth.identity_token") {
-			cfg.Sandbox.RegistryAuth.IdentityToken = viper.GetString("sandbox.registry_auth.identity_token")
-		}
-		if viper.IsSet("sandbox.registry_auth.server_address") {
-			cfg.Sandbox.RegistryAuth.ServerAddress = viper.GetString("sandbox.registry_auth.server_address")
-		}
-		if viper.IsSet("sandbox.registry_auth.docker_config_path") {
-			cfg.Sandbox.RegistryAuth.DockerConfigPath = viper.GetString("sandbox.registry_auth.docker_config_path")
-		}
+	if viper.IsSet("sandbox.registry_auth.username") {
+		cfg.Sandbox.RegistryAuth.Username = viper.GetString("sandbox.registry_auth.username")
+	}
+	if viper.IsSet("sandbox.registry_auth.password") {
+		cfg.Sandbox.RegistryAuth.Password = viper.GetString("sandbox.registry_auth.password")
+	}
+	if viper.IsSet("sandbox.registry_auth.identity_token") {
+		cfg.Sandbox.RegistryAuth.IdentityToken = viper.GetString("sandbox.registry_auth.identity_token")
+	}
+	if viper.IsSet("sandbox.registry_auth.server_address") {
+		cfg.Sandbox.RegistryAuth.ServerAddress = viper.GetString("sandbox.registry_auth.server_address")
+	}
+	if viper.IsSet("sandbox.registry_auth.docker_config_path") {
+		cfg.Sandbox.RegistryAuth.DockerConfigPath = viper.GetString("sandbox.registry_auth.docker_config_path")
+	}
+	if viper.IsSet("sandbox.backend") {
+		cfg.Sandbox.Backend = viper.GetString("sandbox.backend")
+	}
+	if viper.IsSet("sandbox.fly_machines.app_prefix") {
+		cfg.Sandbox.FlyMachines.AppPrefix = viper.GetString("sandbox.fly_machines.app_prefix")
+	}
+	if viper.IsSet("sandbox.fly_machines.org_slug") {
+		cfg.Sandbox.FlyMachines.OrgSlug = viper.GetString("sandbox.fly_machines.org_slug")
+	}
+	if viper.IsSet("sandbox.fly_machines.region") {
+		cfg.Sandbox.FlyMachines.Region = viper.GetString("sandbox.fly_machines.region")
+	}
+	if viper.IsSet("sandbox.fly_machines.image") {
+		cfg.Sandbox.FlyMachines.Image = viper.GetString("sandbox.fly_machines.image")
+	}
+	if viper.IsSet("sandbox.fly_machines.memory_mb") {
+		cfg.Sandbox.FlyMachines.MemoryMB = viper.GetInt("sandbox.fly_machines.memory_mb")
+	}
+	if viper.IsSet("sandbox.fly_machines.cpu_kind") {
+		cfg.Sandbox.FlyMachines.CPUKind = viper.GetString("sandbox.fly_machines.cpu_kind")
+	}
+	if viper.IsSet("sandbox.fly_machines.cpus") {
+		cfg.Sandbox.FlyMachines.CPUs = viper.GetInt("sandbox.fly_machines.cpus")
 	}
 
 	// Lattice configuration overrides from config file
@@ -1023,6 +1134,18 @@ func Load() (*Config, error) {
 	}
 	if viper.IsSet("lattice.orchestrator.embedded_nats.store_dir") {
 		cfg.Lattice.Orchestrator.EmbeddedNATS.StoreDir = viper.GetString("lattice.orchestrator.embedded_nats.store_dir")
+	}
+	if viper.IsSet("lattice.orchestrator.embedded_nats.auth.enabled") {
+		cfg.Lattice.Orchestrator.EmbeddedNATS.Auth.Enabled = viper.GetBool("lattice.orchestrator.embedded_nats.auth.enabled")
+	}
+	if viper.IsSet("lattice.orchestrator.embedded_nats.auth.token") {
+		cfg.Lattice.Orchestrator.EmbeddedNATS.Auth.Token = viper.GetString("lattice.orchestrator.embedded_nats.auth.token")
+	}
+	if viper.IsSet("lattice.orchestrator.embedded_nats.auth.users") {
+		var users []LatticeNATSUser
+		if err := viper.UnmarshalKey("lattice.orchestrator.embedded_nats.auth.users", &users); err == nil {
+			cfg.Lattice.Orchestrator.EmbeddedNATS.Auth.Users = users
+		}
 	}
 	if viper.IsSet("lattice.orchestrator.registry.presence_ttl_sec") {
 		cfg.Lattice.Orchestrator.Registry.PresenceTTLSec = viper.GetInt("lattice.orchestrator.registry.presence_ttl_sec")
@@ -1202,6 +1325,44 @@ func Load() (*Config, error) {
 		if boolValue, err := strconv.ParseBool(envCodeMode); err == nil {
 			cfg.Sandbox.CodeModeEnabled = boolValue
 		}
+	}
+
+	// Secrets backend configuration (for runtime secrets resolution)
+	if viper.IsSet("secrets.backend") {
+		cfg.Secrets.Backend = viper.GetString("secrets.backend")
+	}
+	if envBackend := os.Getenv("STN_SECRETS_BACKEND"); envBackend != "" {
+		cfg.Secrets.Backend = envBackend
+	}
+	if viper.IsSet("secrets.path") {
+		cfg.Secrets.Path = viper.GetString("secrets.path")
+	}
+	if envPath := os.Getenv("STN_SECRETS_PATH"); envPath != "" {
+		cfg.Secrets.Path = envPath
+	}
+	if viper.IsSet("secrets.region") {
+		cfg.Secrets.Region = viper.GetString("secrets.region")
+	}
+	if envRegion := os.Getenv("STN_SECRETS_REGION"); envRegion != "" {
+		cfg.Secrets.Region = envRegion
+	}
+	if viper.IsSet("secrets.vault_addr") {
+		cfg.Secrets.VaultAddr = viper.GetString("secrets.vault_addr")
+	}
+	if envVaultAddr := os.Getenv("VAULT_ADDR"); envVaultAddr != "" {
+		cfg.Secrets.VaultAddr = envVaultAddr
+	}
+	if envVaultAddr := os.Getenv("STN_SECRETS_VAULT_ADDR"); envVaultAddr != "" {
+		cfg.Secrets.VaultAddr = envVaultAddr
+	}
+	if viper.IsSet("secrets.vault_token") {
+		cfg.Secrets.VaultToken = viper.GetString("secrets.vault_token")
+	}
+	if envVaultToken := os.Getenv("VAULT_TOKEN"); envVaultToken != "" {
+		cfg.Secrets.VaultToken = envVaultToken
+	}
+	if envVaultToken := os.Getenv("STN_SECRETS_VAULT_TOKEN"); envVaultToken != "" {
+		cfg.Secrets.VaultToken = envVaultToken
 	}
 
 	// Store loaded config for use by path helpers

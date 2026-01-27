@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 
@@ -20,66 +19,6 @@ const (
 	defaultBashTimeout  = 2 * time.Minute
 	maxBashOutputLength = 30000
 )
-
-var dangerousPatterns = []*regexp.Regexp{
-	regexp.MustCompile(`(?i)rm\s+(-[rRfF]+\s+)*(/|/\*|~|~/\*|\$HOME)`),
-	regexp.MustCompile(`(?i)rm\s+(-[rRfF]+\s+)*\.\./`),
-	regexp.MustCompile(`(?i)mkfs`),
-	regexp.MustCompile(`(?i)dd\s+.*of=/dev/`),
-	regexp.MustCompile(`(?i)>\s*/dev/sd[a-z]`),
-	regexp.MustCompile(`(?i)chmod\s+(-[rR]+\s+)*777\s+/`),
-	regexp.MustCompile(`(?i)chown\s+(-[rR]+\s+)*root\s+/`),
-	regexp.MustCompile(`(?i):(){ :|:& };:`),
-	regexp.MustCompile(`(?i)/etc/passwd|/etc/shadow`),
-	regexp.MustCompile(`(?i)curl\s+.*\|\s*(ba)?sh`),
-	regexp.MustCompile(`(?i)wget\s+.*\|\s*(ba)?sh`),
-}
-
-var sensitiveDirectories = []string{"/etc", "/root", "/var/log", "/boot", "/sys", "/proc"}
-
-type CommandValidationResult struct {
-	Valid   bool
-	Reason  string
-	Warning string
-}
-
-func validateCommand(command string, workspacePath string) CommandValidationResult {
-	for _, pattern := range dangerousPatterns {
-		if pattern.MatchString(command) {
-			return CommandValidationResult{Valid: false, Reason: fmt.Sprintf("command blocked: matches dangerous pattern")}
-		}
-	}
-	for _, dir := range sensitiveDirectories {
-		if strings.Contains(command, dir) && !strings.HasPrefix(workspacePath, dir) {
-			return CommandValidationResult{Valid: false, Reason: fmt.Sprintf("command blocked: attempts to access sensitive directory %q", dir)}
-		}
-	}
-	var warning string
-	if strings.Contains(command, "sudo") {
-		warning = "warning: command uses sudo"
-	}
-	return CommandValidationResult{Valid: true, Warning: warning}
-}
-
-func validateWorkdir(workdir, workspacePath string) error {
-	if workdir == "" {
-		return nil
-	}
-	absWorkdir, err := filepath.Abs(workdir)
-	if err != nil {
-		return fmt.Errorf("invalid workdir path: %w", err)
-	}
-	absWorkspace, err := filepath.Abs(workspacePath)
-	if err != nil {
-		return fmt.Errorf("invalid workspace path: %w", err)
-	}
-	cleanWorkdir := filepath.Clean(absWorkdir)
-	cleanWorkspace := filepath.Clean(absWorkspace)
-	if !strings.HasPrefix(cleanWorkdir, cleanWorkspace) {
-		return fmt.Errorf("workdir %q is outside workspace %q", workdir, workspacePath)
-	}
-	return nil
-}
 
 type BashInput struct {
 	Command     string `json:"command" jsonschema:"description=The command to execute"`
@@ -124,11 +63,6 @@ Examples:
 				return BashOutput{}, fmt.Errorf("command is required")
 			}
 
-			validation := validateCommand(input.Command, workspacePath)
-			if !validation.Valid {
-				return BashOutput{Output: validation.Reason, ExitCode: 1}, fmt.Errorf("command validation failed: %s", validation.Reason)
-			}
-
 			workdir := workspacePath
 			if input.Workdir != "" {
 				if filepath.IsAbs(input.Workdir) {
@@ -136,10 +70,6 @@ Examples:
 				} else {
 					workdir = filepath.Join(workspacePath, input.Workdir)
 				}
-			}
-
-			if err := validateWorkdir(workdir, workspacePath); err != nil {
-				return BashOutput{Output: err.Error(), ExitCode: 1}, err
 			}
 
 			timeout := defaultBashTimeout
@@ -150,19 +80,12 @@ Examples:
 			execCtx, cancel := context.WithTimeout(ctx, timeout)
 			defer cancel()
 
-			var result BashOutput
-			var err error
+			// Use sandbox if available, otherwise execute directly on host
 			if sb != nil {
-				result, err = executeBashViaSandbox(execCtx, sb, input.Command, workdir, timeout)
-			} else {
-				result, err = executeBashDirect(execCtx, input.Command, workdir, timeout)
+				return executeBashViaSandbox(execCtx, sb, input.Command, workdir, timeout)
 			}
 
-			if validation.Warning != "" && err == nil {
-				result.Output = validation.Warning + "\n\n" + result.Output
-			}
-
-			return result, err
+			return executeBashDirect(execCtx, input.Command, workdir, timeout)
 		},
 	)
 }

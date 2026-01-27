@@ -10,6 +10,7 @@ import (
 
 	"station/internal/config"
 	"station/internal/genkit/anthropic_oauth"
+	"station/internal/genkit/cloudshipai"
 	"station/internal/logging"
 
 	"github.com/firebase/genkit/go/genkit"
@@ -222,16 +223,49 @@ func (gp *GenKitProvider) Initialize(ctx context.Context) error {
 			genkit.WithPromptDir(promptDir))
 		err = nil
 
+	case "cloudshipai":
+		// CloudShip AI inference endpoint - OpenAI-compatible API with registration key auth
+		// Uses Together AI backend with models: cloudship/llama-3.1-8b, cloudship/llama-3.1-70b, cloudship/qwen-72b
+		logging.Debug("Setting up CloudShip AI plugin with model: %s", cfg.AIModel)
+
+		promptDir := "/tmp/station-prompts"
+		_ = os.MkdirAll(promptDir, 0755)
+
+		// Get CloudShip registration key for authentication
+		registrationKey := cfg.CloudShip.RegistrationKey
+		if registrationKey == "" {
+			// Fall back to AI API key if registration key not set
+			registrationKey = cfg.AIAPIKey
+		}
+
+		if registrationKey == "" {
+			return fmt.Errorf("CloudShip AI provider requires a registration key (STN_CLOUDSHIP_KEY) or API key")
+		}
+
+		// Use our custom CloudShip AI plugin with proper model registration
+		// This ensures models are registered as cloudshipai/cloudship/llama-3.1-70b etc.
+		cloudshipPlugin := &cloudshipai.CloudShipAI{
+			RegistrationKey: registrationKey,
+		}
+
+		logging.Info("Using CloudShip AI inference endpoint at inference.cloudshipai.com (full tool support)")
+		genkitApp = genkit.Init(ctx,
+			genkit.WithPlugins(cloudshipPlugin),
+			genkit.WithPromptDir(promptDir))
+		err = nil
+
 	default:
 		return fmt.Errorf("unsupported AI provider: %s\n\n"+
 			"Station automatically detects providers based on model names:\n"+
 			"  • gemini-*: Routes to Google Gemini provider\n"+
 			"  • claude-*: Routes to Anthropic provider\n"+
+			"  • cloudship/*: Routes to CloudShip AI inference\n"+
 			"  • gpt-*, llama*, etc: Routes to OpenAI-compatible provider\n\n"+
 			"Supported configurations:\n"+
 			"  • OpenAI models: Use any gpt-* model name with OPENAI_API_KEY\n"+
 			"  • Anthropic models: Use any claude-* model name with ANTHROPIC_API_KEY\n"+
 			"  • Gemini models: Use any gemini-* model name with GEMINI_API_KEY or GOOGLE_API_KEY\n"+
+			"  • CloudShip AI: Use cloudship/* models with STN_CLOUDSHIP_KEY\n"+
 			"  • OpenAI-compatible APIs: Use any model name with ai_base_url configured\n"+
 			"    Examples: Ollama, Together AI, etc.\n\n"+
 			"Set ai_base_url in config.yml or use --base-url with 'stn init' for custom endpoints.",
@@ -272,6 +306,11 @@ func detectProviderFromModel(modelName, configuredProvider string) string {
 
 	if strings.HasPrefix(modelLower, "claude") {
 		return "anthropic"
+	}
+
+	// Detect CloudShip AI models (cloudship/llama-3.1-8b, cloudship/qwen-72b, etc.)
+	if strings.HasPrefix(modelLower, "cloudship/") {
+		return "cloudshipai"
 	}
 
 	return configuredProvider

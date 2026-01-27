@@ -1,0 +1,36 @@
+server_name: {{ nats_server_name }}
+
+listen: 0.0.0.0:{{ nats_client_port }}
+http: 0.0.0.0:{{ nats_http_port }}
+
+max_payload: {{ nats_max_payload }}
+
+{% if nats_jetstream_enabled %}
+jetstream {
+  store_dir: {{ nats_jetstream_store_dir }}
+  max_memory_store: {{ nats_jetstream_max_memory }}
+  max_file_store: {{ nats_jetstream_max_file }}
+}
+{% endif %}
+
+{% if nats_auth_enabled %}
+{% if nats_auth_token %}
+authorization {
+  token: "{{ nats_auth_token }}"
+}
+{% elif nats_users | length > 0 %}
+authorization {
+  users: [
+{% for user in nats_users %}
+    { user: "{{ user.user }}", password: "{{ user.password }}" }{% if not loop.last %},{% endif %}
+
+{% endfor %}
+  ]
+}
+{% endif %}
+{% endif %}
+
+ping_interval: "2m"
+ping_max: 2
+
+write_deadline: "10s"

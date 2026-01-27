@@ -54,6 +54,7 @@ func init() {
 	rootCmd.AddCommand(configCmd)
 	rootCmd.AddCommand(syncCmd)
 	rootCmd.AddCommand(deployCmd)
+	initDeploySubcommands()
 	rootCmd.AddCommand(mcpCmd)
 	rootCmd.AddCommand(bundleCmd)
 	rootCmd.AddCommand(agentCmd)
@@ -73,6 +74,8 @@ func init() {
 	rootCmd.AddCommand(providerCmd)
 	rootCmd.AddCommand(filesCmd)
 	rootCmd.AddCommand(latticeCmd)
+	rootCmd.AddCommand(githubCmd)
+	rootCmd.AddCommand(secretsCmd)
 	rootCmd.AddCommand(sessionCmd)
 	rootCmd.AddCommand(harnessCmd)
 
@@ -137,7 +140,7 @@ func init() {
 	initCmd.Flags().Bool("replicate", false, "Set up Litestream database replication for production deployments")
 	initCmd.Flags().StringP("config", "c", "", "Path to configuration file (sets workspace to config file's directory)")
 	initCmd.Flags().Bool("ship", false, "Bootstrap with ship CLI MCP integration for filesystem access")
-	initCmd.Flags().String("provider", "", "AI provider (openai, gemini, custom) - if not set, shows interactive selection")
+	initCmd.Flags().String("provider", "", "AI provider (cloudshipai, openai, anthropic, gemini, custom) - if not set, shows interactive selection")
 	initCmd.Flags().String("model", "", "AI model name - if not set, shows interactive selection based on provider")
 	initCmd.Flags().String("api-key", "", "API key for AI provider (alternative to environment variables)")
 	initCmd.Flags().String("base-url", "", "Base URL for OpenAI-compatible endpoints (e.g., http://localhost:11434/v1 for Ollama)")
@@ -146,6 +149,11 @@ func init() {
 	initCmd.Flags().String("cloudship-endpoint", "lighthouse.cloudship.ai:443", "CloudShip Lighthouse gRPC endpoint")
 	initCmd.Flags().String("otel-endpoint", "", "OpenTelemetry OTLP endpoint for telemetry export (e.g., http://localhost:4318)")
 	initCmd.Flags().Bool("telemetry", false, "Enable telemetry collection and export (default: false)")
+	initCmd.Flags().String("lattice-url", "", "NATS URL to join a lattice mesh (e.g., nats://orchestrator:4222)")
+	initCmd.Flags().String("lattice-name", "", "Station name in the lattice mesh (defaults to hostname)")
+	initCmd.Flags().Bool("lattice-orchestrator", false, "Run as lattice orchestrator with embedded NATS server")
+	initCmd.Flags().Int("lattice-port", 4222, "NATS port for embedded orchestrator (default: 4222)")
+	initCmd.Flags().String("lattice-token", "", "Authentication token for lattice NATS (for both client and embedded server)")
 
 	// Serve command flags
 	serveCmd.Flags().Int("ssh-port", 2222, "SSH server port")
@@ -203,14 +211,27 @@ func init() {
 	syncCmd.Flags().BoolP("verbose", "v", false, "Verbose output showing all operations")
 
 	// Deploy command flags
-	deployCmd.Flags().String("target", "fly", "Deployment target (fly, cloudflare [experimental])")
+	deployCmd.Flags().String("target", "fly", "Deployment target (fly, kubernetes, ansible, cloudflare)")
 	deployCmd.Flags().String("region", "ord", "Deployment region (e.g., ord, syd, fra)")
 	deployCmd.Flags().String("sleep-after", "10m", "Cloudflare: sleep container after inactivity (e.g., 10m, 1h, 24h)")
-	deployCmd.Flags().Bool("always-on", false, "Cloudflare: keep container always running (sets sleep-after to 168h)")
+	deployCmd.Flags().Bool("auto-stop", false, "Enable auto-stop/suspend when idle (default: always-on for persistent Lighthouse connection)")
 	deployCmd.Flags().String("instance-type", "basic", "Cloudflare: container size (lite, basic, standard-1 to standard-4)")
 	deployCmd.Flags().Bool("destroy", false, "Tear down the deployment instead of deploying")
 	deployCmd.Flags().Bool("with-opencode", false, "Deploy OpenCode coding backend alongside Station (Fly.io only)")
 	deployCmd.Flags().Bool("with-sandbox", false, "Enable Fly Machines sandbox backend for code execution (Fly.io only)")
+	deployCmd.Flags().String("secrets-backend", "", "Runtime secrets backend - container fetches on startup (aws-secretsmanager, aws-ssm, vault, gcp-secretmanager, sops)")
+	deployCmd.Flags().String("secrets-path", "", "Path for runtime secrets backend (e.g., station/prod for AWS SM, secret/data/station/prod for Vault)")
+	deployCmd.Flags().String("namespace", "", "Kubernetes namespace (default: default)")
+	deployCmd.Flags().String("context", "", "Kubernetes context to use")
+	deployCmd.Flags().String("output-dir", "", "Output directory for generated configs")
+	deployCmd.Flags().Bool("dry-run", false, "Generate configs only, don't deploy")
+	deployCmd.Flags().String("bundle-id", "", "CloudShip bundle ID to deploy (uses base image, no local environment needed)")
+	deployCmd.Flags().String("bundle", "", "Local bundle file (.tar.gz) to deploy - installs to temp environment then deploys")
+	deployCmd.Flags().String("name", "", "Custom name for the deployed app (default: station-<env> or cloudshipai.name from config)")
+	deployCmd.Flags().StringSlice("hosts", nil, "Ansible: target hosts (user@host or host format, can specify multiple)")
+	deployCmd.Flags().String("ssh-key", "", "Ansible: SSH private key path")
+	deployCmd.Flags().String("ssh-user", "root", "Ansible: SSH user (default: root)")
+	deployCmd.Flags().String("env-file", "", "Load secrets from .env file (use with 'stn deploy export-vars' to generate template)")
 
 	mcpStatusCmd.Flags().String("endpoint", "", "Station API endpoint (default: use local mode)")
 	mcpStatusCmd.Flags().String("environment", "default", "Environment to check status for (default shows all)")
@@ -378,7 +399,7 @@ func initConfig() {
 
 	// Read config file if it exists
 	if err := viper.ReadInConfig(); err == nil {
-		fmt.Printf("Using config file: %s\n", viper.ConfigFileUsed())
+		fmt.Fprintf(os.Stderr, "Using config file: %s\n", viper.ConfigFileUsed())
 
 		// CloudShip integration is now handled by the Lighthouse client
 		// in individual command contexts (stdio, serve, CLI modes)

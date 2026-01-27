@@ -3,6 +3,7 @@ package tools
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"station/pkg/harness/sandbox"
@@ -48,12 +49,14 @@ Lines longer than 2000 characters are truncated.`,
 				return ReadOutput{}, fmt.Errorf("file_path is required")
 			}
 
-			path, err := ValidatePathForRead(input.FilePath, workspacePath)
-			if err != nil {
-				return ReadOutput{}, err
+			path := input.FilePath
+			if !filepath.IsAbs(path) {
+				path = filepath.Join(workspacePath, path)
 			}
 
 			var content []byte
+			var err error
+
 			if sb != nil {
 				content, err = sb.ReadFile(ctx, path)
 			} else {

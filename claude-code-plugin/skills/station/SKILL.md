@@ -104,9 +104,15 @@ stn bundle install devops-security-bundle security
 
 # Create bundle from environment
 stn bundle create <environment>
+stn bundle create default --output ./my-bundle.tar.gz
 
 # Share bundle to CloudShip
 stn bundle share <environment>
+
+# Export required variables from bundle (for CI/CD)
+stn bundle export-vars ./my-bundle.tar.gz --format yaml
+stn bundle export-vars ./my-bundle.tar.gz --format env
+stn bundle export-vars <cloudship-bundle-id> --format yaml
 ```
 
 ### Workflow Management
@@ -145,9 +151,36 @@ stn status                              # Check container status
 stn logs -f                             # Follow logs
 stn down                                # Stop container
 
-# Deploy to cloud
+# DEPLOY TO CLOUD (3 methods)
+# Method 1: Local environment
 stn deploy <environment> --target fly   # Deploy to Fly.io
-stn deploy production --target fly --region syd
+stn deploy production --target k8s      # Deploy to Kubernetes
+stn deploy production --target ansible  # Deploy via Ansible (SSH + Docker)
+
+# Method 2: CloudShip bundle ID (no local environment needed)
+stn deploy --bundle-id <uuid> --target fly
+stn deploy --bundle-id <uuid> --target k8s --name my-station
+
+# Method 3: Local bundle file
+stn deploy --bundle ./my-bundle.tar.gz --target fly
+stn deploy --bundle ./my-bundle.tar.gz --target k8s
+
+# Deploy flags
+--target        fly, kubernetes/k8s, ansible (default: fly)
+--bundle-id     CloudShip bundle UUID (uses base image)
+--bundle        Local .tar.gz bundle file
+--name          Custom app name
+--region        Deployment region (default: ord)
+--namespace     Kubernetes namespace
+--dry-run       Generate configs only, don't deploy
+--auto-stop     Enable idle auto-stop (Fly.io)
+--destroy       Tear down deployment
+
+# IMPORTANT: K8s and Ansible require a container registry
+# Fly.io has built-in registry, no extra setup needed
+
+# Export variables for CI/CD
+stn deploy export-vars default --format yaml > deploy-vars.yml
 ```
 
 ### Benchmarking & Reports

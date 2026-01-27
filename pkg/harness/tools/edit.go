@@ -3,6 +3,7 @@ package tools
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"station/pkg/harness/sandbox"
@@ -54,12 +55,14 @@ Examples:
 				return EditOutput{}, fmt.Errorf("old_string and new_string must be different")
 			}
 
-			path, err := ValidatePathForWrite(input.FilePath, workspacePath)
-			if err != nil {
-				return EditOutput{}, err
+			path := input.FilePath
+			if !filepath.IsAbs(path) {
+				path = filepath.Join(workspacePath, path)
 			}
 
 			var content []byte
+			var err error
+
 			if sb != nil {
 				content, err = sb.ReadFile(ctx, path)
 			} else {

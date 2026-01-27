@@ -38,11 +38,12 @@ var ConfigSections = []ConfigSection{
 	{Name: "coding", Description: "Coding Backend Settings", Order: 2},
 	{Name: "harness", Description: "Agentic Harness Settings", Order: 3},
 	{Name: "cloudship", Description: "CloudShip Integration", Order: 4},
-	{Name: "telemetry", Description: "Telemetry & Observability", Order: 5},
-	{Name: "sandbox", Description: "Sandbox Execution", Order: 6},
-	{Name: "webhook", Description: "Webhook Settings", Order: 7},
-	{Name: "notifications", Description: "Notification Settings", Order: 8},
-	{Name: "server", Description: "Server & Port Settings", Order: 9},
+	{Name: "lattice", Description: "Lattice Mesh Network", Order: 5},
+	{Name: "telemetry", Description: "Telemetry & Observability", Order: 6},
+	{Name: "sandbox", Description: "Sandbox Execution", Order: 7},
+	{Name: "webhook", Description: "Webhook Settings", Order: 8},
+	{Name: "notifications", Description: "Notification Settings", Order: 9},
+	{Name: "server", Description: "Server & Port Settings", Order: 10},
 }
 
 var ConfigSchema = []ConfigField{
@@ -119,21 +120,48 @@ var ConfigSchema = []ConfigField{
 	{Key: "cloudship.name", Type: FieldTypeString, Description: "Station name (unique across org)", Section: "cloudship"},
 	{Key: "cloudship.tags", Type: FieldTypeStringSlice, Description: "Station tags for filtering", Section: "cloudship"},
 
+	// Lattice Mesh Settings
+	{Key: "lattice.station_name", Type: FieldTypeString, Description: "Station name in the lattice mesh", Section: "lattice"},
+	{Key: "lattice.nats.url", Type: FieldTypeString, Description: "NATS URL to join lattice (e.g., nats://orchestrator:4222)", Section: "lattice"},
+	{Key: "lattice.nats.auth.token", Type: FieldTypeString, Description: "NATS authentication token", Secret: true, Section: "lattice"},
+	{Key: "lattice.nats.auth.user", Type: FieldTypeString, Description: "NATS username", Section: "lattice"},
+	{Key: "lattice.nats.auth.password", Type: FieldTypeString, Description: "NATS password", Secret: true, Section: "lattice"},
+	{Key: "lattice_orchestration", Type: FieldTypeBool, Description: "Run as lattice orchestrator with embedded NATS", Default: false, Section: "lattice"},
+	{Key: "lattice.orchestrator.embedded_nats.port", Type: FieldTypeInt, Description: "Embedded NATS port", Default: 4222, Section: "lattice"},
+	{Key: "lattice.orchestrator.embedded_nats.http_port", Type: FieldTypeInt, Description: "Embedded NATS monitoring port", Default: 8222, Section: "lattice"},
+	{Key: "lattice.orchestrator.embedded_nats.auth.enabled", Type: FieldTypeBool, Description: "Enable auth for embedded NATS", Default: false, Section: "lattice"},
+	{Key: "lattice.orchestrator.embedded_nats.auth.token", Type: FieldTypeString, Description: "Auth token for embedded NATS", Secret: true, Section: "lattice"},
+
 	// Telemetry Settings
 	{Key: "telemetry.enabled", Type: FieldTypeBool, Description: "Enable telemetry/tracing", Default: true, Section: "telemetry"},
 	{Key: "telemetry.provider", Type: FieldTypeString, Description: "Telemetry provider (none, jaeger, otlp, cloudship)", Default: "jaeger", Section: "telemetry", Options: []string{"none", "jaeger", "otlp", "cloudship"}},
 	{Key: "telemetry.endpoint", Type: FieldTypeString, Description: "OTLP endpoint URL", Default: "http://localhost:4318", Section: "telemetry"},
 
-	// Sandbox Settings
+	// Sandbox Settings - Common
 	{Key: "sandbox.enabled", Type: FieldTypeBool, Description: "Enable sandbox code execution", Default: false, Section: "sandbox"},
 	{Key: "sandbox.code_mode_enabled", Type: FieldTypeBool, Description: "Enable code mode in sandbox", Default: false, Section: "sandbox"},
+	{Key: "sandbox.backend", Type: FieldTypeString, Description: "Sandbox backend (docker, fly_machines, opencode, host)", Default: "docker", Section: "sandbox", Options: []string{"docker", "fly_machines", "opencode", "host"}},
 	{Key: "sandbox.idle_timeout_minutes", Type: FieldTypeInt, Description: "Sandbox idle timeout in minutes", Default: 30, Section: "sandbox"},
-	{Key: "sandbox.docker_image", Type: FieldTypeString, Description: "Docker image for sandbox containers", Default: "ubuntu:22.04", Section: "sandbox"},
-	{Key: "sandbox.registry_auth.username", Type: FieldTypeString, Description: "Registry username for private images", Section: "sandbox"},
-	{Key: "sandbox.registry_auth.password", Type: FieldTypeString, Description: "Registry password or access token", Secret: true, Section: "sandbox"},
-	{Key: "sandbox.registry_auth.identity_token", Type: FieldTypeString, Description: "OAuth token for ECR/GCR/ACR", Secret: true, Section: "sandbox"},
-	{Key: "sandbox.registry_auth.server_address", Type: FieldTypeString, Description: "Registry server (e.g., ghcr.io, 123456.dkr.ecr.us-east-1.amazonaws.com)", Section: "sandbox"},
-	{Key: "sandbox.registry_auth.docker_config_path", Type: FieldTypeString, Description: "Path to Docker config.json for auth", Section: "sandbox"},
+	{Key: "sandbox.docker_image", Type: FieldTypeString, Description: "Default Docker image for sandbox containers", Default: "python:3.11-slim", Section: "sandbox"},
+
+	// Docker Backend Settings (backend: docker)
+	{Key: "sandbox.registry_auth.username", Type: FieldTypeString, Description: "Registry username for private images", Section: "sandbox", ShowWhen: &ShowWhenCondition{Field: "sandbox.backend", Values: []string{"docker"}}},
+	{Key: "sandbox.registry_auth.password", Type: FieldTypeString, Description: "Registry password or access token", Secret: true, Section: "sandbox", ShowWhen: &ShowWhenCondition{Field: "sandbox.backend", Values: []string{"docker"}}},
+	{Key: "sandbox.registry_auth.identity_token", Type: FieldTypeString, Description: "OAuth bearer token (ECR, GCR, ACR)", Secret: true, Section: "sandbox", ShowWhen: &ShowWhenCondition{Field: "sandbox.backend", Values: []string{"docker"}}},
+	{Key: "sandbox.registry_auth.server_address", Type: FieldTypeString, Description: "Registry server URL (e.g., ghcr.io)", Section: "sandbox", ShowWhen: &ShowWhenCondition{Field: "sandbox.backend", Values: []string{"docker"}}},
+	{Key: "sandbox.registry_auth.docker_config_path", Type: FieldTypeString, Description: "Path to Docker config.json", Section: "sandbox", ShowWhen: &ShowWhenCondition{Field: "sandbox.backend", Values: []string{"docker"}}},
+
+	// Fly Machines Backend Settings (backend: fly_machines)
+	{Key: "sandbox.fly_machines.org_slug", Type: FieldTypeString, Description: "Fly.io organization slug (env: FLY_ORG)", Section: "sandbox", ShowWhen: &ShowWhenCondition{Field: "sandbox.backend", Values: []string{"fly_machines"}}},
+	{Key: "sandbox.fly_machines.region", Type: FieldTypeString, Description: "Fly.io region for sandbox machines", Default: "ord", Section: "sandbox", ShowWhen: &ShowWhenCondition{Field: "sandbox.backend", Values: []string{"fly_machines"}}},
+	{Key: "sandbox.fly_machines.app_prefix", Type: FieldTypeString, Description: "Prefix for Fly app names", Default: "stn-sandbox", Section: "sandbox", ShowWhen: &ShowWhenCondition{Field: "sandbox.backend", Values: []string{"fly_machines"}}},
+	{Key: "sandbox.fly_machines.image", Type: FieldTypeString, Description: "Docker image for Fly machines (overrides sandbox.docker_image)", Section: "sandbox", ShowWhen: &ShowWhenCondition{Field: "sandbox.backend", Values: []string{"fly_machines"}}},
+	{Key: "sandbox.fly_machines.memory_mb", Type: FieldTypeInt, Description: "Memory allocation in MB", Default: 256, Section: "sandbox", ShowWhen: &ShowWhenCondition{Field: "sandbox.backend", Values: []string{"fly_machines"}}},
+	{Key: "sandbox.fly_machines.cpu_kind", Type: FieldTypeString, Description: "CPU type (shared, performance)", Default: "shared", Section: "sandbox", Options: []string{"shared", "performance"}, ShowWhen: &ShowWhenCondition{Field: "sandbox.backend", Values: []string{"fly_machines"}}},
+	{Key: "sandbox.fly_machines.cpus", Type: FieldTypeInt, Description: "Number of CPUs", Default: 1, Section: "sandbox", ShowWhen: &ShowWhenCondition{Field: "sandbox.backend", Values: []string{"fly_machines"}}},
+	{Key: "sandbox.fly_machines.registry_auth.username", Type: FieldTypeString, Description: "Registry username for private images", Section: "sandbox", ShowWhen: &ShowWhenCondition{Field: "sandbox.backend", Values: []string{"fly_machines"}}},
+	{Key: "sandbox.fly_machines.registry_auth.password", Type: FieldTypeString, Description: "Registry password or access token", Secret: true, Section: "sandbox", ShowWhen: &ShowWhenCondition{Field: "sandbox.backend", Values: []string{"fly_machines"}}},
+	{Key: "sandbox.fly_machines.registry_auth.server_address", Type: FieldTypeString, Description: "Registry server URL (e.g., ghcr.io, your-registry.com)", Section: "sandbox", ShowWhen: &ShowWhenCondition{Field: "sandbox.backend", Values: []string{"fly_machines"}}},
 
 	// Webhook Settings
 	{Key: "webhook.enabled", Type: FieldTypeBool, Description: "Enable webhook execute endpoint", Default: true, Section: "webhook"},

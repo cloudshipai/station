@@ -55,10 +55,10 @@ Limited to 100 results with 60s timeout.`,
 
 			basePath := workspacePath
 			if input.Path != "" {
-				var err error
-				basePath, err = ValidatePath(input.Path, workspacePath)
-				if err != nil {
-					return GlobOutput{}, err
+				if filepath.IsAbs(input.Path) {
+					basePath = input.Path
+				} else {
+					basePath = filepath.Join(workspacePath, input.Path)
 				}
 			}
 
