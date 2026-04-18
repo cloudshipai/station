@@ -413,9 +413,17 @@ func (aee *AgentExecutionEngine) ExecuteWithOptions(ctx context.Context, agent *
 	var mcpTools []ai.ToolRef
 
 	// Create a map of assigned tool names for quick lookup
+	// We register BOTH the original DB name AND its sanitized form, because:
+	// - The DB may store the original MCP name (e.g. "__resolve-library-id")
+	// - At runtime, SanitizedMCPTool reports the safe name ("__resolve_library_id")
+	// - Both must match for the tool to be included in the agent's execution
 	assignedToolNames := make(map[string]bool)
 	for _, assignedTool := range agentTools {
 		assignedToolNames[assignedTool.ToolName] = true
+		sanitized := SanitizeToolName(assignedTool.ToolName)
+		if sanitized != assignedTool.ToolName {
+			assignedToolNames[sanitized] = true
+		}
 		fmt.Printf("DEBUG FILTER: Assigned tool from DB: %s\n", assignedTool.ToolName)
 	}
 

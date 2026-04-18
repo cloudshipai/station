@@ -217,6 +217,76 @@ func (mcm *MCPConnectionManager) parseFileConfig(fileConfig *repositories.FileCo
 	return nil
 }
 
+// SanitizeToolName normalizes a tool name to be compatible with LLM function-calling
+// constraints. LLMs like Gemini and OpenAI enforce [a-zA-Z0-9_]+ for tool names and
+// will silently replace unsupported characters (like hyphens) with underscores. This
+// causes a name mismatch when the runtime tries to resolve the LLM's normalized name
+// against the original MCP-provided name.
+//
+// This function should be used at every boundary where tool names enter the system:
+// MCP discovery, DB storage, agent assignment filtering, etc.
+func SanitizeToolName(name string) string {
+	name = strings.ReplaceAll(name, "-", "_")
+	name = strings.ReplaceAll(name, ".", "_")
+	return name
+}
+
+// SanitizedMCPTool wraps a GenKit ai.Tool to ensure its name conforms to the strict
+// LLM function-calling regex ([a-zA-Z0-9_]+). LLMs like Gemini and OpenAI silently
+// normalize tool names (e.g. replacing hyphens with underscores) before emitting
+// tool-call requests. When the runtime tries to resolve the normalized name against
+// the original MCP-provided name, it fails with "tool not found".
+//
+// This decorator transparently sanitizes the name at the boundary between MCP
+// discovery and GenKit registration, while preserving the original tool's execution
+// logic. See: https://github.com/cloudshipai/station/issues/42
+type SanitizedMCPTool struct {
+	OriginalTool  ai.Tool
+	SanitizedName string
+}
+
+// Name returns the LLM-safe sanitized name.
+func (s *SanitizedMCPTool) Name() string { return s.SanitizedName }
+
+// Definition returns a copy of the original tool definition with the sanitized name,
+// ensuring the schema sent to the LLM uses the name the LLM will actually call back with.
+func (s *SanitizedMCPTool) Definition() *ai.ToolDefinition {
+	def := s.OriginalTool.Definition()
+	if def == nil {
+		return nil
+	}
+	// Shallow copy to avoid mutating the original tool's definition
+	newDef := *def
+	newDef.Name = s.SanitizedName
+	return &newDef
+}
+
+// RunRaw delegates execution to the original MCP tool unchanged.
+func (s *SanitizedMCPTool) RunRaw(ctx context.Context, input any) (any, error) {
+	return s.OriginalTool.RunRaw(ctx, input)
+}
+
+// Respond delegates to the original tool's response construction.
+func (s *SanitizedMCPTool) Respond(toolReq *ai.Part, outputData any, opts *ai.RespondOptions) *ai.Part {
+	return s.OriginalTool.Respond(toolReq, outputData, opts)
+}
+
+// Restart delegates to the original tool's restart construction, but uses the
+// sanitized name so the re-triggered request matches the registered name.
+func (s *SanitizedMCPTool) Restart(toolReq *ai.Part, opts *ai.RestartOptions) *ai.Part {
+	part := s.OriginalTool.Restart(toolReq, opts)
+	// Ensure the restarted request uses the sanitized name for consistency
+	if part != nil && part.ToolRequest != nil {
+		part.ToolRequest.Name = s.SanitizedName
+	}
+	return part
+}
+
+// Register delegates to the original tool's registration logic.
+func (s *SanitizedMCPTool) Register(r api.Registry) {
+	s.OriginalTool.Register(r)
+}
+
 // createServerClient creates a new MCP client (extracted from connectToMCPServer)
 func (mcm *MCPConnectionManager) createServerClient(ctx context.Context, serverName string, serverConfigRaw interface{}) (*mcp.GenkitMCPClient, []ai.Tool, error) {
 	// Create telemetry span for MCP client creation and tool discovery
@@ -302,13 +372,25 @@ func (mcm *MCPConnectionManager) createServerClient(ctx context.Context, serverN
 	)
 	logging.Info(" MCP SUCCESS: Discovered %d tools from server '%s'", len(serverTools), serverName)
 
-	// Log actual tool names returned by MCP server
+	// Log and wrap actual tool names returned by MCP server
 	logging.Info("Tool names returned by MCP server '%s':", serverName)
+	sanitizedTools := make([]ai.Tool, len(serverTools))
 	for i, tool := range serverTools {
-		toolName := tool.Name()
-		logging.Info("   MCP Tool %d: '%s'", i+1, toolName)
+		originalName := tool.Name()
+		safeName := SanitizeToolName(originalName)
+		
+		if safeName != originalName {
+			logging.Info("   MCP Tool %d (SANITIZED): '%s' -> '%s'", i+1, originalName, safeName)
+		} else {
+			logging.Info("   MCP Tool %d: '%s'", i+1, originalName)
+		}
+		
+		sanitizedTools[i] = &SanitizedMCPTool{
+			OriginalTool:  tool,
+			SanitizedName: safeName,
+		}
 	}
-	return mcpClient, serverTools, nil
+	return mcpClient, sanitizedTools, nil
 }
 
 // GetEnvironmentMCPTools connects to MCP servers from file configs and gets their tools
@@ -1148,7 +1230,15 @@ func (mcm *MCPConnectionManager) connectToMCPServer(ctx context.Context, serverN
 		debugLogToFile(fmt.Sprintf("WARNING: Server '%s' connected but provided zero tools", serverName))
 	}
 
-	return serverTools, mcpClient
+	// Wrap tools with SanitizedMCPTool to ensure LLM-compatible names (Issue #42)
+	sanitizedTools := make([]ai.Tool, len(serverTools))
+	for i, tool := range serverTools {
+		sanitizedTools[i] = &SanitizedMCPTool{
+			OriginalTool:  tool,
+			SanitizedName: SanitizeToolName(tool.Name()),
+		}
+	}
+	return sanitizedTools, mcpClient
 }
 
 // fileExists checks if a file exists
